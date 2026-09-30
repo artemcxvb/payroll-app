@@ -1396,7 +1396,7 @@
         info.closed ? h('p', { class: 'help', text: 'Приём закрыт — изменить или отменить заказ уже нельзя.' })
           : h('div', { class: 'btnrow mt' }, h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'adv-edit', onclick: function () { S.advEdit = true; render(); } }, 'Изменить'), h('button', { class: 'btn danger', type: 'button', 'data-testid': 'adv-cancel', onclick: function () {
             confirmDlg({ title: 'Отменить заказ аванса?', yes: 'Да, отменить', no: 'Нет, оставить', danger: true, body: [h('p', { class: 'cap', text: 'Заказ на ' + money(active.amount) + ' будет отменён. Новый можно оформить до пятницы ' + hh(CFG.advDeadlineHour) + '.' })] }).then(function (ok) {
-              if (!ok) return; delay(LAT).then(function () { return backend.cancelAdvance(active.id); }).then(function (r) { toast(r.ok ? 'Заказ отменён' : 'Не удалось отменить: ' + (r.error === 'closed' ? 'приём закрыт' : 'ошибка'), r.ok ? 'ok' : 'bad'); refresh(); }); }); } }, 'Отменить заказ'))));
+              if (!ok) return; delay(LAT).then(function () { return backend.cancelAdvance(active.id); }).then(function (r) { toast(r.ok ? 'Заказ отменён' : 'Не удалось отменить: ' + (r.error === 'closed' ? 'приём закрыт' : 'ошибка' + (r.error ? ' (' + r.error + ')' : '')), r.ok ? 'ok' : 'bad'); refresh(); }); }); } }, 'Отменить заказ'))));
     }
     // --- форма / закрыто ---
     if (info.closed) {

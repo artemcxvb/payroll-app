@@ -1,5 +1,5 @@
 /* Service worker: оболочка приложения кэшируется, чтобы данные можно было смотреть без сети. */
-var CACHE = 'pr-shell-v4';
+var CACHE = 'pr-shell-v5';
 var SHELL = ['./', 'index.html', 'app.js', 'style.css', 'mock-data.js', 'config.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];
 
