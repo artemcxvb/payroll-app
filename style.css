@@ -456,7 +456,7 @@ textarea.inp { padding: 12px 14px; min-height: 110px; font-size: 16px; resize: v
 .thanks .eic { width: 64px; height: 64px; border-radius: 22px; display: grid; place-items: center; }
 
 /* фото: карусель (акции, вакансии) и полноэкранный просмотр */
-.car { position: relative; aspect-ratio: 16 / 10; width: 100%; overflow: hidden; border-radius: 14px; background: var(--card2); isolation: isolate; }
+.car { position: relative; aspect-ratio: 4 / 3; width: 100%; overflow: hidden; border-radius: 14px; background: var(--card2); isolation: isolate; }
 .card .car.in-card { margin: 0 0 12px; }
 .car-track { display: flex; height: 100%; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; border-radius: inherit; }
 .car-track::-webkit-scrollbar { display: none; }
