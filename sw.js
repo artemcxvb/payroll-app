@@ -1,6 +1,6 @@
 /* Service worker: оболочка приложения кэшируется, чтобы данные можно было смотреть без сети. */
-var CACHE = 'pr-shell-v13';
-var SHELL = ['./', 'index.html', 'app.js', 'style.css', 'mock-data.js', 'config.js', 'manifest.webmanifest', 'company-banner.jpg',
+var CACHE = 'pr-shell-v14';
+var SHELL = ['./', 'index.html', 'app.js', 'style.css', 'mock-data.js', 'config.js', 'manifest.webmanifest', 'company-banner.jpg', 'admin.html', 'admin.js', 'admin.css',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png',
   'demo-photos/promo-weekend-1.jpg', 'demo-photos/promo-weekend-2.jpg', 'demo-photos/promo-weekend-3.jpg', 'demo-photos/promo-weekend-4.jpg', 'demo-photos/promo-nodefect-1.jpg',
   'demo-photos/job-brigadier-1.jpg', 'demo-photos/job-brigadier-2.jpg', 'demo-photos/job-brigadier-3.jpg', 'demo-photos/job-forklift-1.jpg', 'demo-photos/job-forklift-2.jpg'];
@@ -21,7 +21,7 @@ self.addEventListener('fetch', function (e) {
     var net = fetch(req).then(function (res) {
       if (res && res.ok) { var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); }
       return res;
-    }).catch(function () { return hit || (req.mode === 'navigate' ? caches.match('index.html') : Response.error()); });
+    }).catch(function () { return hit || (req.mode === 'navigate' ? caches.match(/\/admin\.html$/.test(new URL(req.url).pathname) ? 'admin.html' : 'index.html') : Response.error()); });
     return hit || net;
   }));
 });

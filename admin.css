@@ -1,0 +1,69 @@
+/* Кабинет админа: дополняет style.css (те же переменные и обе темы). Без inline-стилей (CSP). */
+body.adminpage .app { max-width: 520px; }
+.adm-title { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.adm-title h1 { flex: 1; font-size: 24px; line-height: 1.15; letter-spacing: -.01em; min-width: 0; }
+.adm-title .sub { color: var(--muted); font-size: 13px; }
+.adm-tools { display: flex; gap: 8px; align-items: center; }
+.iconbtn.spin .ico { animation: spin .8s linear infinite; }
+.adm-search { position: relative; margin: 4px 0 10px; }
+.adm-search .ico { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--faint); pointer-events: none; }
+.adm-search input { padding-left: 44px; font-size: 16px; }
+.alist { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 10px; }
+.acard { display: flex; flex-direction: column; gap: 10px; }
+.acard .hd { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
+.acard .nm { font-weight: 800; font-size: 16px; line-height: 1.25; overflow-wrap: anywhere; }
+.acard .meta { color: var(--muted); font-size: 13px; margin-top: 2px; overflow-wrap: anywhere; }
+.acard .amt { font-weight: 800; font-size: 20px; white-space: nowrap; }
+.acard .kv { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 14px; }
+.acard .kv span:nth-child(odd) { color: var(--muted); }
+.acard .kv span:nth-child(even) { text-align: right; font-weight: 600; overflow-wrap: anywhere; }
+.acard .txt { font-size: 14.5px; background: var(--card2); border-radius: 12px; padding: 10px 12px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.acard .txt b { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 2px; font-weight: 700; }
+.acard .txt.add { background: var(--warn-bg); color: var(--warn); }
+.acard .txt.ans { background: var(--info-bg); color: var(--info); }
+.acard .files { display: flex; flex-wrap: wrap; gap: 8px; }
+.acard .fbtn { min-height: 44px; font-size: 14px; }
+.acard .acts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 2px; }
+.acard .acts .btn { min-height: 52px; font-size: 16px; padding: 0 12px; }
+.btn.ok { background: var(--ok); color: #fff; }
+:root[data-theme="dark"] .btn.ok { color: #06240f; }
+.btn.warnb { background: var(--warn-bg); color: var(--warn); }
+.btn.sending { opacity: .7; pointer-events: none; }
+.sumgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.sumcard { text-align: left; display: flex; flex-direction: column; gap: 4px; min-height: 108px; cursor: pointer; width: 100%; font: inherit; color: inherit; }
+.sumcard .n { font-size: 34px; font-weight: 800; line-height: 1; letter-spacing: -.02em; }
+.sumcard .n.hot { color: var(--bad); }
+.sumcard .l { font-size: 14px; font-weight: 700; }
+.sumcard .s { font-size: 12.5px; color: var(--muted); }
+.logrow { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13.5px; overflow-wrap: anywhere; }
+.logrow:first-child { border-top: 0; }
+.logrow time { color: var(--muted); font-size: 12px; }
+.errbox { display: flex; gap: 10px; align-items: flex-start; background: var(--bad-bg); color: var(--bad); border-radius: var(--r); padding: 14px; margin: 10px 0; }
+.errbox b { display: block; }
+.errbox .btn { margin-top: 10px; min-height: 44px; }
+.adm-login .lead { color: var(--muted); font-size: 16px; margin-bottom: 20px; }
+.demobadge { display: inline-block; font-size: 12px; font-weight: 800; padding: 2px 10px; border-radius: 99px; background: var(--warn-bg); color: var(--warn); margin-left: 8px; vertical-align: middle; }
+.demohint { background: var(--warn-bg); color: var(--warn); border-radius: 14px; padding: 10px 14px; font-size: 13.5px; margin-top: 14px; }
+.segrow { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--card2); border-radius: 14px; padding: 4px; gap: 4px; margin-bottom: 10px; }
+.segrow button { min-height: 44px; border-radius: 11px; border: 0; background: transparent; font-weight: 600; font-size: 14.5px; }
+.segrow button[aria-pressed="true"] { background: var(--card); box-shadow: var(--shadow); color: var(--primary); }
+.blockform { display: flex; flex-direction: column; gap: 10px; }
+.reasonbox textarea { min-height: 90px; font-size: 16px; }
+.reasonbox .cnt2 { text-align: right; font-size: 12.5px; color: var(--muted); }
+.note-d { font-size: 12.5px; color: var(--muted); text-align: center; margin: 18px 0 4px; }
+.ro-cols { display: grid; grid-template-columns: 1fr; gap: 2px 12px; font-size: 13.5px; }
+.ro-cols div { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding: 5px 0; }
+.ro-cols div span:first-child { color: var(--muted); flex: none; max-width: 45%; }
+.ro-cols div span:last-child { text-align: right; overflow-wrap: anywhere; }
+.adm-tabs-pad { padding-bottom: calc(var(--tab-h) + var(--sab) + 28px); }
+@media (min-width: 820px) {
+  body.adminpage .app { max-width: 1040px; }
+  body.adminpage .tabbar { max-width: 1040px; }
+  body.adminpage .tab { flex-direction: row; gap: 8px; font-size: 14px; }
+  body.adminpage .tab .cnt { position: static; margin-left: 2px; }
+  .alist { grid-template-columns: 1fr 1fr; align-items: start; }
+  .sumgrid { grid-template-columns: repeat(4, 1fr); }
+  body.adminpage .toasts { bottom: calc(var(--tab-h) + var(--sab) + 14px); }
+  body.adminpage .brand img { max-height: 220px; object-fit: cover; }
+  .adm-login { max-width: 520px; margin: 0 auto; }
+}
