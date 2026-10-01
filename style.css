@@ -449,3 +449,38 @@ textarea.inp { padding: 12px 14px; min-height: 110px; font-size: 16px; resize: v
 .anonbox .terms li { font-size: 13.5px; }
 .thanks { display: grid; gap: 10px; justify-items: center; text-align: center; padding: 18px 6px; } .thanks b { font-size: 22px; } .thanks .eic.ok { background: var(--ok-bg); color: var(--ok); }
 .thanks .eic { width: 64px; height: 64px; border-radius: 22px; display: grid; place-items: center; }
+
+/* фото: карусель (акции, вакансии) и полноэкранный просмотр */
+.car { position: relative; aspect-ratio: 16 / 10; width: 100%; overflow: hidden; border-radius: 14px; background: var(--card2); isolation: isolate; }
+.card .car.in-card { margin: 0 0 12px; }
+.car-track { display: flex; height: 100%; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; border-radius: inherit; }
+.car-track::-webkit-scrollbar { display: none; }
+.car-track:focus-visible { box-shadow: inset 0 0 0 3px rgba(43,89,230,.7); }
+.car.tap .car-track { cursor: zoom-in; }
+.car-slide { position: relative; flex: 0 0 100%; height: 100%; scroll-snap-align: center; scroll-snap-stop: always; }
+.car-slide:not(.ok):not(.bad) { background: linear-gradient(100deg, var(--card2) 30%, var(--line) 50%, var(--card2) 70%); background-size: 300% 100%; animation: shim 1.3s linear infinite; }
+.car-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .25s ease; user-select: none; -webkit-user-drag: none; }
+.car-slide.ok .car-img { opacity: 1; }
+.car-slide.bad .car-img { display: none; }
+.car-bad { display: none; position: absolute; inset: 0; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--muted); font-size: 13px; }
+.car-slide.bad .car-bad { display: flex; }
+.car-cnt { position: absolute; top: 10px; right: 10px; z-index: 2; padding: 3px 10px; border-radius: 99px; background: rgba(8,12,22,.62); color: #fff; font-size: 12.5px; font-weight: 700; pointer-events: none; }
+.car-dots { position: absolute; left: 0; right: 0; bottom: 10px; z-index: 2; display: flex; justify-content: center; gap: 6px; pointer-events: none; }
+.car-dot { width: 7px; height: 7px; border-radius: 4px; background: rgba(255,255,255,.6); box-shadow: 0 0 0 1px rgba(0,0,0,.28); transition: width .2s ease, background .2s ease; }
+.car-dot.on { width: 18px; background: #fff; }
+.car-arrow { display: none; position: absolute; top: 50%; z-index: 2; width: 44px; height: 44px; margin-top: -22px; border: 0; border-radius: 50%; background: rgba(8,12,22,.55); color: #fff; place-items: center; cursor: pointer; }
+.car-arrow.prev { left: 8px; } .car-arrow.next { right: 8px; }
+.car-arrow:hover:not(:disabled) { background: rgba(8,12,22,.78); } .car-arrow:disabled { opacity: .3; cursor: default; }
+@media (hover: hover) and (pointer: fine) { .car-arrow { display: grid; } }
+.card.has-photo { cursor: pointer; }
+.pc-main { display: block; width: 100%; padding: 0; margin: 0; border: 0; background: none; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.lb { position: fixed; inset: 0; z-index: 70; background: #000; animation: bdin .2s ease both; }
+.lb .car { position: absolute; inset: 0; aspect-ratio: auto; border-radius: 0; background: #000; }
+.lb .car-slide:not(.ok):not(.bad) { background: #111; animation: none; }
+.lb .car-slide.ok { background: #000; } .lb .car-bad { color: #cfd6e6; }
+.lb .car-img { object-fit: contain; }
+.lb .car-track { cursor: default; }
+.lb .car-cnt { top: calc(18px + var(--sat)); right: auto; left: 14px; font-size: 14px; padding: 5px 12px; }
+.lb .car-dots { bottom: calc(18px + var(--sab)); }
+.lb-x { position: absolute; top: calc(10px + var(--sat)); right: 10px; z-index: 3; width: 44px; height: 44px; border: 0; border-radius: 50%; background: rgba(255,255,255,.18); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.lb-x:focus-visible { box-shadow: 0 0 0 3px rgba(255,255,255,.8); }

@@ -853,6 +853,99 @@
   }
 
 
+  /* ---------- фото: карусель и полноэкранный просмотр (акции и вакансии) ---------- */
+  // Допустимы только https-ссылки (Drive/lh3/прямые картинки), встроенные data:image и файлы демо-папки; всё остальное отбрасывается.
+  var PHOTO_OK = [/^https:\/\/[^\s"'<>]+$/i, /^data:image\/(?:jpeg|png|webp|gif);base64,[A-Za-z0-9+\/=]+$/, /^demo-photos\/[\w.-]+$/];
+  function photosOf(x) {
+    var seen = {}; return (x && Array.isArray(x.photos) ? x.photos : []).filter(function (u) {
+      if (typeof u !== 'string' || seen[u] || !PHOTO_OK.some(function (r) { return r.test(u); })) return false; seen[u] = 1; return true;
+    }).slice(0, 10);
+  }
+  var REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function carousel(urls, o) {
+    o = o || {};
+    var n = urls.length, cur = Math.min(Math.max(o.start || 0, 0), n - 1), raf = 0, lastW = 0, imgs = [];
+    var track = h('div', { class: 'car-track', tabindex: '0', role: 'group', 'aria-roledescription': 'карусель', 'aria-label': (o.label || 'Фотографии') + (n > 1 ? ', фото ' + n : ''), 'data-testid': 'car-track' });
+    urls.forEach(function (u, i) {
+      var img = h('img', { class: 'car-img', alt: (o.alt || 'Фото') + ', ' + (i + 1) + ' из ' + n, loading: 'lazy', decoding: 'async', draggable: 'false', referrerpolicy: 'no-referrer' }), sl;
+      img.addEventListener('load', function () { sl.classList.add('ok'); });
+      img.addEventListener('error', function () { sl.classList.add('bad'); });
+      sl = h('div', { class: 'car-slide', 'data-i': String(i) }, img, h('div', { class: 'car-bad' }, ico('image'), h('span', { text: 'Фото не загрузилось' })));
+      imgs.push(img); track.appendChild(sl);
+    });
+    var cnt = n > 1 ? h('span', { class: 'car-cnt num', 'data-testid': 'car-cnt', role: 'status', 'aria-label': '' }) : null;
+    var dots = n > 1 ? h('div', { class: 'car-dots', 'data-testid': 'car-dots', 'aria-hidden': 'true' }, urls.map(function () { return h('span', { class: 'car-dot' }); })) : null;
+    var prev = n > 1 ? h('button', { class: 'car-arrow prev', type: 'button', 'aria-label': 'Предыдущее фото', 'data-testid': 'car-prev', onclick: function () { go(cur - 1, true); } }, ico('cl')) : null;
+    var next = n > 1 ? h('button', { class: 'car-arrow next', type: 'button', 'aria-label': 'Следующее фото', 'data-testid': 'car-next', onclick: function () { go(cur + 1, true); } }, ico('cr')) : null;
+    var el = h('div', { class: 'car' + (o.cls ? ' ' + o.cls : ''), 'data-testid': o.testid || 'carousel', 'data-count': String(n) }, track, cnt, dots, prev, next);
+    function ensure(i) {   // подгружаем только текущее и соседние фото
+      for (var j = Math.max(0, i - 1); j <= Math.min(n - 1, i + 1); j++) if (!imgs[j].getAttribute('src')) imgs[j].setAttribute('src', urls[j]);
+    }
+    function paint() {
+      if (cnt) { cnt.textContent = (cur + 1) + '/' + n; cnt.setAttribute('aria-label', 'Фото ' + (cur + 1) + ' из ' + n); }
+      if (dots) [].forEach.call(dots.children, function (d, i) { d.classList.toggle('on', i === cur); });
+      if (prev) { prev.disabled = cur === 0; next.disabled = cur === n - 1; }
+      el.setAttribute('data-index', String(cur));
+    }
+    function set(i) { cur = i; paint(); ensure(i); if (o.onChange) o.onChange(i); }
+    function go(i, smooth) {
+      i = Math.min(Math.max(i, 0), n - 1);
+      track.scrollTo({ left: i * track.clientWidth, behavior: smooth && !REDUCE ? 'smooth' : 'auto' });
+      if (!smooth || REDUCE) set(i);
+    }
+    track.addEventListener('scroll', function () {
+      if (raf) return;
+      raf = requestAnimationFrame(function () { raf = 0; var i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth)); if (i !== cur && i >= 0 && i < n) set(i); });
+    }, { passive: true });
+    track.addEventListener('keydown', function (e) {
+      if (n > 1 && e.key === 'ArrowLeft') { e.preventDefault(); go(cur - 1, true); }
+      else if (n > 1 && e.key === 'ArrowRight') { e.preventDefault(); go(cur + 1, true); }
+      else if (n > 1 && e.key === 'Home') { e.preventDefault(); go(0, true); }
+      else if (n > 1 && e.key === 'End') { e.preventDefault(); go(n - 1, true); }
+      else if (o.onOpen && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); o.onOpen(cur); }
+    });
+    if (o.onOpen) { el.classList.add('tap'); track.addEventListener('click', function () { o.onOpen(cur); }); }
+    if (window.ResizeObserver) new ResizeObserver(function () {   // меняется ширина (поворот экрана, первый показ) → держим текущий кадр
+      var w = track.clientWidth; if (w && w !== lastW) { lastW = w; track.scrollLeft = cur * w; }
+    }).observe(track);
+    paint(); ensure(cur);
+    return { el: el, track: track, go: go, index: function () { return cur; } };
+  }
+  var lbCtl = null;
+  function openLightbox(urls, start, label) {
+    if (lbCtl) return;
+    var opener = document.activeElement, ctl, car;
+    var closeBtn = h('button', { class: 'lb-x', type: 'button', 'aria-label': 'Закрыть', 'data-testid': 'lb-close', onclick: function () { ctl.close(); } }, ico('x'));
+    car = carousel(urls, { start: start, label: label, alt: label, cls: 'lb-car', testid: 'lb-carousel' });
+    var ov = h('div', { class: 'lb', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Просмотр фотографий: ' + label, 'data-testid': 'lightbox' }, car.el, closeBtn);
+    function onKey(e) {
+      if (openStack[openStack.length - 1] !== ctl) return;
+      if (e.key === 'Escape') { e.preventDefault(); ctl.close(); }
+      if (e.key === 'Tab') {
+        var f = [car.track].concat([].slice.call(ov.querySelectorAll('button:not([disabled])'))).filter(function (x) { return x.offsetParent !== null; });
+        var i = f.indexOf(document.activeElement), d = e.shiftKey ? -1 : 1;
+        e.preventDefault(); f[(i + d + f.length) % f.length].focus();
+      }
+    }
+    ctl = {
+      el: ov,
+      close: function (fromPop) {
+        if (!ov.parentNode) return;
+        ov.remove(); document.removeEventListener('keydown', onKey); openStack.splice(openStack.indexOf(ctl), 1); lbCtl = null;
+        [].forEach.call(overlayRoot.children, function (x) { x.removeAttribute('inert'); });
+        if (!openStack.length) { $('#app').removeAttribute('inert'); document.body.classList.remove('has-ov'); }
+        if (fromPop !== true && history.state && history.state.prLb) history.back();   // убираем свою запись истории (крестик/Esc)
+        if (opener && opener.isConnected) opener.focus();
+      }
+    };
+    lbCtl = ctl;
+    try { history.pushState({ prLb: 1 }, '', location.href); } catch (e) { /* без истории закрытие по «назад» недоступно */ }
+    [].forEach.call(overlayRoot.children, function (x) { x.setAttribute('inert', ''); });
+    openStack.push(ctl); document.body.classList.add('has-ov'); overlayRoot.appendChild(ov); $('#app').setAttribute('inert', ''); document.addEventListener('keydown', onKey);
+    setTimeout(function () { car.track.focus(); }, 30);
+  }
+  window.addEventListener('popstate', function () { if (lbCtl && !(history.state && history.state.prLb)) lbCtl.close(true); });   // «назад» / жест Android закрывают просмотр
+
   /* ---------- «Ещё»: плитки, акции, вакансии, анонимная обратная связь ---------- */
   function promoState(p) {
     var t = M.today;
@@ -874,11 +967,14 @@
 
   /* --- акции и бонусы --- */
   function promoCard(p) {
-    var st = promoState(p);
-    return h('button', { class: 'card promo ' + st.k, type: 'button', 'data-promo': p.id, 'data-state': st.k, 'aria-label': p.title + ', ' + st.label + ', ' + p.bonus, onclick: function () { openPromo(p); } },
-      h('div', { class: 'row between' }, chip(st.label, st.tone, st.k === 'active' ? 'check' : st.k === 'soon' ? 'clock' : null), h('span', { class: 'cap num', text: st.note })),
+    var st = promoState(p), ph = photosOf(p), lbl = p.title + ', ' + st.label + ', ' + p.bonus;
+    var inner = [h('div', { class: 'row between' }, chip(st.label, st.tone, st.k === 'active' ? 'check' : st.k === 'soon' ? 'clock' : null), h('span', { class: 'cap num', text: st.note })),
       h('b', { class: 'pt', text: p.title }), h('div', { class: 'pbonus num', text: p.bonus }), h('p', { class: 'cap', text: p.desc }),
-      h('div', { class: 'gl num' }, h('span', { text: dmy(p.from) + ' – ' + dmy(p.to) }), h('span', { text: 'Условия ›' })));
+      h('div', { class: 'gl num' }, h('span', { text: dmy(p.from) + ' – ' + dmy(p.to) }), h('span', { text: 'Условия ›' }))];
+    if (!ph.length) return h('button', { class: 'card promo ' + st.k, type: 'button', 'data-promo': p.id, 'data-state': st.k, 'aria-label': lbl, onclick: function () { openPromo(p); } }, inner);
+    var car = carousel(ph, { label: p.title, alt: p.title, cls: 'in-card', onOpen: function (i) { openLightbox(ph, i, p.title); } });
+    return h('div', { class: 'card promo has-photo ' + st.k, 'data-promo': p.id, 'data-state': st.k, onclick: function (e) { if (!e.target.closest('.car')) openPromo(p); } },
+      car.el, h('button', { class: 'pc-main', type: 'button', 'aria-label': lbl }, inner));
   }
   function viewPromo() {
     var v = h('main', { class: 'view stack', id: 'main' }); v.appendChild(backTop('Акции и бонусы', 'Что действует для вас сейчас'));
@@ -897,8 +993,9 @@
     return v;
   }
   function openPromo(p) {
-    var st = promoState(p), ctl;
+    var st = promoState(p), ctl, ph = photosOf(p);
     ctl = openSheet({ title: p.title, body: h('div', { class: 'gap16', 'data-testid': 'promo-detail' },
+      ph.length ? carousel(ph, { label: p.title, alt: p.title, onOpen: function (i) { openLightbox(ph, i, p.title); } }).el : null,
       h('div', { class: 'row between' }, chip(st.label, st.tone, st.k === 'active' ? 'check' : st.k === 'soon' ? 'clock' : null), h('span', { class: 'cap num', text: st.note })),
       h('div', { class: 'pbonus big num', text: p.bonus }), h('p', { text: p.desc }),
       h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Срок действия' }), h('div', { class: 'am num', text: dmy(p.from) + ' – ' + dmy(p.to) }))),
@@ -910,11 +1007,15 @@
   /* --- вакансии --- */
   function appOf(jobId) { return (S.data.applications || []).filter(function (x) { return x.jobId === jobId; })[0]; }
   function jobCard(j) {
-    var ap = appOf(j.id), closed = j.status !== 'open';
-    return h('button', { class: 'card job' + (closed ? ' closed' : ''), type: 'button', 'data-job': j.id, 'aria-label': j.title + ', ' + j.zone + (closed ? ', закрыта' : '') + (ap ? ', вы откликнулись' : ''), onclick: function () { openJob(j); } },
-      h('div', { class: 'row between' }, h('b', { class: 'pt', text: j.title }), closed ? chip('Закрыта', 'gray') : ap ? chip(APP_ST[ap.status][0], APP_ST[ap.status][1], 'check') : chip('Открыта', 'ok')),
+    var ap = appOf(j.id), closed = j.status !== 'open', ph = photosOf(j);
+    var lbl = j.title + ', ' + j.zone + (closed ? ', закрыта' : '') + (ap ? ', вы откликнулись' : '');
+    var inner = [h('div', { class: 'row between' }, h('b', { class: 'pt', text: j.title }), closed ? chip('Закрыта', 'gray') : ap ? chip(APP_ST[ap.status][0], APP_ST[ap.status][1], 'check') : chip('Открыта', 'ok')),
       h('div', { class: 'jmeta' }, h('span', null, ico('box', 'sm'), j.zone), h('span', null, ico('clock', 'sm'), j.schedule)),
-      h('div', { class: 'jpay num', text: j.pay }), h('div', { class: 'gl' }, h('span', { text: 'Контакт: ' + j.contact.name }), h('span', { text: 'Подробнее ›' })));
+      h('div', { class: 'jpay num', text: j.pay }), h('div', { class: 'gl' }, h('span', { text: 'Контакт: ' + j.contact.name }), h('span', { text: 'Подробнее ›' }))];
+    if (!ph.length) return h('button', { class: 'card job' + (closed ? ' closed' : ''), type: 'button', 'data-job': j.id, 'aria-label': lbl, onclick: function () { openJob(j); } }, inner);
+    var car = carousel(ph, { label: j.title, alt: j.title, cls: 'in-card', onOpen: function (i) { openLightbox(ph, i, j.title); } });
+    return h('div', { class: 'card job has-photo' + (closed ? ' closed' : ''), 'data-job': j.id, onclick: function (e) { if (!e.target.closest('.car')) openJob(j); } },
+      car.el, h('button', { class: 'pc-main', type: 'button', 'aria-label': lbl }, inner));
   }
   function viewJobs() {
     var v = h('main', { class: 'view stack', id: 'main' }); v.appendChild(backTop('Вакансии в компании', 'Внутренние вакансии — можно откликнуться'));
@@ -924,12 +1025,13 @@
     return v;
   }
   function openJob(j) {
-    var ap = appOf(j.id), closed = j.status !== 'open', ctl;
+    var ap = appOf(j.id), closed = j.status !== 'open', ctl, ph = photosOf(j);
     function kv(t, val) { return h('div', { class: 'line' }, h('div', { class: 'nm', text: t }), h('div', { class: 'am', text: val })); }
     var foot = closed ? h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть')
       : ap ? h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть')
       : h('div', { class: 'stack' }, h('button', { class: 'btn', type: 'button', 'data-testid': 'job-apply', onclick: function () { ctl.close(true); openApply(j); } }, ico('send', 'sm'), 'Откликнуться'), h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть'));
     ctl = openSheet({ title: j.title, body: h('div', { class: 'gap16', 'data-testid': 'job-detail' },
+      ph.length ? carousel(ph, { label: j.title, alt: j.title, onOpen: function (i) { openLightbox(ph, i, j.title); } }).el : null,
       closed ? h('div', { class: 'tipbox' }, ico('info', 'sm'), h('span', { text: 'Вакансия закрыта — отклики не принимаются.' })) : null,
       ap ? h('div', { class: 'tipbox ok', 'data-testid': 'job-applied' }, ico('check', 'sm'), h('span', { text: 'Вы откликнулись ' + dmy(ap.sentAt) + '. Статус: ' + APP_ST[ap.status][0] + '.' + (ap.comment ? ' Ваш комментарий: «' + ap.comment + '».' : '') })) : null,
       h('div', { class: 'card2box' }, kv('Участок', j.zone), kv('График', j.schedule), kv('Оплата', j.pay)),
@@ -1553,7 +1655,7 @@
     wrap.appendChild(h('button', { class: 'devpill', type: 'button', 'aria-expanded': devOpen ? 'true' : 'false', 'data-testid': 'dev-toggle', onclick: function () { devOpen = !devOpen; devRender(); } }, ico('paper', 'sm'), devOpen ? 'Скрыть DEV' : 'DEV: Telegram админа'));
     host.appendChild(wrap);
   }
-  window.__dev = { periodOf: M.periodOf, buildPeriods: M.buildPeriods, anonChallenge: function () { return server.anonChallenge(); }, anonSubmit: function (p) { return server.anonSubmit(p); }, anonBuild: anonBuildRequest, applyJob: function (p) { return server.applyJob(session().phone, p); }, promoState: promoState, validate: incidentErrors, advInfo: function () { return advInfo(S.data, S.calc); }, advCheck: function (x) { return server._advCheck(x); }, advInfoFor: function (d) { var i = advInfo(d, calcAll(d)); i.w = null; return i; }, weekInfo: weekInfo, open: function (v) { devOpen = v !== false; devRender(); } };
+  window.__dev = { periodOf: M.periodOf, buildPeriods: M.buildPeriods, anonChallenge: function () { return server.anonChallenge(); }, anonSubmit: function (p) { return server.anonSubmit(p); }, anonBuild: anonBuildRequest, applyJob: function (p) { return server.applyJob(session().phone, p); }, promoState: promoState, photosOf: photosOf, validate: incidentErrors, advInfo: function () { return advInfo(S.data, S.calc); }, advCheck: function (x) { return server._advCheck(x); }, advInfoFor: function (d) { var i = advInfo(d, calcAll(d)); i.w = null; return i; }, weekInfo: weekInfo, open: function (v) { devOpen = v !== false; devRender(); } };
 
   /* ---------- старт ---------- */
   setTheme(load('pr.theme', 'auto'));
