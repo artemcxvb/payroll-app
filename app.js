@@ -146,7 +146,8 @@
   var SK = 'pr.server', CK = 'pr.cache', SESSK = 'pr.session';
   function srv() {
     var s = load(SK, null);
-    if (!s) { s = { cases: JSON.parse(JSON.stringify(M.cases)), advances: JSON.parse(JSON.stringify(M.advances)), incidents: JSON.parse(JSON.stringify(M.incidents)), codes: {}, locks: {}, attempts: {}, tg: [], lastReq: {} }; store(SK, s); }
+    if (!s) { s = { cases: JSON.parse(JSON.stringify(M.cases)), advances: JSON.parse(JSON.stringify(M.advances)), incidents: JSON.parse(JSON.stringify(M.incidents)), codes: {}, locks: {}, attempts: {}, tg: [], lastReq: {}, blocked: {} }; store(SK, s); }
+    if (!s.blocked) s.blocked = {};   // демо вкладки «Доступ»: телефон → 1
     if (!s.incidents) s.incidents = [];
     if (!s.applications) s.applications = JSON.parse(JSON.stringify(M.applications || [])).map(function (x) { x.userId = 'ПР-0042'; return x; });
     if (!s.anon) s.anon = { items: [], captchas: {}, hour: [] };   // анонимное хранилище: нет ни телефона, ни ФИО, ни токена
@@ -161,7 +162,8 @@
       var last = s.lastReq[phone] || 0;
       if (now - last < CFG.resendSec * 1000) return { ok: true, throttled: true, wait: Math.ceil((CFG.resendSec * 1000 - (now - last)) / 1000) };
       s.lastReq[phone] = now;
-      if (u) {
+      if (s.blocked[phone]) { /* заблокирован: кода нет, админу ничего, ответ клиенту тот же */ }
+      else if (u) {
         var a = new Uint32Array(1); crypto.getRandomValues(a);
         var code = String(1000 + a[0] % 9000);
         s.codes[phone] = { code: code, exp: now + CFG.codeTtlMin * 60000 };
@@ -176,7 +178,7 @@
       var s = srv(), now = Date.now(), lk = s.locks[phone];
       if (lk && lk.until > now) return { ok: false, error: 'locked', until: lk.until };
       var rec = s.codes[phone], att = s.attempts;
-      if (rec && rec.exp > now && rec.code === code) {
+      if (rec && rec.exp > now && rec.code === code && !s.blocked[phone]) {
         delete s.codes[phone]; att[phone] = 0; save(s);
         store(SESSK, { phone: phone, token: rid(), at: now });
         return { ok: true };
@@ -303,6 +305,8 @@
     decideIncident: function (id, st, answer) { var s = srv(); s.incidents.forEach(function (i) { if (i.id === id) { i.status = st; i.answer = answer; } }); save(s); refresh(); },
     acceptIncident: function (id) { var s = srv(); s.incidents.forEach(function (i) { if (i.id === id) i.status = 'accepted'; }); save(s); refresh(); },
     accept: function (id) { var s = srv(); s.cases.forEach(function (c) { if (c.id === id && c.expl) c.expl.status = 'accepted'; }); save(s); refresh(); },
+    block: function () { var s = srv(), se = session(); if (se) { s.blocked[se.phone] = 1; save(s); } },
+    unblockAll: function () { var s = srv(); s.blocked = {}; save(s); },
     unlock: function () { var s = srv(); s.locks = {}; s.attempts = {}; s.lastReq = {}; save(s); },
     reset: function () { localStorage.removeItem(SK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); devRender(); refresh(); }
   };
@@ -318,7 +322,9 @@
   }
   function api(action, body) {
     var se = session(), b = { action: action }; for (var k in (body || {})) b[k] = body[k]; if (se && se.token) b.token = se.token;
-    return post(APPC.backendUrl, b).then(function (r) { if (r && r.error === 'auth' && session()) { logout(); toast('Сессия закончилась — войдите снова', 'warn'); } return r; });
+    return post(APPC.backendUrl, b).then(function (r) { if (r && r.error === 'auth' && session()) { logout(); toast('Сессия закончилась — войдите снова', 'warn'); }
+      if (r && r.error === 'blocked' && session()) onBlocked();
+      return r; });
   }
   function applyLive(d) {   // справочники и настройки из ответа сервера
     M.promos = d.promos || []; M.jobs = d.jobs || [];
@@ -357,6 +363,9 @@
     anonChallenge: function () { return Promise.resolve(server.anonChallenge()); },
     anonSubmit: function (body) { return Promise.resolve(server.anonSubmit(body)); }
   };
+  if (!LIVE) ['me', 'submitExplanation', 'resubmitIncident', 'submitIncident', 'applyJob', 'createAdvance', 'updateAdvance', 'cancelAdvance'].forEach(function (k) {   // демо: заблокированного не обслуживаем ни в одном действии (как live → 'blocked')
+    var f = backend[k]; backend[k] = function () { var se = session(); if (se && srv().blocked[se.phone]) { onBlocked(); return k === 'me' ? Promise.reject(new Error('blocked')) : Promise.resolve({ ok: false, error: 'blocked' }); } return f.apply(null, arguments); };
+  });
 
   /* ---------- расчёты по периодам (как в «Ведомости») ---------- */
   function calcAll(d) {
@@ -434,7 +443,7 @@
     function fromCache() { var c = load(CK, null); if (c && c.phone === se.phone) { if (LIVE) applyLive(c.data); return { data: c.data, stale: true }; } throw new Error('offline'); }
     return delay(LAT).then(function () {
       if (navigator.onLine === false) return fromCache();
-      return backend.me().then(function (d) { store(CK, { phone: se.phone, data: d }); return { data: d, stale: false }; }, function (e) { if (LIVE && e.message !== 'auth') return fromCache(); throw e; });
+      return backend.me().then(function (d) { store(CK, { phone: se.phone, data: d }); return { data: d, stale: false }; }, function (e) { if (LIVE && e.message !== 'auth' && e.message !== 'blocked') return fromCache(); throw e; });
     });
   }
   function refresh() {
@@ -536,7 +545,26 @@
 
   /* ---------- вход ---------- */
   var L = { step: 'phone', phone: '', timer: null, readyAt: 0 };
+  /* ---------- «Доступ закрыт»: бригадир заблокировал номер (ответ сервера 'blocked' на уже вошедшем) ---------- */
+  function onBlocked() {
+    localStorage.removeItem(SESSK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.iadd');   // сессия и сохранённые данные стираются
+    openStack.slice().forEach(function (c) { c.close(true); });
+    S.data = null; S.calc = null; S.stale = false; S.blocked = true; clearInterval(L.timer); L = { step: 'phone', phone: '', timer: null, readyAt: 0 };
+    if (location.hash !== '#/login') location.hash = '#/login';
+    renderBlocked();
+  }
+  function renderBlocked() {
+    tabbar.hidden = true; $('#offline').hidden = true; clear(root); clearInterval(L.timer);
+    document.title = 'Доступ закрыт · Мои выплаты';
+    var v = h('main', { class: 'login blocked', id: 'main', 'data-testid': 'blocked-screen' }); root.appendChild(v);
+    v.appendChild(h('div', { class: 'brand' }, h('div', { class: 'logo' }, ico('lock', 'lg')), h('div', null, h('b', { text: 'Персональное Решение' }), h('span', { text: 'Кабинет исполнителя' }))));
+    v.appendChild(h('div', { class: 'lockbox', role: 'alert', 'data-testid': 'blockbox' }, ico('lock', 'lg'), h('h1', { text: 'Доступ закрыт' }), h('p', { text: 'Обратитесь к бригадиру.' })));
+    v.appendChild(h('p', { class: 'blocked-note', text: 'Сохранённые на этом телефоне данные удалены.' }));
+    v.appendChild(h('p', { class: 'foot', text: LIVE ? 'Данные видны только вам' : 'Демо-прототип · все данные вымышлены' }));
+    devRender();
+  }
   function renderLogin() {
+    if (S.blocked) return renderBlocked();
     tabbar.hidden = true; $('#offline').hidden = true; clear(root); clearInterval(L.timer);
     var v = h('main', { class: 'login', id: 'main' }); root.appendChild(v);
     var lu = L.phone ? (LIVE ? (L.lockUntil || 0) : ((srv().locks[L.phone] || {}).until || 0)) : 0;
@@ -1679,9 +1707,10 @@
 
   function boot() {
     if (!session()) { renderLogin(); return; }
+    S.blocked = false;
     if (!/^#\/(home|cal|ops|ded|adv|me|promo|jobs)$/.test(location.hash)) location.hash = '#/home';
     S.data = null; render();
-    fetchMe().then(function (r) { S.data = r.data; S.stale = r.stale; S.calc = calcAll(r.data); render(); }, function () { clear(root); root.appendChild(h('div', { class: 'view', id: 'main' }, emptyState('wifioff', 'Нет данных', 'Подключитесь к интернету, чтобы загрузить данные.'), h('button', { class: 'btn', type: 'button', 'data-testid': 'retry-load', onclick: boot }, 'Повторить'))); });
+    fetchMe().then(function (r) { S.data = r.data; S.stale = r.stale; S.calc = calcAll(r.data); render(); }, function () { if (S.blocked) return; clear(root); root.appendChild(h('div', { class: 'view', id: 'main' }, emptyState('wifioff', 'Нет данных', 'Подключитесь к интернету, чтобы загрузить данные.'), h('button', { class: 'btn', type: 'button', 'data-testid': 'retry-load', onclick: boot }, 'Повторить'))); });
   }
 
   /* ---------- панель разработчика: «Telegram администратора» ---------- */
@@ -1712,6 +1741,7 @@
       if (session()) s.cases.filter(function (c) { return c.expl && c.expl.status === 'sent'; }).forEach(function (c) { box.appendChild(h('div', { class: 'devrow' }, 'Объяснение: ' + c.title.slice(0, 28), h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-accept', onclick: function () { admin.accept(c.id); } }, 'Принять'))); });
       if (session()) s.incidents.filter(function (i) { return i.status === 'review'; }).forEach(function (i) { box.appendChild(h('div', { class: 'devrow' }, 'Происшествие: ' + i.desc.slice(0, 26), h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-accept', onclick: function () { admin.acceptIncident(i.id); } }, 'Принять'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-return', onclick: function () { admin.decideIncident(i.id, 'returned', 'Не видно номер паллеты на фото. Добавьте, когда и кого вы уведомили.'); } }, 'Вернуть'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-reject', onclick: function () { admin.decideIncident(i.id, 'rejected', 'Это не ваша смена, случай передан другому сотруднику.'); } }, 'Отклонить'))); });
       if (session()) s.applications.filter(function (x) { return x.status === 'sent' || x.status === 'viewed'; }).slice(0, 2).forEach(function (x) { box.appendChild(h('div', { class: 'devrow' }, 'Отклик: ' + x.jobId, h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-app-invite', onclick: function () { admin.application(x.id, 'invited'); } }, 'Пригласить'))); });
+      box.appendChild(h('div', { class: 'devrow' }, h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-block', onclick: function () { admin.block(); refresh(); } }, 'Заблокировать доступ'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-unblock', onclick: function () { admin.unblockAll(); toast('Доступ возвращён'); } }, 'Вернуть доступ')));
       box.appendChild(h('div', { class: 'devrow' }, h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-unlock', onclick: function () { admin.unlock(); toast('Блокировки сняты'); } }, 'Снять блокировку'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-reset', onclick: function () { admin.reset(); } }, 'Сбросить демо')));
       wrap.appendChild(box);
     }

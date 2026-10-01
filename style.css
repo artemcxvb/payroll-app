@@ -201,6 +201,9 @@ textarea.inp { padding: 12px 14px; min-height: 110px; font-size: 16px; resize: v
 .lockbox { text-align: center; padding: 22px 16px; background: var(--bad-bg); color: var(--bad); border-radius: 18px; }
 .lockbox .t { font-size: 34px; font-weight: 800; margin: 6px 0; }
 .lockbox p { font-size: 14px; }
+.lockbox h1 { font-size: 28px; margin: 10px 0 6px; color: var(--bad); }
+.lockbox svg { margin: 0 auto; display: block; }
+.blocked-note { text-align: center; color: var(--muted); font-size: 14px; margin-top: 16px; }
 .center { text-align: center; }
 .gap8 > * + * { margin-top: 8px; } .gap12 > * + * { margin-top: 12px; } .gap16 > * + * { margin-top: 16px; } .gap24 > * + * { margin-top: 24px; }
 
