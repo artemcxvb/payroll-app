@@ -4,7 +4,7 @@
 (function () {
   'use strict';
   var M = window.MOCK, CFG = M.config;
-  var APPC = window.APP_CONFIG || {}, LIVE = APPC.mode === 'live' && /^https:\/\//.test(APPC.backendUrl || '');   // demo по умолчанию, пока нет URL бэкенда
+  var APPC = window.APP_CONFIG || {}, BOT_URL = /^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{4,31}$/.test(String(APPC.loginBotUrl || '')) ? APPC.loginBotUrl : 'https://t.me/tableworks_bot', BOT_NAME = '@' + BOT_URL.replace(/^.*\//, ''), LIVE = APPC.mode === 'live' && /^https:\/\//.test(APPC.backendUrl || '');   // demo по умолчанию, пока нет URL бэкенда
   var qs = new URLSearchParams(location.search);
   var LAT = LIVE ? 0 : qs.has('lat') ? +qs.get('lat') : 450;       // задержка «сети», мс (в боевом режиме — настоящая сеть)
   if (LIVE) { ['users', 'shifts', 'cases', 'incidents', 'promos', 'jobs', 'applications', 'advances'].forEach(function (k) { M[k] = []; }); M.OPS.length = 0; }   // демо-данных в боевом режиме нет
@@ -57,6 +57,8 @@
   function kb(n) { return Math.max(1, Math.round(n / 1024)) + ' КБ'; }
   function pctClass(p) { return p >= CFG.normGood ? 'good' : p >= CFG.normLow ? 'mid' : 'low'; }
   function pctText(p) { return p >= CFG.normGood ? 'Норма выполнена' : p >= CFG.normLow ? 'Ниже нормы' : 'Сильно ниже нормы'; }
+  function rate4(n) { return (Math.round(n * 10000) / 10000).toFixed(4).replace('.', ','); }   // «ЗП сотруднику, ₽/ед» в таблице — 4 знака (16,3605)
+  function normTxt(o) { return o.normH > 0 ? o.normH + ' ед./ч' : 'нормы нет'; }
   function rate(n) { return (Math.round(n * 100) / 100).toFixed(2).replace('.', ','); }
   function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* квота */ } }
   function load(k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
@@ -163,7 +165,7 @@
         var a = new Uint32Array(1); crypto.getRandomValues(a);
         var code = String(1000 + a[0] % 9000);
         s.codes[phone] = { code: code, exp: now + CFG.codeTtlMin * 60000 };
-        s.tg.unshift({ t: now, kind: 'code', name: u.name, phone: phone, code: code });
+        s.tg.unshift({ t: now, kind: 'code', name: u.name, phone: phone, code: code, ttl: CFG.codeTtlMin });
       } else {
         s.tg.unshift({ t: now, kind: 'unknown', phone: phone });   // код не создаётся; клиенту отвечаем так же, как для известного номера
       }
@@ -368,15 +370,20 @@
       var withheld = Math.min(total, limit), carryOut = total - withheld;
       out[p.id] = { p: p, shifts: sh, cases: cs, units: units, norm: norm, tariff: tariff, accrued: accrued, by: by, own: own, carryIn: carry, total: total, limit: limit,
         withheld: withheld, carryOut: carryOut, payout: accrued - withheld, hours: sum(sh, function (s) { return s.hours; }),
-        perf: norm ? units / norm * 100 : 0 };
+        perf: meanPerf(sh) };
       var stm = d.statements && d.statements[p.id];   // боевой режим: деньги берём из «Ведомости» как есть, не пересчитываем
-      if (stm) { var o = out[p.id]; o.accrued = stm.accrued; o.by = stm.by; o.own = sum(KINDS, function (k) { return stm.by[k] || 0; }); o.total = stm.total; o.limit = stm.limit; o.withheld = stm.withheld; o.carryOut = stm.carryOut; o.payout = stm.payout; carryOut = stm.carryOut; }
+      if (stm) { var o = out[p.id]; o.perf = stm.perf || o.perf; o.accrued = stm.accrued; o.by = stm.by; o.own = sum(KINDS, function (k) { return stm.by[k] || 0; }); o.total = stm.total; o.limit = stm.limit; o.withheld = stm.withheld; o.carryOut = stm.carryOut; o.payout = stm.payout; carryOut = stm.carryOut; }
       carry = carryOut;
     });
     return out;
   }
   /* ---------- недельный аванс: все параметры — в CFG (настройки) ---------- */
+  function limitWords() { var d = CFG.deductShare; return d === 0.5 ? 'половины' : Math.round(d * 100) + '%'; }
   function perfOf(x) { return x.norm ? x.units / x.norm * 100 : 0; }
+  // «Произв-ть, %» в таблице = СРЕДНЕЕ процентов по сменам (не взвешенное по единицам): так считает «Ведомость» и «Нормативы по участкам»
+  function meanPerf(shifts) { var a = shifts.filter(function (x) { return x.norm; }); return a.length ? sum(a, perfOf) / a.length : 0; }
+  // подпись процента: целое; если округление перескочило бы порог 50/100/115 (99,7 → «100»), показываем десятые со знаком вниз, как в таблице («99,7%»)
+  function pctS(p) { var r = Math.round(p); if ([50, 100, 115].some(function (t) { return (r >= t) !== (p >= t); })) return (Math.floor(p * 10) / 10).toFixed(1).replace('.', ','); return String(r); }
   var DOWG = ['воскресенья', 'понедельника', 'вторника', 'среды', 'четверга', 'пятницы', 'субботы'];
   var DOWA = ['в воскресенье', 'в понедельник', 'во вторник', 'в среду', 'в четверг', 'в пятницу', 'в субботу'];
   function hh(n) { return ('0' + n).slice(-2) + ':00'; }
@@ -559,13 +566,13 @@
         L.phone = phone; L.step = 'code'; L.readyAt = Date.now() + (r.throttled ? r.wait * 1000 : CFG.resendSec * 1000); renderLogin();
       });
     } },
-      h('div', { class: 'field' }, h('label', { class: 'l', for: 'phone', text: 'Номер телефона' }), h('div', { class: 'phone' }, h('span', { class: 'pre', 'aria-hidden': 'true', text: '+7' }), inp), err, h('p', { class: 'help', id: 'ph-help', text: 'Тот номер, который вы сообщили администратору.' })), btn);
+      h('div', { class: 'field' }, h('label', { class: 'l', for: 'phone', text: 'Номер телефона' }), h('div', { class: 'phone' }, h('span', { class: 'pre', 'aria-hidden': 'true', text: '+7' }), inp), err, h('p', { class: 'help', id: 'ph-help', text: 'Тот номер, который вы сообщили бригадиру при оформлении.' })), btn);
     v.appendChild(h('h1', { text: 'Вход для исполнителей' }));
-    v.appendChild(h('p', { class: 'lead', text: 'Доступ только по индивидуальному коду, который выдаёт администратор.' }));
+    v.appendChild(h('p', { class: 'lead', text: 'Доступ только по личному коду, который приходит вам в Telegram.' }));
     v.appendChild(form);
     v.appendChild(h('div', { class: 'steps' },
       h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: 'Введите номер телефона и нажмите «Запросить код».' })),
-      h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: 'Администратор получит код в Telegram и сообщит его вам.' })),
+      h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: 'Код придёт вам лично в Telegram от бота ' + BOT_NAME + '. Впервые? Откройте бота, нажмите «Старт» и «Поделиться номером».' })),
       h('div', { class: 'stepi' }, h('i', { text: '3' }), h('span', { text: 'Введите 4 цифры — увидите только свои данные.' }))));
     setTimeout(function () { inp.focus(); }, 50);
   }
@@ -610,12 +617,15 @@
       backend.requestCode(L.phone).then(function (r) {
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         if (r.error === 'network' || r.error === 'server') { toast('Нет связи с сервером. Повторите позже.', 'bad'); return; }
-        L.readyAt = Date.now() + (r.throttled ? r.wait * 1000 : CFG.resendSec * 1000); tick(); toast('Новый код отправлен администратору'); boxes.forEach(function (b) { b.value = ''; }); boxes[0].focus();
+        L.readyAt = Date.now() + (r.throttled ? r.wait * 1000 : CFG.resendSec * 1000); tick(); toast('Код запрошен повторно — проверьте Telegram'); boxes.forEach(function (b) { b.value = ''; }); boxes[0].focus();
       });
     });
     tick(); L.timer = setInterval(function () { if (!resend.isConnected) return clearInterval(L.timer); tick(); }, 1000);
     v.appendChild(h('h1', { text: 'Введите код' }));
-    v.appendChild(h('div', { class: 'waitbox', 'data-testid': 'wait-admin', role: 'status' }, ico('send'), h('div', null, h('b', { text: 'Код отправлен администратору' }), h('span', { text: 'Позвоните или напишите ему — он назовёт код для номера ' + fmtPhone(L.phone) + '. Код действует ' + CFG.codeTtlMin + ' минут.' }))));
+    // подсказка одинакова для любого номера (не раскрываем, есть ли он в CRM и привязан ли Telegram)
+    v.appendChild(h('div', { class: 'waitbox', 'data-testid': 'wait-admin', role: 'status' }, ico('send'), h('div', null, h('b', { text: 'Проверьте Telegram' }),
+      h('span', { 'data-testid': 'tg-hint', text: 'Код придёт вам в Telegram. Если вы ещё не запускали бота, откройте ' + BOT_NAME + ' (кнопка со ссылкой ' + BOT_URL + '), нажмите «Старт» и «Поделиться номером», затем запросите код снова. Код действует ' + CFG.codeTtlMin + ' минут.' }),
+      h('a', { class: 'btn ghost botlink', href: BOT_URL, target: '_blank', rel: 'noopener noreferrer', 'data-testid': 'tg-bot-link' }, ico('send', 'sm'), 'Открыть ' + BOT_NAME + ' в Telegram'))));
     v.appendChild(h('div', { class: 'gap16' }, h('div', { class: 'gap12' }, otp, err), go,
       h('div', { class: 'row between' }, resend, h('button', { class: 'link', type: 'button', 'data-testid': 'change-phone', onclick: function () { L.step = 'phone'; renderLogin(); } }, 'Изменить номер'))));
     v.appendChild(h('p', { class: 'foot', text: 'После ' + CFG.maxAttempts + ' неверных попыток вход блокируется на ' + CFG.lockMin + ' минут.' }));
@@ -625,7 +635,7 @@
     var t = h('div', { class: 't num', 'data-testid': 'lock-timer' });
     function tick() { var s = Math.max(0, Math.ceil((until - Date.now()) / 1000)); t.textContent = ('0' + Math.floor(s / 60)).slice(-2) + ':' + ('0' + s % 60).slice(-2); if (s <= 0) { clearInterval(L.timer); L.step = 'phone'; renderLogin(); } }
     v.appendChild(h('div', { class: 'brand' }, h('div', { class: 'logo' }, ico('lock', 'lg')), h('div', null, h('b', { text: 'Вход временно закрыт' }), h('span', { text: 'Слишком много неверных кодов' }))));
-    v.appendChild(h('div', { class: 'lockbox', role: 'alert', 'data-testid': 'lockbox' }, ico('lock', 'lg'), h('p', { text: 'Повторить попытку можно через' }), t, h('p', { text: 'Если код потерялся — попросите администратора выдать новый.' })));
+    v.appendChild(h('div', { class: 'lockbox', role: 'alert', 'data-testid': 'lockbox' }, ico('lock', 'lg'), h('p', { text: 'Повторить попытку можно через' }), t, h('p', { text: 'Когда блокировка закончится, запросите новый код — он придёт в Telegram.' })));
     v.appendChild(h('div', { class: 'gap12 lockbtn' }, h('button', { class: 'btn ghost', type: 'button', onclick: function () { clearInterval(L.timer); L.step = 'phone'; renderLogin(); } }, 'Вернуться к вводу номера')));
     tick(); L.timer = setInterval(tick, 1000);
   }
@@ -635,7 +645,7 @@
     var W = 320, H = 112, top = 8, bot = 18, n = shifts.length, max = 140, bw = Math.min(22, (W - 40) / n - 4), gap = n > 1 ? (W - 36 - bw * n) / (n - 1) : 0;
     var ns = 'http://www.w3.org/2000/svg', s = document.createElementNS(ns, 'svg');
     s.setAttribute('viewBox', '0 0 ' + W + ' ' + H); s.setAttribute('class', 'trend'); s.setAttribute('role', 'img'); s.setAttribute('data-testid', 'trend');
-    s.setAttribute('aria-label', 'График производительности по сменам: ' + shifts.map(function (x) { return dm(x.date) + ' — ' + Math.round(perfOf(x)) + '%'; }).join(', '));
+    s.setAttribute('aria-label', 'График производительности по сменам: ' + shifts.map(function (x) { return dm(x.date) + ' — ' + pctS(perfOf(x)) + '%'; }).join(', '));
     function el(t, a, txt) { var e = document.createElementNS(ns, t); for (var k in a) e.setAttribute(k, a[k]); if (txt) e.textContent = txt; s.appendChild(e); return e; }
     var y100 = top + (H - top - bot) * (1 - 100 / max);
     el('line', { x1: 32, x2: W, y1: y100, y2: y100, class: 'norm' }); el('text', { x: 28, y: y100 + 3, class: 'nl' }, '100%');
@@ -647,10 +657,10 @@
     return s;
   }
   function shiftRow(s) {
-    var p = Math.round(perfOf(s));
+    var p = perfOf(s);
     return h('div', { class: 'srow' }, h('div', { class: 'sico ' + s.type }, ico(s.type === 'day' ? 'sun' : 'moon', 'sm')),
       h('div', { class: 'd' }, dlong(s.date) + ', ' + dowOf(s.date).slice(0, 2).toLowerCase(), h('small', { text: (s.type === 'day' ? 'Дневная' : 'Ночная') + ' · ' + s.hours + ' ч · ' + num(s.units) + ' ед.' })),
-      h('div', { class: 'pct ' + pctClass(p), text: p + '%' }));
+      h('div', { class: 'pct ' + pctClass(p), text: pctS(p) + '%' }));
   }
   function applyWidths(v) { // CSP запрещает inline style — размеры задаём через CSSOM
     v.querySelectorAll('.stackbar i[data-w]').forEach(function (b) { b.style.flex = b.getAttribute('data-w') + ' 1 0'; });
@@ -697,7 +707,7 @@
     var over = c.carryOut > 0, used = c.limit ? Math.min(100, c.withheld / c.limit * 100) : 0;
     b.appendChild(h('div', { class: 'limit', 'data-testid': 'limit-box' },
       h('div', { class: 't' }, ico('lock', 'sm'), 'Защитный лимит удержаний'),
-      h('p', null, 'Из начисленного нельзя удержать больше ', h('b', { text: 'половины' }), ' — сейчас это ', h('b', { class: 'num', text: money(c.limit) }), '.'),
+      (CFG.deductShare >= 1 ? h('p', null, 'Удерживать можно не больше начисленного — сейчас это ', h('b', { class: 'num', text: money(c.limit) }), '.') : h('p', null, 'Из начисленного нельзя удержать больше ', h('b', { text: limitWords() }), ' — сейчас это ', h('b', { class: 'num', text: money(c.limit) }), '.')),
       h('div', { class: 'gauge', role: 'img', 'aria-label': 'Удержано ' + money(c.withheld) + ' из лимита ' + money(c.limit) }, h('i', { class: over ? 'full' : '', 'data-w': used })),
       h('div', { class: 'gl num' }, h('span', { text: 'Удержано ' + money(c.withheld) }), h('span', { text: 'Лимит ' + money(c.limit) })),
       over ? h('p', { 'data-testid': 'carry-text' }, 'Вычетов набралось больше лимита, поэтому ', h('b', { class: 'num', text: money(c.carryOut) }), ' сейчас не списываются — они ', h('b', { text: 'переносятся на следующий период' }), ' и будут удержаны позже.')
@@ -707,7 +717,7 @@
     // производительность
     var pc = pctClass(c.perf), pf = h('section', { class: 'card', 'aria-labelledby': 'pf-h', 'data-testid': 'perf' });
     pf.appendChild(h('div', { class: 'card-h' }, h('h2', { id: 'pf-h', text: 'Производительность' }), chip(pctText(c.perf), pc === 'good' ? 'ok' : pc === 'mid' ? 'warn' : 'bad')));
-    pf.appendChild(h('div', { class: 'perf-top' }, h('div', null, h('div', { class: 'perf-num num ' + pc, 'data-testid': 'perf-val', text: Math.round(c.perf) + '%' }), h('div', { class: 'cap', text: 'факт к нормативу операций за период' }))));
+    pf.appendChild(h('div', { class: 'perf-top' }, h('div', null, h('div', { class: 'perf-num num ' + pc, 'data-testid': 'perf-val', text: pctS(c.perf) + '%' }), h('div', { class: 'cap', text: 'факт к нормативу операций за период' }))));
     if (c.shifts.length) {
       pf.appendChild(perfChart(c.shifts));
       pf.appendChild(h('div', { class: 'legend' }, h('span', null, h('i', { class: 'lg-good' }), '100% и выше'), h('span', null, h('i', { class: 'lg-mid' }), '50–99%'), h('span', null, h('i', { class: 'lg-low' }), 'ниже 50%')));
@@ -761,7 +771,7 @@
     if (!s) dc.appendChild(h('p', { class: 'cap', text: 'В этот день смены не было.' }));
     else if (s.planned) dc.appendChild(h('p', { class: 'cap', text: 'Смена ещё не закрыта — выработка появится после подведения итогов.' }));
     else { var p = Math.round(perfOf(s));
-      dc.appendChild(h('div', { class: 'kv' }, h('div', null, h('b', { class: 'num', text: s.hours + ' ч' }), h('span', { text: 'Отработано' })), h('div', null, h('b', { class: 'num', text: num(s.units) }), h('span', { text: 'Выработка, ед.' })), h('div', null, h('b', { class: 'num ' + pctClass(p), 'data-testid': 'day-pct', text: p + '%' }), h('span', { text: 'Производит-ть' }))));
+      dc.appendChild(h('div', { class: 'kv' }, h('div', null, h('b', { class: 'num', text: s.hours + ' ч' }), h('span', { text: 'Отработано' })), h('div', null, h('b', { class: 'num', text: num(s.units) }), h('span', { text: 'Выработка, ед.' })), h('div', null, h('b', { class: 'num ' + pctClass(p), 'data-testid': 'day-pct', text: pctS(p) + '%' }), h('span', { text: 'Производит-ть' }))));
       dc.appendChild(h('p', { class: 'cap mt', 'data-testid': 'day-zone', text: 'Участок ' + ZI[s.zone].name + ' · смена «' + shiftName(s) + '»' + (s.counted ? '' : ' · не засчитана') }));
       dc.appendChild(h('p', { class: 'cap num mt', text: 'Начислено за смену ≈ ' + money(Math.round(s.tsum * M.SHARE)) }));
       dc.appendChild(h('button', { class: 'btn secondary mt', type: 'button', 'data-testid': 'shift-detail', onclick: function () { openShiftDetail(s); } }, 'Детали смены')); }
@@ -783,7 +793,7 @@
       var a = by[sh.zone] || (by[sh.zone] = { id: sh.zone, z: ZI[sh.zone], units: 0, norm: 0, tsum: 0, shifts: [] });
       a.units += sh.units; a.norm += sh.norm; a.tsum += sh.tsum; a.shifts.push(sh);
     });
-    return M.ZONES.filter(function (z) { return by[z.id]; }).map(function (z) { var a = by[z.id]; a.perf = a.norm ? a.units / a.norm * 100 : 0; a.earned = Math.round(a.tsum * M.SHARE); a.avgTariff = a.units ? a.tsum / a.units : 0; return a; });
+    return M.ZONES.filter(function (z) { return by[z.id]; }).map(function (z) { var a = by[z.id]; a.perf = meanPerf(a.shifts); a.earned = Math.round(a.tsum * M.SHARE); a.avgTariff = a.units ? a.tsum / a.units : 0; return a; });
   }
   function viewOps() {
     var c = S.calc[S.periodId], v = h('main', { class: 'view stack', id: 'main' });
@@ -796,12 +806,12 @@
     if (!zs.length) v.appendChild(emptyState('box', 'Выработки в периоде нет', 'Когда смены будут закрыты, здесь появится факт по участкам.'));
     else { var zl = h('div', { class: 'stack', 'data-testid': 'zone-list' }); zs.forEach(function (a) {
       var t = opTone(a.perf);
-      zl.appendChild(h('button', { class: 'card opcard', type: 'button', 'data-zone-card': a.id, 'aria-label': 'Участок ' + a.z.name + ': ' + num(a.units) + ' ед., ' + Math.round(a.perf) + '% к нормативу, заработано ' + money(a.earned), onclick: function () { openZoneDetail(a); } },
+      zl.appendChild(h('button', { class: 'card opcard', type: 'button', 'data-zone-card': a.id, 'aria-label': 'Участок ' + a.z.name + ': ' + num(a.units) + ' ед., ' + pctS(a.perf) + '% к нормативу, заработано ' + money(a.earned), onclick: function () { openZoneDetail(a); } },
         h('div', { class: 'row between' }, h('b', { class: 'opn', text: a.z.name }), chip(t[0], t[1])),
         h('div', { class: 'opgrid' }, h('div', null, h('span', { text: 'Смен в зачёте' }), h('b', { class: 'num', text: String(a.shifts.length) })), h('div', null, h('span', { text: 'Выполнено' }), h('b', { class: 'num', text: num(a.units) + ' ед.' })),
           h('div', null, h('span', { text: 'Средний тариф' }), h('b', { class: 'num', text: rate(a.avgTariff) + ' ₽/ед.' })), h('div', null, h('span', { text: 'Заработано' }), h('b', { class: 'num', text: money(a.earned) }))),
         h('div', { class: 'gauge', 'aria-hidden': 'true' }, h('i', { class: 'pg-' + t[2], 'data-w': Math.min(100, a.perf / 1.3) })),
-        h('div', { class: 'gl num' }, h('span', { text: 'Выполнение норматива: ' + Math.round(a.perf) + '%' }), h('span', { text: 'По сменам ›' }))));
+        h('div', { class: 'gl num' }, h('span', { text: 'Выполнение норматива: ' + pctS(a.perf) + '%' }), h('span', { text: 'По сменам ›' }))));
     }); v.appendChild(zl); }
     v.appendChild(h('h2', { class: 'h3', text: 'Нормативы и тарифы операций' }));
     v.appendChild(h('p', { class: 'cap', text: 'Справочник «Нормативы по участкам»: с ним сверяется ваша выработка. Единицы учитываются по смене и участку, поэтому своего факта по каждой операции здесь нет.' }));
@@ -810,8 +820,8 @@
       var ops = M.OPS.filter(function (o) { return o.zone === z.id; });
       var box = h('div', { class: 'card2box refbox', 'data-zone': z.id }, h('div', { class: 'zone-h' }, h('h3', { class: 'h3', text: 'Участок ' + z.name })));
       ops.forEach(function (o) {
-        box.appendChild(h('button', { class: 'refrow', type: 'button', 'data-op': o.id, 'aria-label': o.name + ': тариф ' + rate(o.tariff) + ' ₽ за единицу, норматив ' + o.normH + ' ед. в час', onclick: function () { openOpDetail(o); } },
-          h('span', { class: 'opn', text: o.name }), h('span', { class: 'num rv' }, h('b', { text: rate(o.tariff) + ' ₽' }), h('small', { text: o.normH + ' ед./ч' }))));
+        box.appendChild(h('button', { class: 'refrow', type: 'button', 'data-op': o.id, 'aria-label': o.name + ': тариф ' + rate(o.tariff) + ' ₽ за единицу, ' + (o.normH > 0 ? 'норматив ' + o.normH + ' ед. в час' : 'норматива нет'), onclick: function () { openOpDetail(o); } },
+          h('span', { class: 'opn', text: o.name }), h('span', { class: 'num rv' }, h('b', { text: rate(o.tariff) + ' ₽' }), h('small', { text: normTxt(o) }))));
       });
       lst.appendChild(box);
     });
@@ -827,16 +837,16 @@
     applyWidths(v); return v;
   }
   function shiftRowLine(s, onTap) {
-    var p = Math.round(perfOf(s)), cls = 'srow' + (onTap ? ' tap' : '');
+    var p = perfOf(s), cls = 'srow' + (onTap ? ' tap' : '');
     return h(onTap ? 'button' : 'div', { class: cls, type: onTap ? 'button' : null, 'data-date': s.date, onclick: onTap || null }, h('div', { class: 'sico ' + s.type }, ico(s.type === 'day' ? 'sun' : 'moon', 'sm')),
-      h('div', { class: 'd' }, dlong(s.date) + ', ' + dowOf(s.date).slice(0, 2).toLowerCase(), h('small', { class: 'num', text: shiftName(s) + ' · ' + num(s.units) + ' ед. · ' + money(Math.round(s.tsum * M.SHARE)) })), h('div', { class: 'pct ' + pctClass(p), text: p + '%' }));
+      h('div', { class: 'd' }, dlong(s.date) + ', ' + dowOf(s.date).slice(0, 2).toLowerCase(), h('small', { class: 'num', text: shiftName(s) + ' · ' + num(s.units) + ' ед. · ' + money(Math.round(s.tsum * M.SHARE)) })), h('div', { class: 'pct ' + pctClass(p), text: pctS(p) + '%' }));
   }
   function openZoneDetail(a) {
     var t = opTone(a.perf), ctl, need = Math.max(0, Math.ceil(a.norm - a.units)), z = a.z;
     var list = h('div', { 'data-testid': 'zone-days' }); a.shifts.slice().sort(function (x, y) { return x.date < y.date ? 1 : -1; }).forEach(function (s) { list.appendChild(shiftRowLine(s)); });
     var ops = M.OPS.filter(function (o) { return o.zone === z.id; });
     ctl = openSheet({ title: 'Участок ' + z.name, body: h('div', { class: 'gap16', 'data-testid': 'zone-detail' },
-      h('div', { class: 'row between' }, chip(t[0], t[1]), h('span', { class: 'cap num', text: 'Выполнение норматива: ' + Math.round(a.perf) + '%' })),
+      h('div', { class: 'row between' }, chip(t[0], t[1]), h('span', { class: 'cap num', text: 'Выполнение норматива: ' + pctS(a.perf) + '%' })),
       h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Смен в зачёте' }), h('div', { class: 'am num', text: String(a.shifts.length) })),
         h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Выполнено единиц' }), h('div', { class: 'am num', text: num(a.units) })),
         h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Норматив за эти смены' }), h('div', { class: 'am num', text: num(a.norm) })),
@@ -851,19 +861,19 @@
   function openOpDetail(d) {
     var ctl, z = ZI[d.zone];
     ctl = openSheet({ title: d.name, body: h('div', { class: 'gap16', 'data-testid': 'op-detail' },
-      h('div', { class: 'cap', text: 'Участок ' + z.name + ' · вам за единицу ' + rate(d.tariff * M.SHARE) + ' ₽' }),
-      h('div', { class: 'kv4' }, h('div', null, h('b', { class: 'num', text: rate(d.tariff) + ' ₽' }), h('span', { text: 'тариф за ед.' })), h('div', null, h('b', { class: 'num', text: d.normH }), h('span', { text: 'ед. в час' })), h('div', null, h('b', { class: 'num', text: num(NORM_SHIFT_H * d.normH) }), h('span', { text: 'ед. за смену ' + NORM_SHIFT_H + ' ч' }))),
-      h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm' }, 'За 100% нормы за смену', h('small', { class: 'num', text: num(NORM_SHIFT_H * d.normH) + ' × ' + rate(d.tariff) + ' ₽ × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', 'data-testid': 'op-norm-pay', text: money(NORM_SHIFT_H * d.normH * d.tariff * M.SHARE) })),
-        h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Каждые +10 ед. сверх нормы' }), h('div', { class: 'am num', text: '+' + money(10 * d.tariff * M.SHARE) }))),
+      h('div', { class: 'cap', text: 'Участок ' + z.name + ' · вам за единицу ' + rate4(d.tariff * M.SHARE) + ' ₽' }),
+      h('div', { class: 'kv4' }, h('div', null, h('b', { class: 'num', text: rate(d.tariff) + ' ₽' }), h('span', { text: 'тариф за ед.' })), h('div', null, h('b', { class: 'num', text: d.normH > 0 ? String(d.normH) : '—' }), h('span', { text: 'ед. в час' })), h('div', null, h('b', { class: 'num', text: d.normH > 0 ? num(NORM_SHIFT_H * d.normH) : '—' }), h('span', { text: 'ед. за смену ' + NORM_SHIFT_H + ' ч' }))),
+      d.normH > 0 ? h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm' }, 'За 100% нормы за смену', h('small', { class: 'num', text: num(NORM_SHIFT_H * d.normH) + ' × ' + rate(d.tariff) + ' ₽ × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', 'data-testid': 'op-norm-pay', text: money(NORM_SHIFT_H * d.normH * d.tariff * M.SHARE) })),
+        h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Каждые +10 ед. выработки' }), h('div', { class: 'am num', text: '+' + money(10 * d.tariff * M.SHARE) }))) : h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Норматива по операции нет' }), h('div', { class: 'am num', text: 'оплата за единицу' })), h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Каждые +10 ед. выработки' }), h('div', { class: 'am num', text: '+' + money(10 * d.tariff * M.SHARE) }))),
       h('div', { class: 'tipbox' }, ico('info', 'sm'), h('span', { text: 'Ваш факт считается по смене и участку (вкладка «Выработка»), а не по отдельной операции. Свой результат смотрите в разделе «Мой факт по участкам». ' + d.tip }))),
       footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') });
   }
   function openShiftDetail(s) {
-    var ctl, p = Math.round(perfOf(s)), t = opTone(p), z = ZI[s.zone], need = Math.max(0, Math.ceil(s.norm - s.units)), earned = Math.round(s.tsum * M.SHARE);
+    var ctl, p = perfOf(s), t = opTone(p), z = ZI[s.zone], need = Math.max(0, Math.ceil(s.norm - s.units)), earned = Math.round(s.tsum * M.SHARE);
     ctl = openSheet({ title: dowOf(s.date) + ', ' + dlong(s.date), body: h('div', { class: 'gap16', 'data-testid': 'shift-detail-sheet' },
-      h('div', { class: 'row between' }, chip(shiftName(s), s.type === 'day' ? 'day' : 'night', s.type === 'day' ? 'sun' : 'moon'), chip(t[0] + ' · ' + p + '%', t[1])),
+      h('div', { class: 'row between' }, chip(shiftName(s), s.type === 'day' ? 'day' : 'night', s.type === 'day' ? 'sun' : 'moon'), chip(t[0] + ' · ' + pctS(p) + '%', t[1])),
       h('div', { class: 'cap', text: 'Участок ' + z.name + (s.counted ? ' · смена засчитана' : ' · смена не засчитана') }),
-      h('div', { class: 'stats3' }, h('div', { class: 'stat' }, h('b', { class: 'num', text: num(s.units) }), h('span', { text: 'единиц' })), h('div', { class: 'stat' }, h('b', { class: 'num ' + pctClass(p), text: p + '%' }), h('span', { text: 'к нормативу' })), h('div', { class: 'stat' }, h('b', { class: 'num', text: money(earned) }), h('span', { text: 'начислено' }))),
+      h('div', { class: 'stats3' }, h('div', { class: 'stat' }, h('b', { class: 'num', text: num(s.units) }), h('span', { text: 'единиц' })), h('div', { class: 'stat' }, h('b', { class: 'num ' + pctClass(p), text: pctS(p) + '%' }), h('span', { text: 'к нормативу' })), h('div', { class: 'stat' }, h('b', { class: 'num', text: money(earned) }), h('span', { text: 'начислено' }))),
       h('div', { class: 'card2box', 'data-testid': 'shift-lines' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Выполнено единиц' }), h('div', { class: 'am num', text: num(s.units) })),
         h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Норматив смены', h('small', { text: 'факт ÷ производительность' })), h('div', { class: 'am num', text: num(s.norm) })),
         h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Выработка по тарифу', h('small', { class: 'num', text: 'средний тариф ' + rate(s.units ? s.tsum / s.units : 0) + ' ₽/ед.' })), h('div', { class: 'am num', text: money(s.tsum) })),
@@ -1682,11 +1692,11 @@
     var wrap = h('div', { class: 'dev' + (session() ? '' : ' nt'), 'data-testid': 'dev' });
     if (devOpen) {
       var box = h('div', { class: 'devbox', 'data-testid': 'dev-box', role: 'region', 'aria-label': 'Панель разработчика' });
-      box.appendChild(h('h3', { text: 'Telegram админа · бот «Table»' }));
+      box.appendChild(h('h3', { text: 'Демо Telegram · личный чат с ' + BOT_NAME + ' и чат админа' }));
       if (!s.tg.length) box.appendChild(h('div', { text: 'Пока пусто. Демо-номер: +7 900 000-00-01' }));
       s.tg.slice(0, 3).forEach(function (m) {
         var t = new Date(m.t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        box.appendChild(m.kind === 'code' ? h('div', { class: 'tgmsg', 'data-testid': 'tg-msg' }, h('time', { text: t }), '🔑 Запрос кода', h('br'), '👤 ' + m.name, h('br'), '📞 ' + fmtPhone(m.phone), h('br'), '🔢 Код: ', h('b', { class: 'code', 'data-testid': 'tg-code', text: m.code }))
+        box.appendChild(m.kind === 'code' ? h('div', { class: 'tgmsg', 'data-testid': 'tg-msg' }, h('time', { text: t }), 'Личное сообщение · ' + BOT_NAME, h('br'), '🔑 Код для входа в «Мои выплаты»: ', h('b', { class: 'code', 'data-testid': 'tg-code', text: m.code }), '. Действует ' + (m.ttl || CFG.codeTtlMin) + ' минут. Никому не сообщайте.')
           : m.kind === 'feedback' ? h('div', { class: 'tgmsg', 'data-testid': 'tg-msg-feedback' }, h('time', { text: t }), '📣 Анонимная обратная связь', h('br'), 'Тема: ' + ANON_TOPICS[m.topic], h('br'), 'Автор неизвестен')
           : m.kind === 'incident-add' ? h('div', { class: 'tgmsg', 'data-testid': 'tg-msg-incident-add' }, h('time', { text: t }), '↩️ Дополнение к происшествию', h('br'), '👤 ' + m.name, h('br'), 'Статус снова «ждёт проверки»')
           : m.kind === 'application' ? h('div', { class: 'tgmsg', 'data-testid': 'tg-msg-application' }, h('time', { text: t }), '💼 Отклик на вакансию', h('br'), '👤 ' + m.name, h('br'), m.job)
