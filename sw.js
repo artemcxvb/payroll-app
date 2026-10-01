@@ -1,6 +1,6 @@
 /* Service worker: оболочка приложения кэшируется, чтобы данные можно было смотреть без сети. */
-var CACHE = 'pr-shell-v11';
-var SHELL = ['./', 'index.html', 'app.js', 'style.css', 'mock-data.js', 'config.js', 'manifest.webmanifest',
+var CACHE = 'pr-shell-v13';
+var SHELL = ['./', 'index.html', 'app.js', 'style.css', 'mock-data.js', 'config.js', 'manifest.webmanifest', 'company-banner.jpg',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png',
   'demo-photos/promo-weekend-1.jpg', 'demo-photos/promo-weekend-2.jpg', 'demo-photos/promo-weekend-3.jpg', 'demo-photos/promo-weekend-4.jpg', 'demo-photos/promo-nodefect-1.jpg',
   'demo-photos/job-brigadier-1.jpg', 'demo-photos/job-brigadier-2.jpg', 'demo-photos/job-brigadier-3.jpg', 'demo-photos/job-forklift-1.jpg', 'demo-photos/job-forklift-2.jpg'];

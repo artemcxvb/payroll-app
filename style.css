@@ -502,3 +502,14 @@ textarea.inp { padding: 12px 14px; min-height: 110px; font-size: 16px; resize: v
 .btn.mt { margin-top: 10px; }
 .cap, .help, .note-s, .fine { overflow-wrap: anywhere; }
 .toast span { overflow-wrap: anywhere; }
+
+/* баннер компании: сверху на всех экранах */
+.brand { padding: calc(10px + var(--sat)) 12px 0; }
+.brand img { display: block; width: 100%; height: auto; aspect-ratio: 1280 / 467; border-radius: 14px; background: var(--card2); }
+.brand + #offline + #view-root .view { padding-top: 12px; }
+.brand + #offline + #view-root .login { min-height: 0; padding-top: 18px; }
+
+/* фото в карточке: плакат целиком (contain) на размытом фоне того же фото */
+.car { aspect-ratio: 4 / 5; }
+.car-img { object-fit: contain; }
+.lb .car { aspect-ratio: auto; } .lb 
