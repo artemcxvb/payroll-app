@@ -113,7 +113,10 @@
   var ANON_TOPICS = { conditions: 'Условия труда', safety: 'Безопасность', boss: 'Руководство', pay: 'Зарплата', idea: 'Идея', other: 'Другое' };
   var APP_ST = { sent: ['Отправлен', 'info'], viewed: ['Просмотрен', 'warn'], invited: ['Приглашён на собеседование', 'ok'], declined: ['Закрыто', 'gray'] };
   var INC_TYPES = { brak: 'Брак', damage: 'Порча имущества', other: 'Другое' };
-  var INC_ST = { review: ['Отправлено, ждёт проверки', 'info'], accepted: ['Принято', 'ok'] };
+  var INC_ST = { review: ['Отправлено, ждёт проверки', 'info'], accepted: ['Принято', 'ok'], returned: ['Возвращено на доработку', 'warn'], rejected: ['Отклонено', 'bad'] };
+  var INC_ST_IC = { review: 'clock', accepted: 'check', returned: 'info', rejected: 'x' };
+  // общие тексты ошибок связи/сервера: одинаково на всех вкладках
+  function netMsg(e) { return e === 'network' ? 'нет связи с сервером, повторите' : e === 'server' ? 'ошибка сервера, повторите позже' : e === 'busy' ? 'сервер занят, повторите через минуту' : e === 'rate_limit' ? 'слишком часто, подождите' : ''; }
   function dateErr(v, today) {
     if (!v) return 'Укажите дату нарушения';
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || iso(pd(v)) !== v) return 'Неверная дата';
@@ -205,6 +208,17 @@
       s.tg.unshift({ t: Date.now(), kind: 'incident', name: userByPhone(session().phone).name, type: p.type, date: p.date });
       save(s); return { ok: true };
     },
+    resubmitIncident: function (id, text) {
+      var s = srv(), i = s.incidents.filter(function (x) { return x.id === id; })[0];
+      if (!i) return { ok: false, error: 'not_found' };
+      if (i.status !== 'returned') return { ok: false, error: 'not_returned' };
+      text = String(text || '').trim();
+      if (text.length < CFG.explMin) return { ok: false, error: 'text_short' };
+      if (text.length > CFG.explMax) return { ok: false, error: 'text_long' };
+      i.addendum = (i.addendum ? i.addendum + '\n\n' : '') + '[' + dmy(M.today) + '] ' + text; i.status = 'review';
+      s.tg.unshift({ t: Date.now(), kind: 'incident-add', name: userByPhone(session().phone).name, id: i.id });
+      save(s); return { ok: true };
+    },
     /* --- анонимная обратная связь: «сервер» НЕ знает, кто отправил (не читает сессию, телефон, токен) --- */
     anonChallenge: function () {
       var s = srv(), x = 2 + Math.floor(Math.random() * 8), y = 2 + Math.floor(Math.random() * 8), cid = 'c' + rid(), ids = Object.keys(s.anon.captchas);
@@ -284,6 +298,7 @@
       save(s); refresh();
     },
     application: function (id, st) { var s = srv(); s.applications.forEach(function (x) { if (x.id === id) x.status = st; }); save(s); refresh(); },
+    decideIncident: function (id, st, answer) { var s = srv(); s.incidents.forEach(function (i) { if (i.id === id) { i.status = st; i.answer = answer; } }); save(s); refresh(); },
     acceptIncident: function (id) { var s = srv(); s.incidents.forEach(function (i) { if (i.id === id) i.status = 'accepted'; }); save(s); refresh(); },
     accept: function (id) { var s = srv(); s.cases.forEach(function (c) { if (c.id === id && c.expl) c.expl.status = 'accepted'; }); save(s); refresh(); },
     unlock: function () { var s = srv(); s.locks = {}; s.attempts = {}; s.lastReq = {}; save(s); },
@@ -297,7 +312,7 @@
   }
   function post(url, body) {   // text/plain без заголовков → нет CORS-preflight; ни cookie, ни referrer
     return fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body), credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store', redirect: 'follow' })
-      .then(function (r) { return r.json(); }).catch(function () { return { ok: false, error: 'network' }; });
+      .then(function (r) { return r.json(); }).then(function (r) { return r && typeof r === 'object' ? r : { ok: false, error: 'server' }; }).catch(function () { return { ok: false, error: 'network' }; });
   }
   function api(action, body) {
     var se = session(), b = { action: action }; for (var k in (body || {})) b[k] = body[k]; if (se && se.token) b.token = se.token;
@@ -315,6 +330,7 @@
     verify: function (phone, code) { return post(APPC.backendUrl, { action: 'codeVerify', phone: phone, code: code }).then(function (r) { if (r.ok && r.token) store(SESSK, { phone: phone, token: r.token, at: Date.now() }); return r; }); },
     me: function () { return api('me').then(function (r) { if (!r.ok) throw new Error(r.error || 'fail'); r.user.phone = session().phone; applyLive(r); return r; }); },
     submitExplanation: function (id, text, photos) { return filesB64(photos).then(function (ph) { return api('explainSubmit', { caseId: id, text: text, photos: ph, rid: rid() }); }); },
+    resubmitIncident: function (id, text) { return api('incidentResubmit', { id: id, text: text, rid: rid() }); },
     submitIncident: function (p) { return Promise.all([filesB64(p.scene), filesB64(p.damage), filesB64(p.acts)]).then(function (g) { return api('incidentSubmit', { date: p.date, type: p.type, desc: p.desc, text: p.text, scene: g[0], damage: g[1], acts: g[2], rid: p.rid }); }); },
     applyJob: function (jobId, comment) { return api('jobApply', { jobId: jobId, comment: comment, rid: rid() }); },
     createAdvance: function (amount, comment) { return api('advanceCreate', { amount: amount, comment: comment, rid: rid() }); },
@@ -330,6 +346,7 @@
     verify: function (phone, code) { return Promise.resolve(server.verify(phone, code)); },
     me: function () { var se = session(); return Promise.resolve(server.me(se.phone)); },
     submitExplanation: function (id, text, photos) { return Promise.resolve(server.submitExplanation(id, text, photos.map(function (p) { return { thumb: p.thumb, w: p.w, h: p.h, size: p.size }; }))); },
+    resubmitIncident: function (id, text) { return Promise.resolve(server.resubmitIncident(id, text)); },
     submitIncident: function (p) { return Promise.resolve(server.submitIncident(p)); },
     applyJob: function (jobId, comment) { return Promise.resolve(server.applyJob(session().phone, { jobId: jobId, comment: comment })); },
     createAdvance: function (amount, comment) { return Promise.resolve(server.createAdvance(amount, comment)); },
@@ -493,16 +510,17 @@
     var b = $('#offline');
     if (S.stale || navigator.onLine === false) {
       b.hidden = false; clear(b); b.appendChild(ico('wifioff', 'sm'));
-      b.appendChild(h('span', { text: 'Нет сети — показаны сохранённые данные' + (S.data ? ' на ' + stamp(S.data.fetchedAt) : '') }));
+      b.appendChild(h('span', { text: (navigator.onLine === false ? 'Нет сети' : 'Нет связи с сервером') + ' — показаны сохранённые данные' + (S.data ? ' на ' + stamp(S.data.fetchedAt) : '') }));
     } else b.hidden = true;
   }
   function waitingCount() { return S.data ? S.data.cases.filter(function (c) { return c.expl && c.expl.status === 'waiting'; }).length : 0; }
+  function returnedCount() { return S.data ? (S.data.incidents || []).filter(function (i) { return i.status === 'returned'; }).length : 0; }
   var TABS = [['home', 'Главная', 'home'], ['cal', 'Календарь', 'cal'], ['ops', 'Операции', 'box'], ['ded', 'Вычеты', 'ded'], ['adv', 'Аванс', 'wallet'], ['me', 'Профиль', 'user']];
   function renderTabs() {
     clear(tabbar);
     TABS.forEach(function (t) {
-      var n = t[0] === 'ded' ? waitingCount() : 0;
-      tabbar.appendChild(h('a', { class: 'tab', href: '#/' + t[0], 'aria-current': (S.route === t[0] || (t[0] === 'home' && (S.route === 'promo' || S.route === 'jobs'))) ? 'page' : null, 'data-tab': t[0], 'aria-label': t[1] + (n ? ', ждут объяснения: ' + n : '') },
+      var n = t[0] === 'ded' ? waitingCount() + returnedCount() : 0, wn = t[0] === 'ded' ? waitingCount() : 0, rn = t[0] === 'ded' ? returnedCount() : 0;
+      tabbar.appendChild(h('a', { class: 'tab', href: '#/' + t[0], 'aria-current': (S.route === t[0] || (t[0] === 'home' && (S.route === 'promo' || S.route === 'jobs'))) ? 'page' : null, 'data-tab': t[0], 'aria-label': t[1] + (wn ? ', ждут объяснения: ' + wn : '') + (rn ? ', возвращено на доработку: ' + rn : '') },
         ico(t[2]), h('span', { text: t[1] }), n ? h('span', { class: 'cnt', 'aria-hidden': 'true', text: String(n) }) : null));
     });
   }
@@ -646,6 +664,9 @@
     var w = waitingCount();
     if (w) v.appendChild(h('button', { class: 'alert', type: 'button', 'data-testid': 'home-alert', onclick: function () { S.dedFilter = 'all'; location.hash = '#/ded'; } }, ico('alert'),
       h('div', null, h('b', { text: w + ' ' + plural(w, ['случай ждёт', 'случая ждут', 'случаев ждут']) + ' объяснения' }), h('span', { text: 'Для брака обязательны фото повреждения и объяснительная. Нажмите, чтобы заполнить.' }))));
+    var rc = returnedCount();
+    if (rc) v.appendChild(h('button', { class: 'alert', type: 'button', 'data-testid': 'home-alert-returned', onclick: function () { S.dedFilter = 'all'; location.hash = '#/ded'; } }, ico('alert'),
+      h('div', null, h('b', { text: rc + ' ' + plural(rc, ['сообщение возвращено', 'сообщения возвращены', 'сообщений возвращено']) + ' на доработку' }), h('span', { text: 'Администратор просит дополнить объяснение. Нажмите, чтобы открыть.' }))));
     v.appendChild(h('section', { class: 'hero', 'aria-labelledby': 'hero-l', 'data-testid': 'hero' },
       h('div', { class: 'lbl', id: 'hero-l' }, open || wait ? 'К выплате' : 'Выплачено', h('span', { class: 'badge-lite', text: open ? 'период идёт' : wait ? 'период закрыт' : 'закрыт' })),
       h('div', { class: 'big num' }, h('span', { 'data-testid': 'payout', text: num(c.payout) }), h('small', { text: '₽' })),
@@ -1020,7 +1041,7 @@
   function viewJobs() {
     var v = h('main', { class: 'view stack', id: 'main' }); v.appendChild(backTop('Вакансии в компании', 'Внутренние вакансии — можно откликнуться'));
     var jobs = (S.data.jobs || M.jobs).slice().sort(function (x, y) { return (x.status === 'open' ? 0 : 1) - (y.status === 'open' ? 0 : 1); });
-    var l = h('div', { class: 'stack', 'data-testid': 'job-list' }); jobs.forEach(function (j) { l.appendChild(jobCard(j)); }); v.appendChild(l);
+    var l = h('div', { class: 'stack', 'data-testid': 'job-list' }); jobs.forEach(function (j) { l.appendChild(jobCard(j)); }); if (jobs.length) v.appendChild(l); else v.appendChild(emptyState('briefcase', 'Вакансий пока нет', 'Когда появятся внутренние вакансии, они будут здесь.'));
     v.appendChild(h('p', { class: 'note-s', text: 'Вакансии ведёт администратор. Отклик увидит только он и HR — бригадир по вашему участку отклик не получает.' }));
     return v;
   }
@@ -1048,7 +1069,7 @@
     send.addEventListener('click', function () {
       if (sending || !requireOnline()) return; sending = true; send.disabled = true; clear(send); send.appendChild(h('span', { class: 'spinner' })); send.appendChild(document.createTextNode(' Отправляем…'));
       delay(LAT + 300).then(function () { return backend.applyJob(j.id, text.value); }).then(function (r) {
-        if (!r.ok) { sending = false; send.disabled = false; clear(send); send.appendChild(ico('send', 'sm')); send.appendChild(document.createTextNode('Отправить отклик')); toast(r.error === 'already' ? 'Вы уже откликались на эту вакансию' : r.error === 'closed' ? 'Вакансия закрыта' : r.error === 'network' ? 'Нет связи с сервером' : 'Не отправлено (' + r.error + ')', 'bad'); return; }
+        if (!r.ok) { sending = false; send.disabled = false; clear(send); send.appendChild(ico('send', 'sm')); send.appendChild(document.createTextNode('Отправить отклик')); toast(r.error === 'already' ? 'Вы уже откликались на эту вакансию' : r.error === 'closed' ? 'Вакансия закрыта' : netMsg(r.error) ? 'Не отправлено: ' + netMsg(r.error) : 'Не отправлено (' + r.error + ')', 'bad'); return; }
         ctl.close(true); toast('Отклик отправлен. Статус — «Отправлен»'); refresh();
       });
     });
@@ -1320,7 +1341,7 @@
     sendBtn.addEventListener('click', function () {
       if (sendBtn.disabled || !requireOnline()) return; sending = true; sendBtn.disabled = true; clear(sendBtn); sendBtn.appendChild(h('span', { class: 'spinner' })); sendBtn.appendChild(document.createTextNode(' Отправляем…'));
       delay(LAT + 300).then(function () { return backend.submitIncident({ rid: rid(), date: date.value, type: type, desc: desc.value, text: text.value, scene: slots.scene.ready(), damage: slots.damage.ready(), acts: slots.acts.ready() }); }).then(function (r) {
-        if (!r.ok) { sending = false; sendLabel(); update(); toast(r.error === 'network' || r.error === 'server' ? 'Не отправлено: нет связи с сервером, повторите' : r.error === 'rate_limit' ? 'Слишком много сообщений за сутки' : 'Не отправлено: проверьте поля (' + r.error + ')', 'bad'); return; }
+        if (!r.ok) { sending = false; sendLabel(); update(); toast(r.error === 'rate_limit' ? 'Слишком много сообщений за сутки' : netMsg(r.error) ? 'Не отправлено: ' + netMsg(r.error) : r.error === 'bad_file' ? 'Не отправлено: файл не подошёл (нужны фото JPG/PNG или PDF)' : r.error === 'too_big' ? 'Не отправлено: файл слишком большой' : 'Не отправлено: проверьте поля (' + r.error + ')', 'bad'); return; }
         localStorage.removeItem('pr.idraft'); Object.keys(slots).forEach(function (k) { slots[k].release(); });
         ctl.close(true); S.dedFilter = 'all'; toast('Сообщение отправлено. Статус — «Отправлено, ждёт проверки»');
         refresh().then(function () { if (location.hash !== '#/ded') location.hash = '#/ded'; });
@@ -1341,23 +1362,54 @@
     update();
   }
   function incFilesLine(i) { return 'Фото места: ' + i.scene.length + ' · порча: ' + i.damage.length + ' · акт: ' + i.acts.length; }
+  function incAnswer(i, tid) {   // решение администратора: причина возврата/отказа
+    if (i.status !== 'returned' && i.status !== 'rejected') return null;
+    return h('div', { class: 'incans ' + (i.status === 'returned' ? 'warn' : 'bad'), role: 'note', 'data-testid': tid || 'inc-answer' }, ico(i.status === 'returned' ? 'info' : 'x', 'sm'),
+      h('div', null, h('b', { text: i.status === 'returned' ? 'Что нужно исправить' : 'Причина отказа' }), h('span', { text: i.answer || 'Причина не указана — уточните у администратора.' })));
+  }
   function incCard(i) {
-    var st = INC_ST[i.status];
-    return h('article', { class: 'card case incident k-error', 'data-incident': i.id, 'aria-label': 'Сообщение: ' + INC_TYPES[i.type] + ', ' + i.desc },
+    var st = INC_ST[i.status] || INC_ST.review;
+    return h('article', { class: 'card case incident k-error', 'data-incident': i.id, 'data-status': i.status, 'aria-label': 'Сообщение: ' + INC_TYPES[i.type] + ', ' + i.desc + ', ' + st[0] },
       h('div', { class: 'hd' }, h('div', { class: 'kico' }, ico('alert')), h('div', { class: 'grow' }, h('div', { class: 'tt', text: i.desc }), h('div', { class: 'meta', text: INC_TYPES[i.type] + ' · ' + dmy(i.date) }))),
-      h('div', { class: 'ft' }, h('div', { class: 'row between' }, chip(st[0], st[1], i.status === 'review' ? 'clock' : 'check'), h('span', { class: 'cap', text: 'Отправлено ' + dmy(i.sentAt) })),
+      h('div', { class: 'ft' }, h('div', { class: 'row between' }, chip(st[0], st[1], INC_ST_IC[i.status] || 'clock'), h('span', { class: 'cap', text: 'Отправлено ' + dmy(i.sentAt) })),
+        incAnswer(i, 'inc-answer-card'),
         h('p', { class: 'cap', text: incFilesLine(i) }),
-        h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'inc-open-' + i.id, onclick: function () { openIncView(i); } }, 'Открыть сообщение')));
+        h('button', { class: i.status === 'returned' ? 'btn' : 'btn ghost', type: 'button', 'data-testid': 'inc-open-' + i.id, onclick: function () { openIncView(i); } }, i.status === 'returned' ? 'Дополнить объяснение' : 'Открыть сообщение')));
   }
   function openIncView(i) {
-    var st = INC_ST[i.status], ctl;
+    var st = INC_ST[i.status] || INC_ST.review, ctl, fix = i.status === 'returned', sending = false;
     function grp(t, a, alt) { var g = h('div', { class: 'photos', role: 'list', 'data-testid': 'view-' + alt }); a.forEach(function (f, k) { g.appendChild(fileTile(f, t + ' ' + (k + 1), null, 'v-' + alt)); }); return h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: t + ' (' + a.length + ')' }), g); }
+    var drafts = load('pr.iadd', {}), ta = null, cnt = null, send = null, why = null;
+    if (fix) {
+      ta = h('textarea', { class: 'inp', id: 'inc-add', 'data-testid': 'inc-add-text', rows: '5', maxlength: String(CFG.explMax), 'aria-required': 'true', 'aria-describedby': 'inc-add-h', placeholder: 'Что вы добавляете или исправляете — с учётом замечания администратора.' });
+      ta.value = drafts[i.id] || '';
+      cnt = h('p', { class: 'help num', 'data-testid': 'inc-add-count' });
+      send = h('button', { class: 'btn', type: 'button', 'data-testid': 'inc-add-send', disabled: true }, ico('send', 'sm'), 'Отправить повторно');
+      why = h('p', { class: 'note-s', role: 'status', 'data-testid': 'inc-add-why' });
+      var upd = function () { var n = ta.value.trim().length, ok = n >= CFG.explMin; cnt.textContent = ok ? n + ' симв. ✓' : n + ' из ' + CFG.explMin + ' симв. минимум'; send.disabled = !ok || sending; why.textContent = ok ? 'Можно отправлять: статус снова станет «ждёт проверки».' : 'Напишите не меньше ' + CFG.explMin + ' символов.'; };
+      ta.addEventListener('input', function () { var d = load('pr.iadd', {}); d[i.id] = ta.value; store('pr.iadd', d); upd(); });
+      send.addEventListener('click', function () {
+        if (send.disabled || !requireOnline()) return; sending = true; send.disabled = true; clear(send); send.appendChild(h('span', { class: 'spinner' })); send.appendChild(document.createTextNode(' Отправляем…'));
+        delay(LAT + 200).then(function () { return backend.resubmitIncident(i.id, ta.value.trim()); }).then(function (r) {
+          if (!r.ok) { sending = false; clear(send); send.appendChild(ico('send', 'sm')); send.appendChild(document.createTextNode('Отправить повторно')); upd();
+            toast('Не отправлено: ' + (({ text_short: 'текст слишком короткий', text_long: 'текст слишком длинный', not_returned: 'сообщение уже не требует доработки', not_found: 'сообщение не найдено' })[r.error] || netMsg(r.error) || 'ошибка'), 'bad');
+            if (r.error === 'not_returned' || r.error === 'not_found') { ctl.close(true); refresh(); } return; }
+          var d = load('pr.iadd', {}); delete d[i.id]; store('pr.iadd', d);
+          ctl.close(true); toast('Дополнение отправлено. Статус — «Отправлено, ждёт проверки»'); refresh();
+        });
+      });
+      setTimeout(upd, 0);
+    }
     ctl = openSheet({ title: 'Сообщение о происшествии', body: h('div', { class: 'gap16', 'data-testid': 'inc-view' },
       h('div', { class: 'casebox' }, h('b', { 'data-testid': 'v-desc', text: i.desc }), h('span', { class: 'num', text: INC_TYPES[i.type] + ' · ' + dmy(i.date) })),
-      h('div', { class: 'row between' }, chip(st[0], st[1], i.status === 'review' ? 'clock' : 'check'), h('span', { class: 'cap', text: 'Отправлено ' + dmy(i.sentAt) })),
+      h('div', { class: 'row between' }, chip(st[0], st[1], INC_ST_IC[i.status] || 'clock'), h('span', { class: 'cap', text: 'Отправлено ' + dmy(i.sentAt) })),
+      incAnswer(i, 'inc-answer'),
       grp('Фото места / нарушения', i.scene, 'scene'), grp('Фото порчи имущества', i.damage, 'damage'), grp('Акт', i.acts, 'act'),
-      h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'Объяснительная' }), h('div', { class: 'quote', 'data-testid': 'v-text', text: i.text }))),
-      footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') });
+      h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'Объяснительная' }), h('div', { class: 'quote', 'data-testid': 'v-text', text: i.text })),
+      i.addendum ? h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'Ваше дополнение' }), h('div', { class: 'quote', 'data-testid': 'v-addendum', text: i.addendum })) : null,
+      fix ? h('div', { class: 'sec', 'data-testid': 'inc-fix' }, h('div', { class: 'sec-h' }, h('label', { for: 'inc-add', text: 'Дополнить объяснение' }), h('span', { class: 'req', 'aria-hidden': 'true', text: '*' })), ta,
+        h('div', { class: 'row between' }, h('p', { class: 'help', id: 'inc-add-h', text: 'Фото и прежний текст остаются, администратор увидит ваше дополнение.' }), cnt)) : null),
+      footer: fix ? h('div', null, send, why, h('button', { class: 'btn ghost mt', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть')) : h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') });
   }
 
   function openExplain(c) {
@@ -1415,7 +1467,7 @@
     sendBtn.addEventListener('click', function () {
       if (sendBtn.disabled || !requireOnline()) return; sending = true; sendBtn.disabled = true; clear(sendBtn); sendBtn.appendChild(h('span', { class: 'spinner' })); sendBtn.appendChild(document.createTextNode(' Отправляем…'));
       delay(LAT + 200).then(function () { return backend.submitExplanation(c.id, ta.value, photos.filter(function (p) { return !p.busy; })); }).then(function (r) {
-        if (!r.ok) { sending = false; sendLabel(); update(); toast('Не отправлено: ' + ({ text_short: 'объяснительная слишком короткая', photo_required: 'нужно фото повреждения', already: 'уже отправлено', network: 'нет связи с сервером, повторите', server: 'ошибка сервера, повторите', rate_limit: 'слишком много отправок за час' }[r.error] || 'ошибка'), 'bad'); return; }
+        if (!r.ok) { sending = false; sendLabel(); update(); toast('Не отправлено: ' + ({ text_short: 'объяснительная слишком короткая', photo_required: 'нужно фото повреждения', already: 'уже отправлено', rate_limit: 'слишком много отправок за час', bad_file: 'файл не подошёл (нужны фото JPG/PNG)', too_big: 'файл слишком большой' }[r.error] || netMsg(r.error) || 'ошибка'), 'bad'); return; }
         var d = load('pr.drafts', {}); delete d[c.id]; store('pr.drafts', d);
         photos.forEach(function (p) { if (p.url) URL.revokeObjectURL(p.url); });
         ctl.close(true); toast('Объяснительная' + (photos.length ? ' и фото отправлены' : ' отправлена') + ' администратору'); refresh();
@@ -1498,7 +1550,7 @@
         info.closed ? h('p', { class: 'help', text: 'Приём закрыт — изменить или отменить заказ уже нельзя.' })
           : h('div', { class: 'btnrow mt' }, h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'adv-edit', onclick: function () { S.advEdit = true; render(); } }, 'Изменить'), h('button', { class: 'btn danger', type: 'button', 'data-testid': 'adv-cancel', onclick: function () {
             confirmDlg({ title: 'Отменить заказ аванса?', yes: 'Да, отменить', no: 'Нет, оставить', danger: true, body: [h('p', { class: 'cap', text: 'Заказ на ' + money(active.amount) + ' будет отменён. Новый можно оформить до пятницы ' + hh(CFG.advDeadlineHour) + '.' })] }).then(function (ok) {
-              if (!ok) return; delay(LAT).then(function () { return backend.cancelAdvance(active.id); }).then(function (r) { toast(r.ok ? 'Заказ отменён' : 'Не удалось отменить: ' + (r.error === 'closed' ? 'приём закрыт' : 'ошибка' + (r.error ? ' (' + r.error + ')' : '')), r.ok ? 'ok' : 'bad'); refresh(); }); }); } }, 'Отменить заказ'))));
+              if (!ok) return; delay(LAT).then(function () { return backend.cancelAdvance(active.id); }).then(function (r) { toast(r.ok ? 'Заказ отменён' : 'Не удалось отменить: ' + (r.error === 'closed' ? 'приём закрыт' : netMsg(r.error) || 'ошибка' + (r.error ? ' (' + r.error + ')' : '')), r.ok ? 'ok' : 'bad'); refresh(); }); }); } }, 'Отменить заказ'))));
     }
     // --- форма / закрыто ---
     if (info.closed) {
@@ -1550,7 +1602,7 @@
           .then(function (ok) {
             if (!ok) return; btn.disabled = true;
             delay(LAT).then(function () { return editing ? backend.updateAdvance(active.id, a, ta.value.trim()) : backend.createAdvance(a, ta.value.trim()); }).then(function (r) {
-              if (!r.ok) { toast('Не отправлено: ' + ({ active: 'на этой неделе уже есть заказ', bad_amount: 'неверная сумма', over_limit: 'сумма больше доступной', closed: 'приём на неделю закрыт', not_found: 'заказ не найден', network: 'нет связи с сервером', rate_limit: 'слишком часто' }[r.error] || 'ошибка'), 'bad'); S.advEdit = false; return refresh(); }
+              if (!r.ok) { toast('Не отправлено: ' + ({ active: 'на этой неделе уже есть заказ', bad_amount: 'неверная сумма', over_limit: 'сумма больше доступной', closed: 'приём на неделю закрыт', not_found: 'заказ не найден' }[r.error] || netMsg(r.error) || 'ошибка'), 'bad'); S.advEdit = false; return refresh(); }
               S.advEdit = false; toast(editing ? 'Заказ изменён — «На рассмотрении»' : 'Заказ на ' + money(a) + ' отправлен — «На рассмотрении»'); refresh();
             });
           });
@@ -1593,7 +1645,7 @@
     return v;
   }
   function logout() {
-    localStorage.removeItem(SESSK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft');
+    localStorage.removeItem(SESSK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.iadd');
     S.data = null; S.calc = null; S.stale = false; L = { step: 'phone', phone: '', timer: null, readyAt: 0 };
     location.hash = '#/login'; boot(); toast('Вы вышли из кабинета');
   }
@@ -1619,7 +1671,7 @@
     if (!session()) { renderLogin(); return; }
     if (!/^#\/(home|cal|ops|ded|adv|me|promo|jobs)$/.test(location.hash)) location.hash = '#/home';
     S.data = null; render();
-    fetchMe().then(function (r) { S.data = r.data; S.stale = r.stale; S.calc = calcAll(r.data); render(); }, function () { clear(root); root.appendChild(h('div', { class: 'view' }, emptyState('wifioff', 'Нет данных', 'Подключитесь к интернету, чтобы загрузить данные.'))); });
+    fetchMe().then(function (r) { S.data = r.data; S.stale = r.stale; S.calc = calcAll(r.data); render(); }, function () { clear(root); root.appendChild(h('div', { class: 'view', id: 'main' }, emptyState('wifioff', 'Нет данных', 'Подключитесь к интернету, чтобы загрузить данные.'), h('button', { class: 'btn', type: 'button', 'data-testid': 'retry-load', onclick: boot }, 'Повторить'))); });
   }
 
   /* ---------- панель разработчика: «Telegram администратора» ---------- */
@@ -1636,6 +1688,7 @@
         var t = new Date(m.t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         box.appendChild(m.kind === 'code' ? h('div', { class: 'tgmsg', 'data-testid': 'tg-msg' }, h('time', { text: t }), '🔑 Запрос кода', h('br'), '👤 ' + m.name, h('br'), '📞 ' + fmtPhone(m.phone), h('br'), '🔢 Код: ', h('b', { class: 'code', 'data-testid': 'tg-code', text: m.code }))
           : m.kind === 'feedback' ? h('div', { class: 'tgmsg', 'data-testid': 'tg-msg-feedback' }, h('time', { text: t }), '📣 Анонимная обратная связь', h('br'), 'Тема: ' + ANON_TOPICS[m.topic], h('br'), 'Автор неизвестен')
+          : m.kind === 'incident-add' ? h('div', { class: 'tgmsg', 'data-testid': 'tg-msg-incident-add' }, h('time', { text: t }), '↩️ Дополнение к происшествию', h('br'), '👤 ' + m.name, h('br'), 'Статус снова «ждёт проверки»')
           : m.kind === 'application' ? h('div', { class: 'tgmsg', 'data-testid': 'tg-msg-application' }, h('time', { text: t }), '💼 Отклик на вакансию', h('br'), '👤 ' + m.name, h('br'), m.job)
           : m.kind === 'incident' ? h('div', { class: 'tgmsg', 'data-testid': 'tg-msg-incident' }, h('time', { text: t }), '🚨 Новое происшествие', h('br'), '👤 ' + m.name, h('br'), INC_TYPES[m.type] + ' · ' + dmy(m.date) + ' · файлы в Drive')
           : h('div', { class: 'tgmsg', 'data-testid': 'tg-msg-unknown' }, h('time', { text: t }), '⚠️ Номер ' + fmtPhone(m.phone) + ' не найден в CRM — код не создан'));
@@ -1647,7 +1700,7 @@
           h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-issue', onclick: function () { admin.advance(a.id, 'issued'); } }, 'Выдать')));
       });
       if (session()) s.cases.filter(function (c) { return c.expl && c.expl.status === 'sent'; }).forEach(function (c) { box.appendChild(h('div', { class: 'devrow' }, 'Объяснение: ' + c.title.slice(0, 28), h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-accept', onclick: function () { admin.accept(c.id); } }, 'Принять'))); });
-      if (session()) s.incidents.filter(function (i) { return i.status === 'review'; }).forEach(function (i) { box.appendChild(h('div', { class: 'devrow' }, 'Происшествие: ' + i.desc.slice(0, 26), h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-accept', onclick: function () { admin.acceptIncident(i.id); } }, 'Принять'))); });
+      if (session()) s.incidents.filter(function (i) { return i.status === 'review'; }).forEach(function (i) { box.appendChild(h('div', { class: 'devrow' }, 'Происшествие: ' + i.desc.slice(0, 26), h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-accept', onclick: function () { admin.acceptIncident(i.id); } }, 'Принять'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-return', onclick: function () { admin.decideIncident(i.id, 'returned', 'Не видно номер паллеты на фото. Добавьте, когда и кого вы уведомили.'); } }, 'Вернуть'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-reject', onclick: function () { admin.decideIncident(i.id, 'rejected', 'Это не ваша смена, случай передан другому сотруднику.'); } }, 'Отклонить'))); });
       if (session()) s.applications.filter(function (x) { return x.status === 'sent' || x.status === 'viewed'; }).slice(0, 2).forEach(function (x) { box.appendChild(h('div', { class: 'devrow' }, 'Отклик: ' + x.jobId, h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-app-invite', onclick: function () { admin.application(x.id, 'invited'); } }, 'Пригласить'))); });
       box.appendChild(h('div', { class: 'devrow' }, h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-unlock', onclick: function () { admin.unlock(); toast('Блокировки сняты'); } }, 'Снять блокировку'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-reset', onclick: function () { admin.reset(); } }, 'Сбросить демо')));
       wrap.appendChild(box);

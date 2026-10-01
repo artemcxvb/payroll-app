@@ -1,7 +1,7 @@
 /* Мои выплаты — прототип. Светлая и тёмная темы, mobile-first. Без inline-стилей (CSP). */
 :root {
   --bg: #f3f5fa; --card: #ffffff; --card2: #f6f8fc; --line: #e3e7f0;
-  --text: #121826; --muted: #566074; --faint: #8a93a6;
+  --text: #121826; --muted: #566074; --faint: #667085;
   --primary: #2b59e6; --primary-ink: #ffffff; --primary-soft: #e6ecff; --primary-strong: #1d43b8;
   --ok: #0f7a3a; --ok-bg: #dff5e7; --warn: #8a5300; --warn-bg: #fff0cf; --bad: #b3261e; --bad-bg: #fde3e1;
   --info: #1d4fb8; --info-bg: #e3ebff; --night: #4b3fb5; --night-bg: #e9e6ff; --day: #b86a00; --day-bg: #ffecc8;
@@ -13,7 +13,7 @@
 }
 :root[data-theme="dark"] {
   --bg: #0c1017; --card: #151b25; --card2: #1b2230; --line: #263043;
-  --text: #edf1f8; --muted: #a3adc2; --faint: #76819a;
+  --text: #edf1f8; --muted: #a3adc2; --faint: #8a95ad;
   --primary: #6f93ff; --primary-ink: #0a1230; --primary-soft: #1c2a52; --primary-strong: #9db5ff;
   --ok: #57d48a; --ok-bg: #12301f; --warn: #ffc55c; --warn-bg: #3a2c0c; --bad: #ff8b82; --bad-bg: #3d1816;
   --info: #8fb0ff; --info-bg: #1a2850; --night: #b3a9ff; --night-bg: #28244f; --day: #ffc266; --day-bg: #3a2b0b;
@@ -25,7 +25,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0c1017; --card: #151b25; --card2: #1b2230; --line: #263043;
-    --text: #edf1f8; --muted: #a3adc2; --faint: #76819a;
+    --text: #edf1f8; --muted: #a3adc2; --faint: #8a95ad;
     --primary: #6f93ff; --primary-ink: #0a1230; --primary-soft: #1c2a52; --primary-strong: #9db5ff;
     --ok: #57d48a; --ok-bg: #12301f; --warn: #ffc55c; --warn-bg: #3a2c0c; --bad: #ff8b82; --bad-bg: #3d1816;
     --info: #8fb0ff; --info-bg: #1a2850; --night: #b3a9ff; --night-bg: #28244f; --day: #ffc266; --day-bg: #3a2b0b;
@@ -484,3 +484,16 @@ textarea.inp { padding: 12px 14px; min-height: 110px; font-size: 16px; resize: v
 .lb .car-dots { bottom: calc(18px + var(--sab)); }
 .lb-x { position: absolute; top: calc(10px + var(--sat)); right: 10px; z-index: 3; width: 44px; height: 44px; border: 0; border-radius: 50%; background: rgba(255,255,255,.18); color: #fff; display: grid; place-items: center; cursor: pointer; }
 .lb-x:focus-visible { box-shadow: 0 0 0 3px rgba(255,255,255,.8); }
+
+/* v7: происшествия «Возвращено»/«Отклонено», длинные тексты, контраст и тап */
+.incans { display: flex; gap: 10px; align-items: flex-start; border-radius: 14px; padding: 10px 12px; font-size: 14px; }
+.incans.warn { background: var(--warn-bg); color: var(--warn); } .incans.bad { background: var(--bad-bg); color: var(--bad); }
+.incans .ico { margin-top: 2px; flex: none; }
+.incans b { display: block; font-size: 13px; margin-bottom: 2px; }
+.incans span { display: block; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); }
+.case .tt, .case .meta, .hist .cm, .hist .ans, .casebox b, .casebox span, .quote { overflow-wrap: anywhere; }
+.casebox b, .casebox span { word-break: normal; }
+.chip { white-space: normal; text-align: left; }
+.btn.mt { margin-top: 10px; }
+.cap, .help, .note-s, .fine { overflow-wrap: anywhere; }
+.toast span { overflow-wrap: anywhere; }

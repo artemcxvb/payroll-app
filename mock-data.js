@@ -141,7 +141,7 @@
     periodOf: periodOf, buildPeriods: buildPeriods, monthEnd: monthEnd,
     SHARE: SHARE, OPS: OPS, ZONES: ZONES, HOURS_SHIFT: HOURS_SHIFT, monday: monday, addDays: addDays,
     today: '2026-09-30',
-    config: { codeTtlMin: 10, resendSec: 30, maxAttempts: 5, lockMin: 15, normGood: 100, normHigh: 115, normLow: 50, deductShare: 0.5, advWeekLimit: 10000, advShare: 0.7, advStep: 500, advMin: 500, advDeadlineDow: 5, advDeadlineHour: 18, advPayDow: 6, incidentReserve: 1500, explMin: 20, maxPhotos: 5, commentMax: 200, incDescMin: 5, anonMin: 10, anonMax: 1500, anonMinSec: 3, anonDayLimit: 3, anonHourGlobal: 20, anonPhotoMaxKB: 1500, jobCommentMax: 300, incDescMin: 5, incDescMax: 120, maxActs: 3, pdfMaxMB: 5, imgSrcMaxMB: 25 },
+    config: { codeTtlMin: 10, resendSec: 30, maxAttempts: 5, lockMin: 15, normGood: 100, normHigh: 115, normLow: 50, deductShare: 0.5, advWeekLimit: 10000, advShare: 0.7, advStep: 500, advMin: 500, advDeadlineDow: 5, advDeadlineHour: 18, advPayDow: 6, incidentReserve: 1500, explMin: 20, maxPhotos: 5, commentMax: 200, incDescMin: 5, anonMin: 10, anonMax: 1500, anonMinSec: 3, anonDayLimit: 3, anonHourGlobal: 20, anonPhotoMaxKB: 1500, jobCommentMax: 300, incDescMin: 5, incDescMax: 120, explMax: 1000, maxActs: 3, pdfMaxMB: 5, imgSrcMaxMB: 25 },
     users: [{ phone: '79000000001', id: 'ПР-0042', name: 'Тестов Иван Петрович', position: 'Комплектовщик', site: 'СК Северная Звезда', employer: 'ООО «Персональное Решение»' }],
     periods: [],   // строятся в app.js из «сегодня»: buildPeriods(today)
     shifts: shifts,
