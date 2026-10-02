@@ -114,7 +114,8 @@
       var pe = s.adv.filter(function (a) { return a.status === 'pending'; }), ap = s.adv.filter(function (a) { return a.status === 'approved'; });
       function sm(l) { return l.reduce(function (t, x) { return t + x.amount; }, 0); }
       return demoRes({ ok: true, today: nowMsk().slice(0, 10), payDate: '2026-10-03', advances: { pending: pe.length, pendingSum: sm(pe), approved: ap.length, approvedSum: sm(ap), approvedForPay: ap.length, approvedForPaySum: sm(ap) },
-        explanations: { sent: counts(s.expl, 'sent') }, incidents: { review: counts(s.inc, 'review') }, applications: { sent: counts(s.apps, 'sent') }, blocked: counts(s.acc, 'blocked') });
+        explanations: { sent: counts(s.expl, 'sent') }, incidents: { review: counts(s.inc, 'review') }, applications: { sent: counts(s.apps, 'sent') }, blocked: counts(s.acc, 'blocked'),
+        notify: { recipients: 12, queue: 0, nextAt: s.notifyAt && s.notifyAt + 1800000 > Date.now() ? s.notifyAt + 1800000 : 0, quiet: false, from: 6, to: 22 } });
     }
     if (action === 'adminAdvances') return demoRes({ ok: true, items: needs(s.adv, ['pending', 'approved']) });
     if (action === 'adminExplanations') return demoRes({ ok: true, items: needs(s.expl, ['sent']) });
@@ -126,6 +127,11 @@
     if (action === 'adminLog') return demoRes({ ok: true, items: s.log.slice().reverse().slice(0, 50) });
     if (action === 'adminFileLink') return demoRes({ ok: false, error: 'demo' });
     function logit(a, o, t) { s.log.push({ at: nowMsk(), action: a, object: o, details: t }); }
+    if (action === 'adminNotifyUpdate') {   // демо: вымышленные получатели; ночную тишину не имитируем (как и часы входа в демо), 30 минут между рассылками имитируем
+      if (s.notifyAt && Date.now() - s.notifyAt < 1800000) return demoRes({ ok: false, error: 'recent', until: s.notifyAt + 1800000, waitMin: Math.ceil((s.notifyAt + 1800000 - Date.now()) / 60000) });
+      s.notifyAt = Date.now(); logit('Оповещение: данные обновлены', 'сотрудники', 'в пакете: 11, останется: 0, пропущено: 2'); logit('Оповещение: итог', 'сотрудники', 'отправлено: 10, не доставлено: 1, осталось: 0'); store(DEMOK, s);
+      return demoRes({ ok: true, sent: 10, failed: 1, skipped: 2, remaining: 0 });
+    }
     var key = { adminAdvanceDecide: 'adv', adminExplDecide: 'expl', adminIncidentDecide: 'inc', adminAppMark: 'apps' }[action];
     if (key) {
       var K = KINDS[key], act = K.acts.filter(function (x) { return x.to === d.to; })[0]; if (!act) return demoRes({ ok: false, error: 'bad_action' });
@@ -168,6 +174,16 @@
   function endSession() { localStorage.removeItem(SESSK); S.sum = null; S.log = null; S.data = {}; S.err = {}; L = { step: 'start', readyAt: 0, lockUntil: 0, wait: false }; render(); }
   var ERR = { network: 'Нет связи с сервером. Проверьте интернет и повторите.', server: 'Сервер ответил ошибкой. Повторите через минуту.', busy: 'Таблица занята другим действием. Повторите через несколько секунд.', disabled: 'Кабинет админа выключен (ADMIN_ENABLED=0).', unknown_action: 'Сервер не знает этого действия: обновите Code.gs (см. DEPLOY.md).', not_found: 'Запись не найдена — возможно, строку удалили в таблице.', bad_phone: 'Нужен мобильный номер РФ, например +7 900 123-45-67.', reason_required: 'Укажите причину (не короче 3 символов).', reason_long: 'Причина слишком длинная (до 300 символов).', unavailable: 'Файл сейчас недоступен на Яндекс Диске.', demo: 'В демо файлы не открываются.' };
   function errText(r) { return ERR[r && r.error] || 'Не получилось выполнить действие. Повторите.'; }
+  function mskHm(ms) { return new Date(ms + 3 * 3600000).toISOString().slice(11, 16); }
+  function notifyErr(r) {   // человеческие тексты отказов рассылки
+    var e = r && r.error;
+    if (e === 'quiet') return 'Сейчас ночь: рассылка доступна с ' + (r.from || 6) + ':00 до ' + (r.to || 22) + ':00 по Москве, чтобы не будить людей. Попробуйте позже.';
+    if (e === 'recent') return 'Оповещение уже отправляли недавно. Снова можно примерно через ' + (r.waitMin || 30) + ' ' + plural(r.waitMin || 30, ['минуту', 'минуты', 'минут']) + (r.until ? ' (после ' + mskHm(r.until) + ' по Москве)' : '') + '.';
+    if (e === 'empty') return 'Некому отправлять: ни у кого нет привязанного Telegram.';
+    if (e === 'too_many') return 'Слишком много получателей для одного запуска. Обратитесь к разработчику.';
+    if (e === 'state') return 'Состояние изменилось. Обновите экран и повторите.';
+    return errText(r);
+  }
 
   /* ---------- состояние ---------- */
   var S = { tab: 'sum', sum: null, log: null, data: {}, err: {}, filter: {}, q: {}, loading: {}, disabled: false };
@@ -475,6 +491,7 @@
     g.appendChild(tile('apps', s.applications.sent, 'Новые отклики', '', 'sum-apps'));
     g.appendChild(tile('acc', s.blocked, 'Заблокировано', s.blocked ? 'доступ закрыт' : 'никто не заблокирован', 'sum-acc'));
     v.appendChild(g);
+    v.appendChild(notifyCard(s));
     v.appendChild(h('section', { class: 'card stack', 'aria-labelledby': 'ref-h' }, h('h2', { id: 'ref-h', text: 'Справочники (только просмотр)' }),
       h('div', { class: 'btnrow' }, h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'open-jobs', onclick: function () { openRO('adminJobs', 'Вакансии'); } }, 'Вакансии'), h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'open-promos', onclick: function () { openRO('adminPromos', 'Акции'); } }, 'Акции')),
       h('p', { class: 'help', text: 'Редактируются прямо в таблице приложения (вкладки «Вакансии» и «Акции»).' })));
@@ -483,6 +500,36 @@
     else lg.appendChild(h('p', { class: 'cap mt', text: 'Пока действий нет.' }));
     v.appendChild(lg);
     return v;
+  }
+  function notifyCard(s) {
+    var n = s.notify || {}, sec = h('section', { class: 'card stack', 'aria-labelledby': 'ntf-h', 'data-testid': 'notify-card' }), btn;
+    sec.appendChild(h('h2', { id: 'ntf-h', text: 'Оповещение сотрудников' }));
+    sec.appendChild(h('p', { class: 'cap', text: 'Личное сообщение в Telegram всем, у кого привязан бот: данные обновлены, можно посмотреть начисления. Отправляйте, когда обновили ведомость.' }));
+    var hint = n.queue > 0 ? 'Рассылка не закончена. Осталось отправить: ' + n.queue + '. Нажмите кнопку, чтобы продолжить.'
+      : n.quiet ? 'Сейчас ночь: рассылка доступна с ' + (n.from || 6) + ':00 до ' + (n.to || 22) + ':00 по Москве.'
+      : n.nextAt ? 'Недавно уже отправляли. Снова можно после ' + mskHm(n.nextAt) + ' по Москве.' : '';
+    if (hint) sec.appendChild(h('p', { class: 'help', 'data-testid': 'notify-hint', text: hint }));
+    btn = h('button', { class: 'btn', type: 'button', 'data-testid': 'notify-btn', onclick: function () { notifyFlow(btn, n); } }, ico('send', 'sm'), n.queue > 0 ? 'Продолжить рассылку (осталось ' + n.queue + ')' : 'Оповестить сотрудников об обновлении данных');
+    sec.appendChild(btn);
+    if (S.notifyRes) sec.appendChild(h('p', { class: 'notify-res' + (S.notifyRes.bad ? ' err' : ''), role: 'status', 'data-testid': 'notify-res', text: S.notifyRes.text }));
+    return sec;
+  }
+  function notifyFlow(btn, n) {
+    if (!requireOnline()) return;
+    var text = n.queue > 0 ? 'Рассылка была прервана. Осталось отправить: ' + n.queue + '. Продолжить?'
+      : 'Всем сотрудникам с привязанным Telegram уйдёт сообщение о том, что данные обновлены. Отправить?' + (n.recipients >= 0 ? ' Получателей: до ' + n.recipients + '.' : '');
+    confirmAct({ title: 'Оповестить сотрудников?', text: text, yes: 'Отправить' }).then(function (ans) {
+      if (!ans) return;
+      btn.disabled = true; btn.classList.add('sending');
+      call('adminNotifyUpdate').then(function (r) {
+        btn.disabled = false; btn.classList.remove('sending');
+        if (r.ok) {
+          var t = 'Отправлено: ' + r.sent + '. Не доставлено: ' + r.failed + '.' + (r.remaining > 0 ? ' Осталось: ' + r.remaining + '. Нажмите кнопку ещё раз, чтобы продолжить.' : '');
+          S.notifyRes = { text: t, bad: false }; toast(t, r.failed ? 'warn' : 'ok');
+        } else { var m = notifyErr(r); S.notifyRes = { text: m, bad: true }; toast(m, 'bad'); }
+        loadSummary();
+      });
+    });
   }
   function openRO(action, title) {
     var body = h('div', { class: 'gap12' }, h('div', { class: 'sk c' }));

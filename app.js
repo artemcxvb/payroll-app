@@ -574,8 +574,10 @@
     v.appendChild(h('p', { class: 'foot', text: LIVE ? 'Данные видны только вам' : 'Демо-прототип · все данные вымышлены' }));
     devRender();
   }
+  function closedMsg(r) { return 'Вход возможен только с ' + (r && r.from >= 0 ? r.from : 6) + ':00 до ' + (r && r.to > 0 ? r.to : 22) + ':00 по Москве. Попробуйте позже.'; }   // часы входа задаёт сервер (6–22 МСК по умолчанию)
   function loginPhone(v) {
-    var inp, btn, err = h('div', { class: 'err', id: 'ph-err', role: 'alert', hidden: true });
+    var inp, btn, err = h('div', { class: 'err', id: 'ph-err', role: 'alert', hidden: true, 'data-testid': 'ph-err' });
+    if (L.notice) { err.textContent = L.notice; err.hidden = false; L.notice = ''; }
     function digits() { return inp.value.replace(/\D/g, '').replace(/^[78](?=\d{10})/, '').slice(0, 10); }
     function fmt(d) { var o = d.slice(0, 3); if (d.length > 3) o += ' ' + d.slice(3, 6); if (d.length > 6) o += '-' + d.slice(6, 8); if (d.length > 8) o += '-' + d.slice(8, 10); return o; }
     inp = h('input', { type: 'tel', inputmode: 'tel', autocomplete: 'tel-national', id: 'phone', 'data-testid': 'phone', placeholder: '900 000-00-00', 'aria-describedby': 'ph-err ph-help',
@@ -590,6 +592,7 @@
       var phone = '7' + d;
       delay(LAT).then(function () { return backend.requestCode(phone); }).then(function (r) {
         if (r.error === 'network' || r.error === 'server' || r.error === 'bad_phone') { toast(r.error === 'bad_phone' ? 'Проверьте номер телефона' : 'Нет связи с сервером. Повторите позже.', 'bad'); return renderLogin(); }
+        if (r.closed) { L.phone = phone; L.step = 'phone'; L.notice = closedMsg(r); return renderLogin(); }   // вне часов входа: остаёмся на вводе номера, код не запрашивался, таймера нет
         L.lockUntil = r.error === 'locked' ? r.until : 0;
         L.phone = phone; L.step = 'code'; L.readyAt = Date.now() + (r.throttled ? r.wait * 1000 : CFG.resendSec * 1000); renderLogin();
       });
@@ -617,6 +620,7 @@
       delay(LAT).then(function () { return backend.verify(L.phone, c); }).then(function (r) {
         busy = false;
         if (r.ok) { clearInterval(L.timer); location.hash = '#/home'; boot(); return; }
+        if (r.error === 'closed') { clear(go); go.appendChild(document.createTextNode('Войти')); go.disabled = false; showErr(closedMsg(r)); return; }   // не неверная попытка: поля не очищаем
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         if (r.error === 'network' || r.error === 'server') { clear(go); go.appendChild(document.createTextNode('Войти')); go.disabled = false; showErr('Нет связи с сервером. Повторите.'); return; }
         boxes.forEach(function (b) { b.value = ''; b.setAttribute('aria-invalid', 'true'); });
@@ -643,6 +647,7 @@
     }
     resend.addEventListener('click', function () {
       backend.requestCode(L.phone).then(function (r) {
+        if (r.closed) { clearInterval(L.timer); L.step = 'phone'; L.notice = closedMsg(r); return renderLogin(); }
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         if (r.error === 'network' || r.error === 'server') { toast('Нет связи с сервером. Повторите позже.', 'bad'); return; }
         L.readyAt = Date.now() + (r.throttled ? r.wait * 1000 : CFG.resendSec * 1000); tick(); toast('Код запрошен повторно — проверьте Telegram'); boxes.forEach(function (b) { b.value = ''; }); boxes[0].focus();

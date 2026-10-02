@@ -67,3 +67,8 @@ body.adminpage .app { max-width: 520px; }
   body.adminpage .brand img { max-height: 220px; object-fit: cover; }
   .adm-login { max-width: 520px; margin: 0 auto; }
 }
+
+/* оповещение сотрудников (вкладка «Сводка») */
+.notify-res { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--ok-bg); color: var(--text); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.notify-res.err { background: var(--bad-bg); }
+[data-testid="notify-card"] .btn { width: 100%; min-height: 52px; }
