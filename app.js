@@ -320,9 +320,45 @@
     return fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body), credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store', redirect: 'follow' })
       .then(function (r) { return r.json(); }).then(function (r) { return r && typeof r === 'object' ? r : { ok: false, error: 'server' }; }).catch(function () { return { ok: false, error: 'network' }; });
   }
+  /* ---------- автовыход: после LOGIN_HOUR_TO (22:00 МСК) приложение закрыто, утром вход заново по коду (только live; в демо времени нет) ---------- */
+  var HRSK = 'pr.hours', autoT = null;
+  function okHr(f, t) { return f === Math.floor(f) && t === Math.floor(t) && f >= 0 && f <= 23 && t >= 1 && t <= 24 && f < t; }
+  function loginHrs() {   // часы из ответов сервера (приоритет), иначе из config.js (loginHours), иначе 6 и 22
+    var st = load(HRSK, null), c = APPC.loginHours || {};
+    if (st && okHr(+st.from, +st.to)) return { from: +st.from, to: +st.to, off: !!st.off };
+    if (okHr(+c.from, +c.to)) return { from: +c.from, to: +c.to, off: false };
+    return { from: 6, to: 22, off: false };
+  }
+  function rememberHours(o) { if (o && okHr(+o.from, +o.to)) store(HRSK, { from: +o.from, to: +o.to, off: !!o.off }); }
+  function isLoginClosed(r) { return !!r && r.error === 'closed' && typeof r.from === 'number' && typeof r.to === 'number'; }   // у 'closed' про аванс/вакансию часов нет
+  function closedNotice() { var hr = loginHrs(); return 'В ' + hr.to + ':00 приложение закрывается. Вход возможен с ' + hr.from + ':00 до ' + hr.to + ':00 по Москве.'; }
+  function staleNotice() { return 'Приложение закрывается в ' + loginHrs().to + ':00, поэтому нужно войти заново.'; }
+  function mskLastClose(hr) { var m = Date.now() + 10800000, d = new Date(m), c = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hr.to, 0, 0); if (c > m) c -= 86400000; return c - 10800000; }   // Москва = UTC+3, считаем от Date.now(), не от пояса устройства
+  function tokenIat(se) { try { var p = JSON.parse(atob(String(se.token).split('.')[0].replace(/-/g, '+').replace(/_/g, '/'))); if (p && p.iat > 0) return +p.iat; } catch (e) { /* не наш формат */ } return +se.at || 0; }
+  function clockState(se) {   // 'closed' (сейчас вне окна), 'stale' (сессия выдана до последнего закрытия) или null
+    if (!LIVE || !se) return null;
+    var hr = loginHrs(); if (hr.off) return null;
+    var h = new Date(Date.now() + 10800000).getUTCHours();
+    if (h < hr.from || h >= hr.to) return 'closed';
+    var iat = tokenIat(se); return iat && iat < mskLastClose(hr) ? 'stale' : null;
+  }
+  function autoCheck() { var se = session(); if (!LIVE || !se) return; var k = clockState(se); if (k) logout(k === 'closed' ? closedNotice() : staleNotice()); }
+  function armAuto() {   // точный таймер на ближайшее закрытие (плюс страховочный опрос ниже)
+    clearTimeout(autoT); if (!LIVE || !session()) return;
+    var hr = loginHrs(); if (hr.off) return;
+    var m = Date.now() + 10800000, d = new Date(m), c = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hr.to, 0, 0); if (c <= m) c += 86400000;
+    autoT = setTimeout(function () { autoCheck(); armAuto(); }, Math.min(c - m + 300, 2000000000));
+  }
+  if (LIVE) {
+    setInterval(autoCheck, 30000);
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { autoCheck(); armAuto(); } });
+    window.addEventListener('pageshow', function () { autoCheck(); armAuto(); });
+  }
   function api(action, body) {
     var se = session(), b = { action: action }; for (var k in (body || {})) b[k] = body[k]; if (se && se.token) b.token = se.token;
-    return post(APPC.backendUrl, b).then(function (r) { if (r && r.error === 'auth' && session()) { logout(); toast('Сессия закончилась — войдите снова', 'warn'); }
+    return post(APPC.backendUrl, b).then(function (r) {
+      if (isLoginClosed(r) && session()) { rememberHours({ from: r.from, to: r.to, off: false }); logout(closedNotice()); return r; }   // сервер закрыт на ночь: сессия стирается, данные не показываем
+      if (r && r.error === 'auth' && session()) { var ck = clockState(session()); logout(ck === 'closed' ? closedNotice() : ck === 'stale' ? staleNotice() : null); if (!ck) toast('Сессия закончилась — войдите снова', 'warn'); }
       if (r && r.error === 'blocked' && session()) onBlocked();
       return r; });
   }
@@ -335,8 +371,8 @@
   function filesB64(a) { return Promise.all((a || []).map(function (f) { return blobB64(f.blob).then(function (b) { return { b64: b }; }); })); }
   var backend = LIVE ? {
     requestCode: function (phone) { return post(APPC.backendUrl, { action: 'codeRequest', phone: phone, rid: rid() }); },
-    verify: function (phone, code) { return post(APPC.backendUrl, { action: 'codeVerify', phone: phone, code: code }).then(function (r) { if (r.ok && r.token) store(SESSK, { phone: phone, token: r.token, at: Date.now() }); return r; }); },
-    me: function () { return api('me').then(function (r) { if (!r.ok) throw new Error(r.error || 'fail'); r.user.phone = session().phone; applyLive(r); return r; }); },
+    verify: function (phone, code) { return post(APPC.backendUrl, { action: 'codeVerify', phone: phone, code: code }).then(function (r) { if (r.ok && r.token) { store(SESSK, { phone: phone, token: r.token, at: Date.now() }); if (r.loginHours) rememberHours(r.loginHours); } return r; }); },
+    me: function () { return api('me').then(function (r) { if (!r.ok) throw new Error(r.error || 'fail'); r.user.phone = session().phone; if (r.loginHours) rememberHours(r.loginHours); applyLive(r); return r; }); },
     submitExplanation: function (id, text, photos) { return filesB64(photos).then(function (ph) { return api('explainSubmit', { caseId: id, text: text, photos: ph, rid: rid() }); }); },
     resubmitIncident: function (id, text) { return api('incidentResubmit', { id: id, text: text, rid: rid() }); },
     submitIncident: function (p) { return Promise.all([filesB64(p.scene), filesB64(p.damage), filesB64(p.acts)]).then(function (g) { return api('incidentSubmit', { date: p.date, type: p.type, desc: p.desc, text: p.text, scene: g[0], damage: g[1], acts: g[2], rid: p.rid }); }); },
@@ -443,7 +479,7 @@
     function fromCache() { var c = load(CK, null); if (c && c.phone === se.phone) { if (LIVE) applyLive(c.data); return { data: c.data, stale: true }; } throw new Error('offline'); }
     return delay(LAT).then(function () {
       if (navigator.onLine === false) return fromCache();
-      return backend.me().then(function (d) { store(CK, { phone: se.phone, data: d }); return { data: d, stale: false }; }, function (e) { if (LIVE && e.message !== 'auth' && e.message !== 'blocked') return fromCache(); throw e; });
+      return backend.me().then(function (d) { store(CK, { phone: se.phone, data: d }); return { data: d, stale: false }; }, function (e) { if (LIVE && e.message !== 'auth' && e.message !== 'blocked' && e.message !== 'closed') return fromCache(); throw e; });
     });
   }
   function refresh() {
@@ -577,16 +613,16 @@
   function closedMsg(r) { return 'Вход возможен только с ' + (r && r.from >= 0 ? r.from : 6) + ':00 до ' + (r && r.to > 0 ? r.to : 22) + ':00 по Москве. Попробуйте позже.'; }   // часы входа задаёт сервер (6–22 МСК по умолчанию)
   function loginPhone(v) {
     var inp, btn, err = h('div', { class: 'err', id: 'ph-err', role: 'alert', hidden: true, 'data-testid': 'ph-err' });
-    if (L.notice) { err.textContent = L.notice; err.hidden = false; L.notice = ''; }
+    if (L.notice) { err.textContent = L.notice; err.hidden = false; }   // сообщение живёт, пока пользователь не начнёт вводить номер (экран могут перерисовать)
     function digits() { return inp.value.replace(/\D/g, '').replace(/^[78](?=\d{10})/, '').slice(0, 10); }
     function fmt(d) { var o = d.slice(0, 3); if (d.length > 3) o += ' ' + d.slice(3, 6); if (d.length > 6) o += '-' + d.slice(6, 8); if (d.length > 8) o += '-' + d.slice(8, 10); return o; }
     inp = h('input', { type: 'tel', inputmode: 'tel', autocomplete: 'tel-national', id: 'phone', 'data-testid': 'phone', placeholder: '900 000-00-00', 'aria-describedby': 'ph-err ph-help',
-      oninput: function () { var d = digits(); inp.value = fmt(d); btn.disabled = d.length !== 10; err.hidden = true; inp.parentNode.classList.remove('invalid'); } });
+      oninput: function () { L.notice = ''; var d = digits(); inp.value = fmt(d); btn.disabled = d.length !== 10; err.hidden = true; inp.parentNode.classList.remove('invalid'); } });
     inp.value = fmt(L.phone.replace(/^7/, ''));
     btn = h('button', { class: 'btn', type: 'submit', 'data-testid': 'req-code' }, ico('send', 'sm'), 'Запросить код');
     btn.disabled = digits().length !== 10;
     var form = h('form', { class: 'gap16', novalidate: true, onsubmit: function (e) {
-      e.preventDefault(); var d = digits(); if (d.length !== 10 || btn.disabled) return;
+      e.preventDefault(); var d = digits(); if (d.length !== 10 || btn.disabled) return; L.notice = '';
       if (navigator.onLine === false) { err.textContent = 'Нет сети. Подключитесь к интернету и повторите.'; err.hidden = false; return; }
       btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…'));
       var phone = '7' + d;
@@ -1687,10 +1723,12 @@
     v.appendChild(h('p', { class: 'note-s', text: 'Мои выплаты · прототип v0.1 · демо-данные' }));
     return v;
   }
-  function logout() {
-    localStorage.removeItem(SESSK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.iadd');
-    S.data = null; S.calc = null; S.stale = false; L = { step: 'phone', phone: '', timer: null, readyAt: 0 };
-    location.hash = '#/login'; boot(); toast('Вы вышли из кабинета');
+  function logout(notice) {   // notice (строка) - автовыход с сообщением на экране входа; без неё - обычный выход
+    clearTimeout(autoT); clearInterval(L.timer);
+    localStorage.removeItem(SESSK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.iadd');   // сессия, кэш данных, черновики
+    openStack.slice().forEach(function (c) { c.close(true); });
+    S.data = null; S.calc = null; S.stale = false; L = { step: 'phone', phone: '', timer: null, readyAt: 0, notice: typeof notice === 'string' ? notice : '' };
+    location.hash = '#/login'; boot(); if (typeof notice !== 'string') toast('Вы вышли из кабинета');
   }
 
   /* ---------- роутер ---------- */
@@ -1711,11 +1749,13 @@
   window.addEventListener('offline', function () { render(); toast('Нет сети — работаем с сохранёнными данными', 'warn'); });
 
   function boot() {
+    var se0 = session();
+    if (se0) { var ck = clockState(se0); if (ck) { logout(ck === 'closed' ? closedNotice() : staleNotice()); return; } }   // запуск после 22:00 или со вчерашней сессией: сразу выход, данные не рисуем
     if (!session()) { renderLogin(); return; }
-    S.blocked = false;
+    S.blocked = false; armAuto();
     if (!/^#\/(home|cal|ops|ded|adv|me|promo|jobs)$/.test(location.hash)) location.hash = '#/home';
     S.data = null; render();
-    fetchMe().then(function (r) { S.data = r.data; S.stale = r.stale; S.calc = calcAll(r.data); render(); }, function () { if (S.blocked) return; clear(root); root.appendChild(h('div', { class: 'view', id: 'main' }, emptyState('wifioff', 'Нет данных', 'Подключитесь к интернету, чтобы загрузить данные.'), h('button', { class: 'btn', type: 'button', 'data-testid': 'retry-load', onclick: boot }, 'Повторить'))); });
+    fetchMe().then(function (r) { S.data = r.data; S.stale = r.stale; S.calc = calcAll(r.data); render(); }, function () { if (S.blocked || !session()) return; clear(root); root.appendChild(h('div', { class: 'view', id: 'main' }, emptyState('wifioff', 'Нет данных', 'Подключитесь к интернету, чтобы загрузить данные.'), h('button', { class: 'btn', type: 'button', 'data-testid': 'retry-load', onclick: boot }, 'Повторить'))); });
   }
 
   /* ---------- панель разработчика: «Telegram администратора» ---------- */
