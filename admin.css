@@ -72,3 +72,16 @@ body.adminpage .app { max-width: 520px; }
 .notify-res { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--ok-bg); color: var(--text); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .notify-res.err { background: var(--bad-bg); }
 [data-testid="notify-card"] .btn { width: 100%; min-height: 52px; }
+
+/* рассылка акций (блок на «Сводке») */
+.promo .field { display: block; }
+.promo textarea.inp { min-height: 150px; }
+.promo select.inp { font-size: 16px; }
+.promo .field > .l .cnt2 { font-weight: 600; font-size: 13px; color: var(--muted); }
+.promo .promo-btns { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.promo .promo-btns .btn { width: 100%; min-height: 52px; }
+.promo-quote { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--card2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; font-size: 15px; line-height: 1.45; max-height: 42vh; overflow-y: auto; }
+@media (min-width: 820px) {
+  .promo .promo-btns { grid-template-columns: 1fr 1fr; }
+  .promo .promo-btns .btn.ghost { grid-column: 1 / -1; }
+}

@@ -84,6 +84,19 @@
   var TABS = [['sum', 'Сводка', 'home'], ['adv', 'Авансы', 'wallet'], ['expl', 'Объяснения', 'file'], ['inc', 'Происшествия', 'alert'], ['apps', 'Отклики', 'briefcase'], ['acc', 'Доступ', 'lock']];
   var LIST_ACTION = { adv: 'adminAdvances', expl: 'adminExplanations', inc: 'adminIncidents', apps: 'adminApplications', acc: 'adminAccess' };
 
+  /* ---------- рассылка акций: проверка ввода (одна и та же в форме и в демо; на сервере проверка повторяется) ---------- */
+  var PROMO = { head: '📣 Акция от «Азбука Смены»', textMin: 5, textMax: 1000, linkMax: 300, minGapMs: 600000, dupMs: 86400000 };
+  var PROMO_LINK_RE = /^https:\/\/[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}(?::\d{1,5})?(?:[\/?#][^\s<>"'\u0000-\u001f]*)?$/;
+  function promoCheckInput(text, link) {   // → код ошибки или ''
+    var t = String(text == null ? '' : text).replace(/\r\n?/g, '\n').trim(), n = Array.from(t).length, l = String(link == null ? '' : link).trim();
+    if (n < PROMO.textMin) return 'text_short';
+    if (n > PROMO.textMax) return 'text_long';
+    if (l && l.length > PROMO.linkMax) return 'link_long';
+    if (l && !PROMO_LINK_RE.test(l)) return 'link_bad';
+    return '';
+  }
+  function promoMessage(text, link) { var t = String(text).replace(/\r\n?/g, '\n').trim(), l = String(link || '').trim(); return PROMO.head + '\n\n' + t + (l ? '\n\n' + l : ''); }
+
   /* ---------- демо-«сервер» (вымышленные данные) ---------- */
   var DEMO_CODE = '4821';
   function demoSeed() {
@@ -97,8 +110,32 @@
       apps: [ { id: 'J1', created: n, jobId: 'j1', title: 'Бригадир смены', phone: '79000000003', name: 'Демов Олег Викторович', tab: '', comment: 'Есть опыт 3 года', status: 'sent', statusText: 'Отправлен', answer: '' } ],
       acc: [ { phone: '79000000009', name: 'Пример Блокированный', status: 'blocked', statusText: 'Заблокирован', reason: 'Уволен (демо)', at: '2026-09-25 12:00', by: 'админ (кабинет)' } ],
       jobs: [ { cols: [{ k: 'ID', v: 'j1' }, { k: 'Должность', v: 'Бригадир смены' }, { k: 'Участок', v: 'WH' }, { k: 'Статус', v: 'Открыта' }] } ],
-      promos: [ { cols: [{ k: 'ID', v: 'p1' }, { k: 'Название', v: 'Бонус за выходные' }, { k: 'Бонус', v: '+10%' }, { k: 'Показывать', v: 'да' }] } ],
+      promos: [ { cols: [{ k: 'ID', v: 'p1' }, { k: 'Название', v: 'Бонус за выходные' }, { k: 'Бонус', v: '+10%' }, { k: 'Описание', v: 'Каждую субботу и воскресенье +10% к ставке за выход на смену.' }, { k: 'Показывать', v: 'да' }] },
+                { cols: [{ k: 'ID', v: 'p2' }, { k: 'Название', v: 'Приведи друга' }, { k: 'Бонус', v: '3 000 ₽' }, { k: 'Описание', v: 'Порекомендуйте нового сотрудника: выплатим бонус после его 20-й смены.' }, { k: 'Показывать', v: 'да' }] } ],
       log: [] };
+  }
+  function promoDemoInfo(s) { var p = s.pr || {}, q = p.q > 0 ? p.q : 0; return { queue: q, nextAt: !q && p.last && p.last + PROMO.minGapMs > Date.now() ? p.last + PROMO.minGapMs : 0 }; }
+  function demoPromo(action, d, s, logit) {   // демо: 12 вымышленных получателей, повтор/дубль/частоту имитируем, ночную тишину нет
+    var p = s.pr = s.pr || { last: 0, hashes: {}, q: 0, msg: '' }, now = Date.now(), err = promoCheckInput(d.text, d.link), key = String(d.text || '').trim() + '\n' + String(d.link || '').trim(), block = '', until = 0, wait = 0;
+    if (action === 'adminPromoDiscard') {
+      if (!(p.q > 0)) return { ok: false, error: 'state' };
+      var dropped = p.q; logit('Акция: остаток отменён', 'сотрудники', 'не отправлено: ' + dropped); p.q = 0; p.msg = ''; store(DEMOK, s); return { ok: true, dropped: dropped };
+    }
+    if (p.q > 0 && (action === 'adminPromoPreview' || action === 'adminPromoSend')) {   // недоконченная рассылка: уходит прежний текст
+      if (action === 'adminPromoPreview') return { ok: true, pending: true, text: p.msg, recipients: p.q, skipped: 0, block: '' };
+      var n = p.q; p.q = 0; logit('Акция: продолжение', 'сотрудники', 'в пакете: ' + n + ', останется: 0'); logit('Акция: итог', 'сотрудники', 'отправлено: ' + n + ', не доставлено: 0, осталось: 0'); p.msg = ''; store(DEMOK, s);
+      return { ok: true, sent: n, failed: 0, skipped: 0, remaining: 0 };
+    }
+    if (err) return { ok: false, error: err };
+    if (action === 'adminPromoTest') { logit('Акция: тест в админский чат', 'админ', 'длина: ' + Array.from(String(d.text).trim()).length); store(DEMOK, s); return { ok: true }; }
+    if (p.hashes[key] && now - p.hashes[key] < PROMO.dupMs) { block = 'duplicate'; until = p.hashes[key] + PROMO.dupMs; }
+    else if (p.last && now - p.last < PROMO.minGapMs) { block = 'recent'; until = p.last + PROMO.minGapMs; wait = Math.ceil((until - now) / 60000); }
+    if (action === 'adminPromoPreview') return { ok: true, pending: false, text: promoMessage(d.text, d.link), recipients: 12, skipped: 2, block: block, until: until, waitMin: wait, from: 6, to: 22 };
+    if (block) return { ok: false, error: block, until: until, waitMin: wait };
+    p.last = now; p.hashes[key] = now; var short = Array.from(String(d.text).trim().replace(/\s+/g, ' ')).slice(0, 80).join('');
+    logit('Акция: рассылка', 'сотрудники', 'в пакете: 11, останется: 0, пропущено: 2, длина: ' + Array.from(String(d.text).trim()).length + ', текст: «' + short + '»');
+    logit('Акция: итог', 'сотрудники', 'отправлено: 10, не доставлено: 1, осталось: 0'); store(DEMOK, s);
+    return { ok: true, sent: 10, failed: 1, skipped: 2, remaining: 0 };
   }
   function demoState() { var s = load(DEMOK, null); if (!s) { s = demoSeed(); store(DEMOK, s); } return s; }
   function demoRes(o) { return Promise.resolve(o); }
@@ -115,7 +152,8 @@
       function sm(l) { return l.reduce(function (t, x) { return t + x.amount; }, 0); }
       return demoRes({ ok: true, today: nowMsk().slice(0, 10), payDate: '2026-10-03', advances: { pending: pe.length, pendingSum: sm(pe), approved: ap.length, approvedSum: sm(ap), approvedForPay: ap.length, approvedForPaySum: sm(ap) },
         explanations: { sent: counts(s.expl, 'sent') }, incidents: { review: counts(s.inc, 'review') }, applications: { sent: counts(s.apps, 'sent') }, blocked: counts(s.acc, 'blocked'),
-        notify: { recipients: 12, queue: 0, nextAt: s.notifyAt && s.notifyAt + 1800000 > Date.now() ? s.notifyAt + 1800000 : 0, quiet: false, from: 6, to: 22 } });
+        notify: { recipients: 12, queue: 0, nextAt: s.notifyAt && s.notifyAt + 1800000 > Date.now() ? s.notifyAt + 1800000 : 0, quiet: false, from: 6, to: 22 },
+        promo: promoDemoInfo(s) });
     }
     if (action === 'adminAdvances') return demoRes({ ok: true, items: needs(s.adv, ['pending', 'approved']) });
     if (action === 'adminExplanations') return demoRes({ ok: true, items: needs(s.expl, ['sent']) });
@@ -132,6 +170,7 @@
       s.notifyAt = Date.now(); logit('Оповещение: данные обновлены', 'сотрудники', 'в пакете: 11, останется: 0, пропущено: 2'); logit('Оповещение: итог', 'сотрудники', 'отправлено: 10, не доставлено: 1, осталось: 0'); store(DEMOK, s);
       return demoRes({ ok: true, sent: 10, failed: 1, skipped: 2, remaining: 0 });
     }
+    if (action === 'adminPromoPreview' || action === 'adminPromoSend' || action === 'adminPromoTest' || action === 'adminPromoDiscard') return demoRes(demoPromo(action, d, s, logit));
     var key = { adminAdvanceDecide: 'adv', adminExplDecide: 'expl', adminIncidentDecide: 'inc', adminAppMark: 'apps' }[action];
     if (key) {
       var K = KINDS[key], act = K.acts.filter(function (x) { return x.to === d.to; })[0]; if (!act) return demoRes({ ok: false, error: 'bad_action' });
@@ -171,7 +210,7 @@
       return r;
     });
   }
-  function endSession() { localStorage.removeItem(SESSK); S.sum = null; S.log = null; S.data = {}; S.err = {}; L = { step: 'start', readyAt: 0, lockUntil: 0, wait: false }; render(); }
+  function endSession() { localStorage.removeItem(SESSK); S.promo = { text: '', link: '', pick: '', res: null, busy: false }; S.promoItems = []; S.sum = null; S.log = null; S.data = {}; S.err = {}; L = { step: 'start', readyAt: 0, lockUntil: 0, wait: false }; render(); }
   var ERR = { network: 'Нет связи с сервером. Проверьте интернет и повторите.', server: 'Сервер ответил ошибкой. Повторите через минуту.', busy: 'Таблица занята другим действием. Повторите через несколько секунд.', disabled: 'Кабинет админа выключен (ADMIN_ENABLED=0).', unknown_action: 'Сервер не знает этого действия: обновите Code.gs (см. DEPLOY.md).', not_found: 'Запись не найдена — возможно, строку удалили в таблице.', bad_phone: 'Нужен мобильный номер РФ, например +7 900 123-45-67.', reason_required: 'Укажите причину (не короче 3 символов).', reason_long: 'Причина слишком длинная (до 300 символов).', unavailable: 'Файл сейчас недоступен на Яндекс Диске.', demo: 'В демо файлы не открываются.' };
   function errText(r) { return ERR[r && r.error] || 'Не получилось выполнить действие. Повторите.'; }
   function mskHm(ms) { return new Date(ms + 3 * 3600000).toISOString().slice(11, 16); }
@@ -185,8 +224,26 @@
     return errText(r);
   }
 
+  function mskDm(ms) { var d = new Date(ms + 3 * 3600000).toISOString(); return d.slice(8, 10) + '.' + d.slice(5, 7) + ' ' + d.slice(11, 16); }
+  function promoErr(r) {   // человеческие тексты ошибок рассылки акций
+    var e = r && r.error;
+    if (e === 'quiet') return 'Сейчас ночь: рассылка доступна с ' + (r.from || 6) + ':00 до ' + (r.to || 22) + ':00 по Москве, чтобы не будить людей. Попробуйте позже.';
+    if (e === 'recent') return 'Акцию уже рассылали недавно: не чаще одного раза в 10 минут. Снова можно примерно через ' + (r.waitMin || 10) + ' ' + plural(r.waitMin || 10, ['минуту', 'минуты', 'минут']) + (r.until ? ' (после ' + mskHm(r.until) + ' по Москве)' : '') + '.';
+    if (e === 'duplicate') return 'Такая акция (тот же текст и ссылка) уже отправлялась за последние 24 часа' + (r.until ? '. Повторить можно после ' + mskDm(r.until) + ' по Москве' : '') + '. Измените текст или ссылку.';
+    if (e === 'empty') return 'Некому отправлять: ни у кого нет привязанного Telegram.';
+    if (e === 'text_short') return 'Введите текст акции: не короче ' + PROMO.textMin + ' символов.';
+    if (e === 'text_long') return 'Текст акции слишком длинный: не больше ' + PROMO.textMax + ' символов.';
+    if (e === 'link_bad') return 'Ссылка не подходит: она должна начинаться с https:// и быть полным адресом сайта, например https://example.com/akciya.';
+    if (e === 'link_long') return 'Ссылка слишком длинная: не больше ' + PROMO.linkMax + ' символов.';
+    if (e === 'throttled') return 'Тест уже отправляли секунду назад. Подождите 10 секунд и повторите.';
+    if (e === 'send_failed') return 'Тест не отправился в админский чат Telegram. Проверьте, что бот работает, и повторите.';
+    if (e === 'too_many') return 'Слишком много получателей для одного запуска. Обратитесь к разработчику.';
+    if (e === 'state') return 'Состояние изменилось. Обновите экран и повторите.';
+    return errText(r);
+  }
+
   /* ---------- состояние ---------- */
-  var S = { tab: 'sum', sum: null, log: null, data: {}, err: {}, filter: {}, q: {}, loading: {}, disabled: false };
+  var S = { promo: { text: '', link: '', pick: '', res: null, busy: false }, promoItems: [], tab: 'sum', sum: null, log: null, data: {}, err: {}, filter: {}, q: {}, loading: {}, disabled: false };
   var L = { step: 'start', readyAt: 0, lockUntil: 0, wait: false, timer: null };
   var root = $('#view-root'), tabbar = $('#tabbar'), overlayRoot = $('#overlay-root'), toasts = $('#toasts');
 
@@ -226,7 +283,7 @@
       var done = false, ctl, ta = null, yes, cnt = null;
       function fin(v) { if (done) return; done = true; ctl.close(true); res(v); }
       function upd() { if (!ta) return; var n = ta.value.trim().length; yes.disabled = o.reason && n < REASON_MIN; cnt.textContent = ta.value.length + ' / ' + REASON_MAX; }
-      var body = h('div', { class: 'gap12' }, o.text ? h('p', { class: 'cap', text: o.text }) : null);
+      var body = h('div', { class: 'gap12' }, o.quote ? h('div', { class: 'promo-quote', 'data-testid': 'dlg-quote', text: o.quote }) : null, o.text ? h('p', { class: 'cap', 'data-testid': 'dlg-note', text: o.text }) : null);
       if (o.who) body.insertBefore(h('p', { class: 'nm', 'data-testid': 'dlg-who', text: o.who }), body.firstChild);
       if (o.reason) {
         ta = h('textarea', { class: 'inp', maxlength: String(REASON_MAX), 'data-testid': 'dlg-reason', 'aria-label': o.reasonLabel || 'Причина', placeholder: o.reasonLabel || 'Причина', oninput: upd });
@@ -492,6 +549,7 @@
     g.appendChild(tile('acc', s.blocked, 'Заблокировано', s.blocked ? 'доступ закрыт' : 'никто не заблокирован', 'sum-acc'));
     v.appendChild(g);
     v.appendChild(notifyCard(s));
+    v.appendChild(promoCard(s));
     v.appendChild(h('section', { class: 'card stack', 'aria-labelledby': 'ref-h' }, h('h2', { id: 'ref-h', text: 'Справочники (только просмотр)' }),
       h('div', { class: 'btnrow' }, h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'open-jobs', onclick: function () { openRO('adminJobs', 'Вакансии'); } }, 'Вакансии'), h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'open-promos', onclick: function () { openRO('adminPromos', 'Акции'); } }, 'Акции')),
       h('p', { class: 'help', text: 'Редактируются прямо в таблице приложения (вкладки «Вакансии» и «Акции»).' })));
@@ -530,6 +588,95 @@
         loadSummary();
       });
     });
+  }
+  /* ---------- рассылка акций (блок на «Сводке») ---------- */
+  function promoCard(s) {
+    var P = S.promo, n = s.notify || {}, pr = s.promo || {}, q = pr.queue > 0 ? pr.queue : 0, sec = h('section', { class: 'card stack promo', 'aria-labelledby': 'pr-h', 'data-testid': 'promo-card' }), ta, link, pick = null, cnt, res;
+    sec.appendChild(h('h2', { id: 'pr-h', text: 'Рассылка акций' }));
+    sec.appendChild(h('p', { class: 'cap', text: 'Личное сообщение в Telegram всем, у кого есть доступ к приложению. Сообщение придёт обычным текстом с заголовком «' + PROMO.head + '», без фото.' }));
+    if (S.promoItems.length) {
+      pick = h('select', { class: 'inp', 'data-testid': 'promo-pick', 'aria-label': 'Взять акцию из вкладки «Акции»' }, h('option', { value: '', text: 'Выбрать из вкладки «Акции»…' }));
+      S.promoItems.forEach(function (it, i) { pick.appendChild(h('option', { value: String(i), text: it.title + (it.bonus ? ' · ' + it.bonus : '') })); });
+      pick.value = P.pick;
+      pick.addEventListener('change', function () {
+        P.pick = pick.value; var it = S.promoItems[+pick.value]; if (!it) return;
+        ta.value = (it.title + (it.desc ? '\n\n' + it.desc : '')).slice(0, PROMO.textMax); P.text = ta.value; sync(); ta.focus();
+      });
+      sec.appendChild(h('div', { class: 'field' }, h('label', { class: 'l', text: 'Акция из таблицы' }), pick, h('p', { class: 'help', text: 'Название и описание подставятся в поле ниже, их можно поправить. Отправляется то, что в поле.' })));
+    }
+    ta = h('textarea', { class: 'inp', id: 'pr-text', maxlength: String(PROMO.textMax), rows: '6', 'data-testid': 'promo-text', 'aria-describedby': 'pr-cnt', placeholder: 'Например: Скидка 10% на форму до пятницы' });
+    cnt = h('span', { id: 'pr-cnt', class: 'cnt2', 'data-testid': 'promo-count' });
+    link = h('input', { class: 'inp', id: 'pr-link', type: 'text', inputmode: 'url', autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false', 'data-testid': 'promo-link', placeholder: 'https://…' });
+    ta.value = P.text; link.value = P.link;
+    function sync() { cnt.textContent = Array.from(ta.value).length + ' / ' + PROMO.textMax; }
+    function dirty() { if (P.res && P.res.bad) { P.res = null; res.hidden = true; } }
+    ta.addEventListener('input', function () { P.text = ta.value; sync(); dirty(); });
+    link.addEventListener('input', function () { P.link = link.value; dirty(); });
+    sec.appendChild(h('div', { class: 'field' }, h('label', { class: 'l', for: 'pr-text' }, h('span', { text: 'Текст акции' }), cnt), ta));
+    sec.appendChild(h('div', { class: 'field' }, h('label', { class: 'l', for: 'pr-link', text: 'Ссылка (необязательно)' }), link, h('p', { class: 'help', text: 'Только https://, до ' + PROMO.linkMax + ' символов. Ссылка добавится в конец сообщения.' })));
+    var hint = q > 0 ? 'Рассылка акции не закончена. Осталось отправить: ' + q + '. Продолжите её или отмените остаток, тогда можно будет отправить новую акцию.'
+      : n.quiet ? 'Сейчас ночь: рассылка доступна с ' + (n.from || 6) + ':00 до ' + (n.to || 22) + ':00 по Москве. Тест себе можно отправить в любое время.'
+      : pr.nextAt ? 'Недавно уже рассылали акцию. Следующую можно после ' + mskHm(pr.nextAt) + ' по Москве.' : '';
+    if (hint) sec.appendChild(h('p', { class: 'help', 'data-testid': 'promo-hint', text: hint }));
+    var test = h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'promo-test', disabled: P.busy, onclick: promoTest }, ico('send', 'sm'), 'Отправить мне тест');
+    var row = h('div', { class: 'btnrow promo-btns' }, test);
+    if (q > 0) {
+      row.appendChild(h('button', { class: 'btn', type: 'button', 'data-testid': 'promo-continue', disabled: P.busy, onclick: function () { promoSend(); } }, ico('send', 'sm'), 'Продолжить рассылку (осталось ' + q + ')'));
+      row.appendChild(h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'promo-discard', disabled: P.busy, onclick: function () { promoDiscard(q); } }, 'Отменить остаток'));
+    } else row.appendChild(h('button', { class: 'btn', type: 'button', 'data-testid': 'promo-send', disabled: P.busy, onclick: function () { promoSend(); } }, ico('send', 'sm'), 'Отправить всем'));
+    sec.appendChild(row);
+    res = h('p', { class: 'notify-res' + (P.res && P.res.bad ? ' err' : ''), role: 'status', 'data-testid': 'promo-res', text: P.res ? P.res.text : '' }); res.hidden = !P.res;
+    sec.appendChild(res); sync();
+    return sec;
+  }
+  function promoBody() { return { text: S.promo.text, link: S.promo.link.trim() }; }
+  function promoSet(text, bad) { S.promo.res = { text: text, bad: !!bad }; toast(text, bad ? 'bad' : 'ok'); }
+  function promoPre() {   // проверка ввода до обращения к серверу; true — можно дальше
+    var e = promoCheckInput(S.promo.text, S.promo.link); if (!e) return true;
+    promoSet(promoErr({ error: e }), true); render(); return false;
+  }
+  function promoTest() {
+    if (!requireOnline() || !promoPre()) return;
+    S.promo.busy = true; render();
+    call('adminPromoTest', promoBody()).then(function (r) {
+      S.promo.busy = false; if (!session()) return;
+      if (r.ok) promoSet('Тест отправлен в админский чат Telegram. Сотрудникам ничего не ушло.', false); else promoSet(promoErr(r), true);
+      render();
+    });
+  }
+  function promoSend() {
+    if (!requireOnline()) return;
+    var q = S.sum && S.sum.promo && S.sum.promo.queue > 0;
+    if (!q && !promoPre()) return;
+    S.promo.busy = true; render();
+    call('adminPromoPreview', promoBody()).then(function (p) {
+      S.promo.busy = false; if (!session()) return;
+      if (!p.ok) { promoSet(promoErr(p), true); return render(); }
+      if (p.block) { promoSet(promoErr({ error: p.block, until: p.until, waitMin: p.waitMin, from: p.from, to: p.to }), true); return render(); }
+      render();
+      confirmAct({ title: p.pending ? 'Продолжить рассылку акции?' : 'Отправить акцию всем?', quote: p.text,
+        text: p.pending ? 'Осталось отправить: ' + p.recipients + '. Уйдёт тот же текст, что и в начале рассылки.' : 'Получателей: до ' + p.recipients + '.', yes: p.pending ? 'Продолжить' : 'Отправить всем' }).then(function (ans) {
+        if (!ans) return;
+        S.promo.busy = true; render();
+        call('adminPromoSend', promoBody()).then(function (r) {
+          S.promo.busy = false; if (!session()) return;
+          if (r.ok) promoSet('Отправлено: ' + r.sent + '. Не доставлено: ' + r.failed + '.' + (r.remaining > 0 ? ' Осталось: ' + r.remaining + '. Нажмите «Продолжить рассылку», чтобы отправить остальным.' : ''), false);
+          else promoSet(promoErr(r), true);
+          render(); loadSummary();
+        });
+      });
+    });
+  }
+  function promoDiscard(q) {
+    if (!requireOnline()) return;
+    confirmAct({ title: 'Отменить остаток рассылки?', text: 'Ещё ' + q + ' ' + plural(q, ['получатель', 'получателя', 'получателей']) + ' не получат эту акцию. Отменить это действие нельзя.', yes: 'Отменить остаток', danger: true }).then(function (ans) {
+      if (!ans) return;
+      call('adminPromoDiscard').then(function (r) { if (r.ok) promoSet('Остаток рассылки отменён.', false); else promoSet(promoErr(r), true); render(); loadSummary(); });
+    });
+  }
+  function promoItemsFrom(items) {
+    return (items || []).map(function (it) { var m = {}; (it.cols || []).forEach(function (c) { m[c.k] = c.v; }); return { title: String(m['Название'] || '').trim(), desc: String(m['Описание'] || '').trim(), bonus: String(m['Бонус'] || '').trim() }; })
+      .filter(function (x) { return x.title; });
   }
   function openRO(action, title) {
     var body = h('div', { class: 'gap12' }, h('div', { class: 'sk c' }));
@@ -571,8 +718,9 @@
   }
   function loadSummary() {
     if (!session()) return Promise.resolve();
-    return Promise.all([call('adminSummary'), call('adminLog')]).then(function (rs) {
+    return Promise.all([call('adminSummary'), call('adminLog'), call('adminPromos')]).then(function (rs) {
       if (!session()) return;
+      if (rs[2].ok) S.promoItems = promoItemsFrom(rs[2].items);
       if (rs[0].ok) { S.sum = rs[0]; delete S.err.sum; S.log = rs[1].ok ? rs[1].items : S.log; } else if (rs[0].error !== 'auth') S.err.sum = errText(rs[0]);
       render();
     });
