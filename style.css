@@ -4,7 +4,7 @@
   --text: #121826; --muted: #566074; --faint: #667085;
   --primary: #2b59e6; --primary-ink: #ffffff; --primary-soft: #e6ecff; --primary-strong: #1d43b8;
   --ok: #0f7a3a; --ok-bg: #dff5e7; --warn: #8a5300; --warn-bg: #fff0cf; --bad: #b3261e; --bad-bg: #fde3e1;
-  --info: #1d4fb8; --info-bg: #e3ebff; --night: #4b3fb5; --night-bg: #e9e6ff; --day: #b86a00; --day-bg: #ffecc8;
+  --info: #1d4fb8; --info-bg: #e3ebff; --night: #4b3fb5; --night-bg: #e9e6ff; --day: #9a5a00; --day-bg: #ffecc8;
   --hero1: #2b59e6; --hero2: #5a3fd8; --shadow: 0 1px 2px rgba(18,24,38,.05), 0 6px 20px rgba(18,24,38,.06);
   --r: 18px; --tab-h: 58px; --sab: env(safe-area-inset-bottom, 0px); --sat: env(safe-area-inset-top, 0px);
   --focus: 0 0 0 3px rgba(43,89,230,.45);
@@ -512,4 +512,14 @@ textarea.inp { padding: 12px 14px; min-height: 110px; font-size: 16px; resize: v
 /* фото в карточке: плакат целиком (contain) на размытом фоне того же фото */
 .car { aspect-ratio: 4 / 5; }
 .car-img { object-fit: contain; }
-.lb .car { aspect-ratio: auto; } .lb 
+.lb .car { aspect-ratio: auto; }
+
+/* предупреждение о новой версии (service worker) */
+.updbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tab-h, 58px) + var(--sab, 0px) + 12px); z-index: 60; width: min(496px, calc(100% - 24px)); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border-radius: 16px; background: var(--card); color: var(--text); border: 1px solid var(--line); box-shadow: var(--shadow, 0 6px 24px rgba(0,0,0,.18)); font-size: 14px; font-weight: 600; }
+.updbar span { flex: 1 1 100%; }
+.updbar .btn { min-height: 44px; flex: 1 1 120px; font-size: 15px; }
+.calcard.card { padding-left: 2px; padding-right: 2px; }
+.noscript-note { padding: 24px; font-size: 16px; }
+/* очень длинные ФИО, названия участков и случаев переносятся, а не растягивают экран */
+.view { overflow-wrap: anywhere; }
+.line > *, .row > *, .hd > .grow { min-width: 0; }

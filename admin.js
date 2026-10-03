@@ -196,9 +196,12 @@
   }
 
   /* ---------- связь с бэкендом ---------- */
+  function reqTimeout() { var t = +APPC.requestTimeoutMs; return t >= 1000 && t <= 300000 ? t : 60000; }   // зависший запрос не держит кнопки «Отправляется…» вечно (рассылка идёт дольше обычного)
   function post(body) {
-    return fetch(APPC.backendUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body), credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store', redirect: 'follow' })
-      .then(function (r) { return r.json(); }).then(function (r) { return r && typeof r === 'object' ? r : { ok: false, error: 'server' }; }).catch(function () { return { ok: false, error: 'network' }; });
+    var ctl = typeof AbortController === 'function' ? new AbortController() : null, tm = ctl ? setTimeout(function () { ctl.abort(); }, reqTimeout()) : null;
+    return fetch(APPC.backendUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body), credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store', redirect: 'follow', signal: ctl ? ctl.signal : undefined })
+      .then(function (r) { return r.json(); }).then(function (r) { return r && typeof r === 'object' ? r : { ok: false, error: 'server' }; }).catch(function () { return { ok: false, error: 'network' }; })
+      .then(function (r) { if (tm) clearTimeout(tm); return r; });
   }
   var session = function () { var s = load(SESSK, null); return s && s.token && (!s.exp || s.exp > Date.now()) ? s : null; };
   function call(action, body) {
@@ -743,6 +746,18 @@
     if (!session()) { renderLogin(); return; }
     if (!/^#\/(sum|adv|expl|inc|apps|acc)$/.test(location.hash)) location.hash = '#/sum';
     render(); loadSummary(); loadTab(location.hash.slice(2));
+  }
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {   // оболочку кэширует sw.js (регистрируется из index.html); о новой версии предупреждаем, сами не перезагружаемся
+    var hadCtl = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (hadCtl && !$('[data-testid="update-bar"]')) {
+        var bar = h('div', { class: 'updbar', role: 'status', 'data-testid': 'update-bar' }, h('span', { text: 'Вышла новая версия кабинета.' }),
+          h('button', { class: 'btn', type: 'button', 'data-testid': 'update-now', onclick: function () { location.reload(); } }, 'Обновить'),
+          h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'update-later', onclick: function () { bar.remove(); } }, 'Позже'));
+        document.body.appendChild(bar);
+      }
+      hadCtl = true;
+    });
   }
   boot();
 })();

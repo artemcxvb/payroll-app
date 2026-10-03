@@ -304,6 +304,7 @@
     application: function (id, st) { var s = srv(); s.applications.forEach(function (x) { if (x.id === id) x.status = st; }); save(s); refresh(); },
     decideIncident: function (id, st, answer) { var s = srv(); s.incidents.forEach(function (i) { if (i.id === id) { i.status = st; i.answer = answer; } }); save(s); refresh(); },
     acceptIncident: function (id) { var s = srv(); s.incidents.forEach(function (i) { if (i.id === id) i.status = 'accepted'; }); save(s); refresh(); },
+    returnExpl: function (id, reason) { var s = srv(); s.cases.forEach(function (c) { if (c.id === id && c.expl) c.expl = { status: 'waiting', returned: true, returnedReason: reason }; }); save(s); refresh(); },
     accept: function (id) { var s = srv(); s.cases.forEach(function (c) { if (c.id === id && c.expl) c.expl.status = 'accepted'; }); save(s); refresh(); },
     block: function () { var s = srv(), se = session(); if (se) { s.blocked[se.phone] = 1; save(s); } },
     unblockAll: function () { var s = srv(); s.blocked = {}; save(s); },
@@ -316,9 +317,15 @@
   function blobB64(blob) {
     return new Promise(function (res, rej) { var fr = new FileReader(); fr.onload = function () { res(String(fr.result).replace(/^data:[^,]*,/, '')); }; fr.onerror = function () { rej(new Error('read')); }; fr.readAsDataURL(blob); });
   }
+  function reqTimeout(size) {   // зависший запрос (слабая сеть, холодный старт Apps Script) не должен держать кнопки «Отправляется…» вечно
+    var t = +APPC.requestTimeoutMs; if (t >= 1000 && t <= 300000) return t;
+    return size > 300000 ? 120000 : 45000;   // с фото дольше
+  }
   function post(url, body) {   // text/plain без заголовков → нет CORS-preflight; ни cookie, ни referrer
-    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body), credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store', redirect: 'follow' })
-      .then(function (r) { return r.json(); }).then(function (r) { return r && typeof r === 'object' ? r : { ok: false, error: 'server' }; }).catch(function () { return { ok: false, error: 'network' }; });
+    var raw = JSON.stringify(body), ctl = typeof AbortController === 'function' ? new AbortController() : null, tm = ctl ? setTimeout(function () { ctl.abort(); }, reqTimeout(raw.length)) : null;
+    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: raw, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store', redirect: 'follow', signal: ctl ? ctl.signal : undefined })
+      .then(function (r) { return r.json(); }).then(function (r) { return r && typeof r === 'object' ? r : { ok: false, error: 'server' }; }).catch(function () { return { ok: false, error: 'network' }; })
+      .then(function (r) { if (tm) clearTimeout(tm); return r; });
   }
   /* ---------- автовыход: после LOGIN_HOUR_TO (22:00 МСК) приложение закрыто, утром вход заново по коду (только live; в демо времени нет) ---------- */
   var HRSK = 'pr.hours', autoT = null;
@@ -565,6 +572,7 @@
       b.appendChild(h('span', { text: (navigator.onLine === false ? 'Нет сети' : 'Нет связи с сервером') + ' — показаны сохранённые данные' + (S.data ? ' на ' + stamp(S.data.fetchedAt) : '') }));
     } else b.hidden = true;
   }
+  function explReturnedCount() { return S.data ? S.data.cases.filter(function (c) { return c.expl && c.expl.status === 'waiting' && c.expl.returned; }).length : 0; }
   function waitingCount() { return S.data ? S.data.cases.filter(function (c) { return c.expl && c.expl.status === 'waiting'; }).length : 0; }
   function returnedCount() { return S.data ? (S.data.incidents || []).filter(function (i) { return i.status === 'returned'; }).length : 0; }
   var TABS = [['home', 'Главная', 'home'], ['cal', 'Календарь', 'cal'], ['ops', 'Операции', 'box'], ['ded', 'Вычеты', 'ded'], ['adv', 'Аванс', 'wallet'], ['me', 'Профиль', 'user']];
@@ -742,7 +750,7 @@
     v.appendChild(h('div', null, periodBtn()));
     var w = waitingCount();
     if (w) v.appendChild(h('button', { class: 'alert', type: 'button', 'data-testid': 'home-alert', onclick: function () { S.dedFilter = 'all'; location.hash = '#/ded'; } }, ico('alert'),
-      h('div', null, h('b', { text: w + ' ' + plural(w, ['случай ждёт', 'случая ждут', 'случаев ждут']) + ' объяснения' }), h('span', { text: 'Для брака обязательны фото повреждения и объяснительная. Нажмите, чтобы заполнить.' }))));
+      h('div', null, h('b', { text: w + ' ' + plural(w, ['случай ждёт', 'случая ждут', 'случаев ждут']) + ' объяснения' }), h('span', { text: 'Для брака обязательны фото повреждения и объяснительная. Нажмите, чтобы заполнить.' + (explReturnedCount() ? ' Возвращено администратором: ' + explReturnedCount() + '.' : '') }))));
     var rc = returnedCount();
     if (rc) v.appendChild(h('button', { class: 'alert', type: 'button', 'data-testid': 'home-alert-returned', onclick: function () { S.dedFilter = 'all'; location.hash = '#/ded'; } }, ico('alert'),
       h('div', null, h('b', { text: rc + ' ' + plural(rc, ['сообщение возвращено', 'сообщения возвращены', 'сообщений возвращено']) + ' на доработку' }), h('span', { text: 'Администратор просит дополнить объяснение. Нажмите, чтобы открыть.' }))));
@@ -1248,10 +1256,12 @@
     el.appendChild(h('div', { class: 'hd' }, h('div', { class: 'kico' }, ico(k.ic)), h('div', { class: 'grow' }, h('div', { class: 'tt', text: c.title }), h('div', { class: 'meta', text: k.n + ' · ' + dmy(c.date) })), h('div', { class: 'amt num', text: minus(c.amount) })));
     if (c.expl) {
       var st = EX_ST[c.expl.status], ft = h('div', { class: 'ft' });
-      ft.appendChild(h('div', { class: 'row between' }, chip(st[0], st[1], c.expl.status === 'waiting' ? 'clock' : 'check'), c.expl.sentAt ? h('span', { class: 'cap', text: dmy(c.expl.sentAt) }) : null));
+      var ret = c.expl.status === 'waiting' && c.expl.returned;
+      ft.appendChild(h('div', { class: 'row between' }, ret ? chip('Возвращено', 'warn', 'info') : chip(st[0], st[1], c.expl.status === 'waiting' ? 'clock' : 'check'), c.expl.sentAt ? h('span', { class: 'cap', text: dmy(c.expl.sentAt) }) : null));
       if (c.expl.status === 'waiting') {
+        if (ret) ft.appendChild(retBox(c.expl.returnedReason, 'expl-returned-' + c.id));
         ft.appendChild(h('div', { class: 'need' }, ico('info', 'sm'), h('span', { text: needText(c) })));
-        ft.appendChild(h('button', { class: 'btn', type: 'button', 'data-testid': 'explain-' + c.id, onclick: function () { openExplain(c); } }, ico('camera', 'sm'), 'Объяснить / приложить фото'));
+        ft.appendChild(h('button', { class: 'btn', type: 'button', 'data-testid': 'explain-' + c.id, onclick: function () { openExplain(c); } }, ico('camera', 'sm'), ret ? 'Исправить и отправить снова' : 'Объяснить / приложить фото'));
       } else ft.appendChild(h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'view-' + c.id, onclick: function () { openExplView(c); } }, 'Посмотреть отправленное'));
       el.appendChild(ft);
     }
@@ -1441,6 +1451,10 @@
     update();
   }
   function incFilesLine(i) { return 'Фото места: ' + i.scene.length + ' · порча: ' + i.damage.length + ' · акт: ' + i.acts.length; }
+  function retBox(reason, tid) {   // причина возврата объяснения (админ обязан её указать; пустая бывает только при ручной правке таблицы)
+    return h('div', { class: 'incans warn', role: 'note', 'data-testid': tid }, ico('info', 'sm'),
+      h('div', null, h('b', { text: 'Возвращено: что нужно исправить' }), h('span', { text: reason || 'Причина не указана. Уточните у администратора.' })));
+  }
   function incAnswer(i, tid) {   // решение администратора: причина возврата/отказа
     if (i.status !== 'returned' && i.status !== 'rejected') return null;
     return h('div', { class: 'incans ' + (i.status === 'returned' ? 'warn' : 'bad'), role: 'note', 'data-testid': tid || 'inc-answer' }, ico(i.status === 'returned' ? 'info' : 'x', 'sm'),
@@ -1554,6 +1568,7 @@
     });
     var body = h('div', null,
       h('div', { class: 'casebox' }, h('b', { text: c.title }), h('span', { class: 'num', text: KIND[c.kind].n + ' · ' + dmy(c.date) + ' · ' + minus(c.amount) })),
+      c.expl && c.expl.returned ? retBox(c.expl.returnedReason, 'ex-returned') : null,
       h('div', { class: 'reqbanner', 'data-testid': 'req-banner' }, ico('alert'), h('div', null, h('b', { text: needPhoto ? 'Обязательно: фото и объяснительная' : 'Обязательно: объяснительная' }), h('span', { text: needPhoto ? 'Кнопка «Отправить» станет активной, когда приложено хотя бы одно фото повреждения и написано объяснение.' : 'Фото можно приложить по желанию.' }))),
       checks,
       h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('span', { text: needPhoto ? 'Фото повреждения' : 'Фото' }), needPhoto ? h('span', { class: 'req', 'aria-hidden': 'true', text: '*' }) : null, tagPh),
@@ -1695,7 +1710,7 @@
       d.advances.slice().sort(function (a, b) { return (a.date + a.time) < (b.date + b.time) ? 1 : -1; }).forEach(function (a) {
         var st = ADV_ST[a.status];
         ul.appendChild(h('div', { class: 'hist', role: 'listitem', 'data-status': a.status }, h('div', { class: 'grow' }, h('div', { class: 'row between' }, h('span', { class: 'am num', text: money(a.amount) }), chip(a.status === 'issued' ? 'Выдан в субботу' : st[0], st[1], a.status === 'issued' ? 'check' : a.status === 'rejected' || a.status === 'cancelled' ? 'x' : 'clock')),
-          h('div', { class: 'cap', text: 'Заказ ' + dmy(a.date) + ' в ' + a.time + (a.payDate ? ' · выдача ' + dm(a.payDate) : '') }), a.comment ? h('div', { class: 'cm', text: '«' + a.comment + '»' }) : null, a.answer ? h('div', { class: 'ans', text: (a.status === 'rejected' ? 'Причина: ' : 'Ответ: ') + a.answer }) : null)));
+          h('div', { class: 'cap', text: 'Заказ ' + dmy(a.date) + ' в ' + a.time + (a.payDate ? ' · выдача ' + dm(a.payDate) : '') }), a.comment ? h('div', { class: 'cm', text: '«' + a.comment + '»' }) : null, a.answer || a.status === 'rejected' ? h('div', { class: 'ans', 'data-testid': 'adv-answer', text: (a.status === 'rejected' ? 'Причина: ' : 'Ответ: ') + (a.answer || 'не указана, уточните у администратора') }) : null)));
       }); hist.appendChild(ul); }
     v.appendChild(hist);
     applyWidths(v); return v;
@@ -1783,7 +1798,7 @@
           a.status === 'pending' ? [h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-approve', onclick: function () { admin.advance(a.id, 'approved'); } }, 'Одобрить'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-reject', onclick: function () { admin.advance(a.id, 'rejected'); } }, 'Отклонить')] : null,
           h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-issue', onclick: function () { admin.advance(a.id, 'issued'); } }, 'Выдать')));
       });
-      if (session()) s.cases.filter(function (c) { return c.expl && c.expl.status === 'sent'; }).forEach(function (c) { box.appendChild(h('div', { class: 'devrow' }, 'Объяснение: ' + c.title.slice(0, 28), h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-accept', onclick: function () { admin.accept(c.id); } }, 'Принять'))); });
+      if (session()) s.cases.filter(function (c) { return c.expl && c.expl.status === 'sent'; }).forEach(function (c) { box.appendChild(h('div', { class: 'devrow' }, 'Объяснение: ' + c.title.slice(0, 28), h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-accept', onclick: function () { admin.accept(c.id); } }, 'Принять'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-return', onclick: function () { admin.returnExpl(c.id, 'Фото нечёткое. Снимите повреждение крупнее и приложите ещё одно.'); } }, 'Вернуть'))); });
       if (session()) s.incidents.filter(function (i) { return i.status === 'review'; }).forEach(function (i) { box.appendChild(h('div', { class: 'devrow' }, 'Происшествие: ' + i.desc.slice(0, 26), h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-accept', onclick: function () { admin.acceptIncident(i.id); } }, 'Принять'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-return', onclick: function () { admin.decideIncident(i.id, 'returned', 'Не видно номер паллеты на фото. Добавьте, когда и кого вы уведомили.'); } }, 'Вернуть'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-reject', onclick: function () { admin.decideIncident(i.id, 'rejected', 'Это не ваша смена, случай передан другому сотруднику.'); } }, 'Отклонить'))); });
       if (session()) s.applications.filter(function (x) { return x.status === 'sent' || x.status === 'viewed'; }).slice(0, 2).forEach(function (x) { box.appendChild(h('div', { class: 'devrow' }, 'Отклик: ' + x.jobId, h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-app-invite', onclick: function () { admin.application(x.id, 'invited'); } }, 'Пригласить'))); });
       box.appendChild(h('div', { class: 'devrow' }, h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-block', onclick: function () { admin.block(); refresh(); } }, 'Заблокировать доступ'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-unblock', onclick: function () { admin.unblockAll(); toast('Доступ возвращён'); } }, 'Вернуть доступ')));
@@ -1797,7 +1812,18 @@
 
   /* ---------- старт ---------- */
   setTheme(load('pr.theme', 'auto'));
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(function () { /* офлайн-оболочка необязательна */ });
+  function updateBar() {   // новая версия оболочки встала в кэш: предложить перезапуск, ничего не перезагружая само (в форме может быть черновик)
+    if (document.querySelector('[data-testid="update-bar"]')) return;
+    var bar = h('div', { class: 'updbar', role: 'status', 'data-testid': 'update-bar' }, h('span', { text: 'Вышла новая версия приложения.' }),
+      h('button', { class: 'btn', type: 'button', 'data-testid': 'update-now', onclick: function () { location.reload(); } }, 'Обновить'),
+      h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'update-later', onclick: function () { bar.remove(); } }, 'Позже'));
+    document.body.appendChild(bar);
+  }
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    var hadCtl = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').catch(function () { /* офлайн-оболочка необязательна */ });
+    navigator.serviceWorker.addEventListener('controllerchange', function () { if (hadCtl) updateBar(); hadCtl = true; });   // первая установка (контроллера не было) не считается обновлением
+  }
   if (!location.hash) location.hash = session() ? '#/home' : '#/login';
   boot(); devRender();
 })();

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="theme-color" content="#f4f6fb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="referrer" content="no-referrer">
+<title>Такси · Учёт поездок</title>
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="admin.css">
+<link rel="stylesheet" href="taxi.css">
+</head>
+<body class="adminpage taxipage">
+<a class="skip" href="#main">К содержимому</a>
+<div id="app" class="app">
+  <div class="brand" data-testid="brand"><img src="company-banner.jpg" alt="Персональное решение — федеральная аутсорсинговая компания" width="1280" height="467" decoding="async"></div>
+  <div id="offline" class="offline" role="status" hidden></div>
+  <div id="view-root"></div>
+  <nav id="tabbar" class="tabbar" aria-label="Разделы учёта такси" hidden></nav>
+</div>
+<div id="overlay-root"></div>
+<div id="toasts" class="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
+<noscript><p class="note-d">Для работы учёта такси нужен JavaScript.</p></noscript>
+<script src="config.js"></script>
+<script src="taxi.js"></script>
+</body>
+</html>
