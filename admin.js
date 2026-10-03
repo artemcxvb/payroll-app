@@ -5,7 +5,7 @@
   'use strict';
   var APPC = window.APP_CONFIG || {}, LIVE = APPC.mode === 'live' && /^https:\/\//.test(APPC.backendUrl || '');
   var qs = new URLSearchParams(location.search), LAT = LIVE ? 0 : qs.has('lat') ? +qs.get('lat') : 150;
-  var SESSK = 'pr.admin.session', DEMOK = 'pr.admin.demo', THEMEK = 'pr.theme', NBSP = '\u00a0';
+  var WHOK = 'pr.admin.who', SESSK = 'pr.admin.session', DEMOK = 'pr.admin.demo', THEMEK = 'pr.theme', NBSP = '\u00a0';
   var REASON_MIN = 3, REASON_MAX = 300;
 
   /* ---------- утилиты ---------- */
@@ -26,6 +26,32 @@
   function dmyT(s) { s = String(s || ''); return s ? dmy(s) + (s.length > 10 ? ' ' + s.slice(11, 16) : '') : ''; }
   function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* квота */ } }
   function load(k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
+
+  /* ---------- данные устройства для сообщения админу о запросе кода (без токенов; постоянный случайный deviceId в localStorage) ---------- */
+  var DEVK = 'pr.deviceId', devMem = '';
+  function deviceId() {
+    var id = ''; try { id = localStorage.getItem(DEVK) || ''; } catch (e) { id = ''; }
+    if (/^[a-f0-9]{24}$/.test(id)) return id;
+    if (/^[a-f0-9]{24}$/.test(devMem)) return devMem;
+    var a = new Uint8Array(12); try { crypto.getRandomValues(a); } catch (e) { for (var i = 0; i < 12; i++) a[i] = Math.floor(Math.random() * 256); }
+    id = ''; for (var j = 0; j < 12; j++) id += ('0' + a[j].toString(16)).slice(-2);
+    devMem = id; try { localStorage.setItem(DEVK, id); } catch (e2) { /* приватный режим: id живёт до закрытия вкладки */ }
+    return id;
+  }
+  function uaShort(ua) {   // «Android 13 · Pixel 7 · Chrome 120»: ОС, модель (если есть), браузер
+    ua = String(ua || ''); var os = '', model = '', br = '', m;
+    if ((m = /Android ([\d.]+)/.exec(ua))) { os = 'Android ' + m[1].split('.')[0]; var mm = /Android [\d.]+; ([^;)]+?)(?: Build|\)|;)/.exec(ua); if (mm && mm[1] !== 'K' && !/^Linux/.test(mm[1])) model = mm[1]; }
+    else if (/iPhone|iPad|iPod/.test(ua)) { m = /OS (\d+)[_\d]* like Mac/.exec(ua); os = 'iOS' + (m ? ' ' + m[1] : ''); model = /iPad/.test(ua) ? 'iPad' : /iPod/.test(ua) ? 'iPod' : 'iPhone'; }
+    else if (/Windows NT/.test(ua)) os = 'Windows'; else if (/Mac OS X/.test(ua)) os = 'macOS'; else if (/CrOS/.test(ua)) os = 'ChromeOS'; else if (/Linux/.test(ua)) os = 'Linux';
+    if ((m = /(?:Edg|EdgA|EdgiOS)\/(\d+)/.exec(ua))) br = 'Edge ' + m[1]; else if ((m = /YaBrowser\/(\d+)/.exec(ua))) br = 'Яндекс Браузер ' + m[1]; else if ((m = /OPR\/(\d+)/.exec(ua))) br = 'Opera ' + m[1];
+    else if ((m = /SamsungBrowser\/(\d+)/.exec(ua))) br = 'Samsung Internet ' + m[1]; else if ((m = /(?:Firefox|FxiOS)\/(\d+)/.exec(ua))) br = 'Firefox ' + m[1];
+    else if ((m = /(?:Chrome|CriOS|HeadlessChrome)\/(\d+)/.exec(ua))) br = 'Chrome ' + m[1]; else if ((m = /Version\/(\d+).*Safari/.exec(ua))) br = 'Safari ' + m[1];
+    return [os, model, br].filter(Boolean).join(' · ').replace(/[^\wА-Яа-яЁё .,;:()+\-·\/]/g, '').slice(0, 80);
+  }
+  function deviceInfo() {
+    var tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { tz = ''; }
+    return { id: deviceId(), ua: uaShort(navigator.userAgent), lang: String(navigator.language || '').slice(0, 12), tz: String(tz).slice(0, 40), scr: Math.round(screen.width || 0) + 'x' + Math.round(screen.height || 0) };
+  }
   function nowMsk() { return new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 16).replace('T', ' '); }
   function plural(n, f) { var a = Math.abs(n) % 100, b = a % 10; return f[(a > 10 && a < 20) ? 2 : b > 1 && b < 5 ? 1 : b === 1 ? 0 : 2]; }
   var IC = {
@@ -142,7 +168,7 @@
   var demoCodeAt = 0;
   function demoCall(action, d) {
     var s = demoState(), tok = (load(SESSK, null) || {}).token;
-    if (action === 'adminCodeRequest') { if (Date.now() - demoCodeAt < 30000 && demoCodeAt) return demoRes({ ok: true, throttled: true, wait: 30 }); demoCodeAt = Date.now(); return demoRes({ ok: true }); }
+    if (action === 'adminCodeRequest') { if (String(d.phone || '').replace(/\D/g, '').length < 10) return demoRes({ ok: false, error: 'bad_phone' }); if (Date.now() - demoCodeAt < 30000 && demoCodeAt) return demoRes({ ok: true, throttled: true, wait: 30 }); demoCodeAt = Date.now(); return demoRes({ ok: true }); }
     if (action === 'adminCodeVerify') return demoRes(String(d.code) === DEMO_CODE ? { ok: true, token: 'demo-admin', expiresAt: Date.now() + 12 * 3600000 } : { ok: false, error: 'wrong', left: 4 });
     if (tok !== 'demo-admin') return demoRes({ ok: false, error: 'auth' });
     function counts(l, st) { return l.filter(function (x) { return x.status === st; }).length; }
@@ -205,7 +231,7 @@
   }
   var session = function () { var s = load(SESSK, null); return s && s.token && (!s.exp || s.exp > Date.now()) ? s : null; };
   function call(action, body) {
-    var b = {}, k, se = session(); for (k in (body || {})) b[k] = body[k]; b.action = action; if (se && action.indexOf('adminCode') !== 0) b.token = se.token;
+    var b = {}, k, se = session(); for (k in (body || {})) b[k] = body[k]; b.action = action; if (se && action.indexOf('adminCode') !== 0) b.token = se.token; if (action === 'adminCodeRequest' || action === 'adminCodeVerify') b.dev = deviceInfo();
     var p = LIVE ? post(b) : delay(LAT).then(function () { return demoCall(action, b); });
     return p.then(function (r) {
       if (r && r.error === 'auth' && session()) { endSession(); toast('Сессия закончилась — войдите снова', 'warn'); }
@@ -247,7 +273,7 @@
 
   /* ---------- состояние ---------- */
   var S = { promo: { text: '', link: '', pick: '', res: null, busy: false }, promoItems: [], tab: 'sum', sum: null, log: null, data: {}, err: {}, filter: {}, q: {}, loading: {}, disabled: false };
-  var L = { step: 'start', readyAt: 0, lockUntil: 0, wait: false, timer: null };
+  var L = { step: 'start', readyAt: 0, lockUntil: 0, wait: false, timer: null, phone: '', name: '' };
   var root = $('#view-root'), tabbar = $('#tabbar'), overlayRoot = $('#overlay-root'), toasts = $('#toasts');
 
   function toast(msg, tone) {
@@ -315,18 +341,23 @@
     v.appendChild(h('p', { class: 'foot', text: LIVE ? 'Код приходит в админский чат Telegram. Сотрудникам в кабинет вход закрыт.' : 'Демо-режим · все данные вымышлены' }));
   }
   function loginStart(v) {
-    var btn = h('button', { class: 'btn', type: 'button', 'data-testid': 'req-code' }, ico('send', 'sm'), 'Получить код в Telegram'), err = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'login-err' });
+    var saved = load(WHOK, {}), btn = h('button', { class: 'btn', type: 'button', 'data-testid': 'req-code' }, ico('send', 'sm'), 'Получить код в Telegram'), err = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'login-err' });
+    var ph = h('input', { class: 'inp', type: 'tel', inputmode: 'tel', autocomplete: 'tel', maxlength: '24', placeholder: '+7 900 000-00-01', 'aria-label': 'Ваш номер телефона', 'data-testid': 'adm-phone', value: L.phone || saved.phone || '' });
+    var nm = h('input', { class: 'inp', type: 'text', autocomplete: 'name', maxlength: '80', placeholder: 'Например: Иванов Пётр', 'aria-label': 'Ваше ФИО (по желанию)', 'data-testid': 'adm-name', value: L.name || saved.name || '' });
+    function fail(t) { clear(btn); btn.appendChild(ico('send', 'sm')); btn.appendChild(document.createTextNode('Получить код в Telegram')); btn.disabled = false; err.textContent = t; err.hidden = false; }
     btn.addEventListener('click', function () {
       if (navigator.onLine === false) { err.textContent = ERR.network; err.hidden = false; return; }
+      var dg = ph.value.replace(/\D/g, ''); if (dg.length < 10 || dg.length > 12) { err.textContent = ERR.bad_phone; err.hidden = false; ph.focus(); return; }
+      L.phone = ph.value.trim(); L.name = nm.value.trim(); store(WHOK, { phone: L.phone, name: L.name });
       btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…'));
-      call('adminCodeRequest').then(function (r) {
+      call('adminCodeRequest', { phone: L.phone, name: L.name }).then(function (r) {
         if (r.error === 'locked') { L.step = 'code'; L.lockUntil = r.until; return renderLogin(); }
-        if (!r.ok) { clear(btn); btn.appendChild(ico('send', 'sm')); btn.appendChild(document.createTextNode('Получить код в Telegram')); btn.disabled = false; err.textContent = errText(r); err.hidden = false; return; }
+        if (!r.ok) return fail(errText(r));
         L.step = 'code'; L.readyAt = Date.now() + (r.throttled ? (r.wait || 30) : 30) * 1000; renderLogin();
       });
     });
-    v.appendChild(h('div', { class: 'gap12' }, btn, err));
-    v.appendChild(h('div', { class: 'steps' }, h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: 'Нажмите «Получить код в Telegram» — 4 цифры придут в ваш админский чат.' })), h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: 'Введите код. Он действует 10 минут, вход держится 12 часов.' }))));
+    v.appendChild(h('div', { class: 'gap12' }, h('div', { class: 'field' }, h('label', { class: 'l', text: 'Ваш телефон' }), ph), h('div', { class: 'field' }, h('label', { class: 'l' }, 'Ваше ФИО ', h('span', { text: 'по желанию' })), nm), btn, err));
+    v.appendChild(h('div', { class: 'steps' }, h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: 'Введите свой номер телефона и нажмите «Получить код в Telegram»: админ увидит, кто просит доступ, и 4 цифры придут в админский чат.' })), h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: 'Введите код. Он действует 10 минут, вход держится 12 часов.' }))));
   }
   function loginCode(v) {
     var boxes = [], busy = false, otp = h('div', { class: 'otp', role: 'group', 'aria-label': 'Код из 4 цифр', 'data-testid': 'otp' }), err = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'code-err' });
@@ -339,7 +370,7 @@
       go.disabled = true; clear(go); go.appendChild(h('span', { class: 'spinner' })); go.appendChild(document.createTextNode(' Проверяем…'));
       call('adminCodeVerify', { code: c }).then(function (r) {
         busy = false;
-        if (r.ok && r.token) { store(SESSK, { token: r.token, exp: r.expiresAt, at: Date.now() }); clearInterval(L.timer); L = { step: 'start', readyAt: 0, lockUntil: 0 }; location.hash = '#/sum'; boot(); return; }
+        if (r.ok && r.token) { store(SESSK, { token: r.token, exp: r.expiresAt, at: Date.now() }); clearInterval(L.timer); L = { step: 'start', readyAt: 0, lockUntil: 0, phone: '', name: '' }; location.hash = '#/sum'; boot(); return; }
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         clear(go); go.appendChild(document.createTextNode('Войти')); go.disabled = true;
         if (r.error === 'wrong') { boxes.forEach(function (b) { b.value = ''; b.setAttribute('aria-invalid', 'true'); }); otp.classList.remove('bad'); void otp.offsetWidth; otp.classList.add('bad'); showErr('Неверный код. Осталось ' + r.left + ' ' + plural(r.left, ['попытка', 'попытки', 'попыток']) + '.'); boxes[0].focus(); }
@@ -356,7 +387,7 @@
     go.addEventListener('click', submit);
     function tick() { var left = Math.ceil((L.readyAt - Date.now()) / 1000); resend.disabled = left > 0; resend.textContent = left > 0 ? 'Запросить код ещё раз (' + left + ' с)' : 'Запросить код ещё раз'; }
     resend.addEventListener('click', function () {
-      call('adminCodeRequest').then(function (r) {
+      call('adminCodeRequest', { phone: L.phone, name: L.name }).then(function (r) {
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         if (!r.ok) { toast(errText(r), 'bad'); return; }
         L.readyAt = Date.now() + (r.throttled ? (r.wait || 30) : 30) * 1000; tick(); toast('Код запрошен повторно — проверьте Telegram'); boxes.forEach(function (b) { b.value = ''; }); boxes[0].focus();

@@ -1,5 +1,5 @@
 /* Service worker: оболочка приложения кэшируется, чтобы данные можно было смотреть без сети. */
-var CACHE = 'pr-shell-v22';
+var CACHE = 'pr-shell-v23';
 var SHELL = ['./', 'index.html', 'app.js', 'style.css', 'mock-data.js', 'config.js', 'manifest.webmanifest', 'company-banner.jpg', 'admin.html', 'admin.js', 'admin.css', 'taxi.html', 'taxi.js', 'taxi.css',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];   // фото демо-режима в кэш при установке не берём (в боевом режиме они не нужны), они попадают в кэш при первом показе
 

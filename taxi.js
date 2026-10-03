@@ -8,7 +8,7 @@
   'use strict';
   var APPC = window.APP_CONFIG || {}, LIVE = APPC.mode === 'live' && /^https:\/\//.test(APPC.backendUrl || '');
   var qs = new URLSearchParams(location.search), LAT = LIVE ? 0 : qs.has('lat') ? +qs.get('lat') : 150;
-  var SESSK = 'pr.admin.session', EMPK = 'pr.taxi.session', DEMOK = 'pr.taxi.demo', THEMEK = 'pr.theme', LASTK = 'pr.taxi.last', NBSP = '\u00a0', DEMO_CODE = '4821';
+  var WHOK = 'pr.admin.who', SESSK = 'pr.admin.session', EMPK = 'pr.taxi.session', DEMOK = 'pr.taxi.demo', THEMEK = 'pr.theme', LASTK = 'pr.taxi.last', NBSP = '\u00a0', DEMO_CODE = '4821';
 
   /* ---------- настройки (правятся здесь; на сервере список маршрутов задаётся в Code.gs: TAXI_ROUTES_ или Script Property TAXI_ROUTES) ---------- */
   var OTHER = 'Другое';
@@ -38,6 +38,32 @@
   function dowOf(s) { var a = String(s).split('-'); return DOW[new Date(Date.UTC(+a[0], +a[1] - 1, +a[2])).getUTCDay()]; }
   function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* квота */ } }
   function load(k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
+
+  /* ---------- данные устройства для сообщения админу о запросе кода (без токенов; постоянный случайный deviceId в localStorage) ---------- */
+  var DEVK = 'pr.deviceId', devMem = '';
+  function deviceId() {
+    var id = ''; try { id = localStorage.getItem(DEVK) || ''; } catch (e) { id = ''; }
+    if (/^[a-f0-9]{24}$/.test(id)) return id;
+    if (/^[a-f0-9]{24}$/.test(devMem)) return devMem;
+    var a = new Uint8Array(12); try { crypto.getRandomValues(a); } catch (e) { for (var i = 0; i < 12; i++) a[i] = Math.floor(Math.random() * 256); }
+    id = ''; for (var j = 0; j < 12; j++) id += ('0' + a[j].toString(16)).slice(-2);
+    devMem = id; try { localStorage.setItem(DEVK, id); } catch (e2) { /* приватный режим: id живёт до закрытия вкладки */ }
+    return id;
+  }
+  function uaShort(ua) {   // «Android 13 · Pixel 7 · Chrome 120»: ОС, модель (если есть), браузер
+    ua = String(ua || ''); var os = '', model = '', br = '', m;
+    if ((m = /Android ([\d.]+)/.exec(ua))) { os = 'Android ' + m[1].split('.')[0]; var mm = /Android [\d.]+; ([^;)]+?)(?: Build|\)|;)/.exec(ua); if (mm && mm[1] !== 'K' && !/^Linux/.test(mm[1])) model = mm[1]; }
+    else if (/iPhone|iPad|iPod/.test(ua)) { m = /OS (\d+)[_\d]* like Mac/.exec(ua); os = 'iOS' + (m ? ' ' + m[1] : ''); model = /iPad/.test(ua) ? 'iPad' : /iPod/.test(ua) ? 'iPod' : 'iPhone'; }
+    else if (/Windows NT/.test(ua)) os = 'Windows'; else if (/Mac OS X/.test(ua)) os = 'macOS'; else if (/CrOS/.test(ua)) os = 'ChromeOS'; else if (/Linux/.test(ua)) os = 'Linux';
+    if ((m = /(?:Edg|EdgA|EdgiOS)\/(\d+)/.exec(ua))) br = 'Edge ' + m[1]; else if ((m = /YaBrowser\/(\d+)/.exec(ua))) br = 'Яндекс Браузер ' + m[1]; else if ((m = /OPR\/(\d+)/.exec(ua))) br = 'Opera ' + m[1];
+    else if ((m = /SamsungBrowser\/(\d+)/.exec(ua))) br = 'Samsung Internet ' + m[1]; else if ((m = /(?:Firefox|FxiOS)\/(\d+)/.exec(ua))) br = 'Firefox ' + m[1];
+    else if ((m = /(?:Chrome|CriOS|HeadlessChrome)\/(\d+)/.exec(ua))) br = 'Chrome ' + m[1]; else if ((m = /Version\/(\d+).*Safari/.exec(ua))) br = 'Safari ' + m[1];
+    return [os, model, br].filter(Boolean).join(' · ').replace(/[^\wА-Яа-яЁё .,;:()+\-·\/]/g, '').slice(0, 80);
+  }
+  function deviceInfo() {
+    var tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { tz = ''; }
+    return { id: deviceId(), ua: uaShort(navigator.userAgent), lang: String(navigator.language || '').slice(0, 12), tz: String(tz).slice(0, 40), scr: Math.round(screen.width || 0) + 'x' + Math.round(screen.height || 0) };
+  }
   function mskNow() { return new Date(Date.now() + 3 * 3600000); }
   function today() { return mskNow().toISOString().slice(0, 10); }
   function isoOf(y, m, d) { return new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10); }
@@ -126,7 +152,7 @@
   var demoCodeAt = 0;
   function demoCall(action, d) {
     var s = demoState(), tok = (load(SESSK, null) || {}).token || (load(EMPK, null) || {}).token, empPhone = /^demo-emp-\d+$/.test(tok || '') ? tok.slice(9) : '', isEmp = !!empPhone, me = isEmp ? ['Демо Сотрудник', empPhone] : ['админ', ''];
-    if (action === 'adminCodeRequest') { if (Date.now() - demoCodeAt < 30000 && demoCodeAt) return demoRes({ ok: true, throttled: true, wait: 30 }); demoCodeAt = Date.now(); return demoRes({ ok: true }); }
+    if (action === 'adminCodeRequest') { if (String(d.phone || '').replace(/\D/g, '').length < 10) return demoRes({ ok: false, error: 'bad_phone' }); if (Date.now() - demoCodeAt < 30000 && demoCodeAt) return demoRes({ ok: true, throttled: true, wait: 30 }); demoCodeAt = Date.now(); return demoRes({ ok: true }); }
     if (action === 'adminCodeVerify') return demoRes(String(d.code) === DEMO_CODE ? { ok: true, token: 'demo-admin', expiresAt: Date.now() + 12 * 3600000 } : { ok: false, error: 'wrong', left: 4 });
     if (action === 'codeRequest') { var dg = String(d.phone || '').replace(/\D/g, ''); if (dg.length < 10) return demoRes({ ok: false, error: 'bad_phone' }); if (Date.now() - demoCodeAt < 30000 && demoCodeAt) return demoRes({ ok: true, throttled: true, wait: 30 }); demoCodeAt = Date.now(); return demoRes({ ok: true }); }
     if (action === 'codeVerify') return demoRes(String(d.code) === DEMO_CODE ? { ok: true, token: 'demo-emp-' + String(d.phone || '').replace(/\D/g, ''), expiresAt: Date.now() + 12 * 3600000 } : { ok: false, error: 'wrong', left: 4 });
@@ -187,7 +213,7 @@
   function isAdmin() { var se = session(); return !(se && se.role === 'employee'); }
   function isLoginAction(a) { return /^(adminCode|code)(Request|Verify)$/.test(a); }
   function call(action, body) {
-    var b = {}, k, se = session(); for (k in (body || {})) b[k] = body[k]; b.action = action; if (se && !isLoginAction(action)) b.token = se.token;
+    var b = {}, k, se = session(); for (k in (body || {})) b[k] = body[k]; b.action = action; if (se && !isLoginAction(action)) b.token = se.token; if (action === 'adminCodeRequest' || action === 'adminCodeVerify') b.dev = deviceInfo();
     var p = LIVE ? post(b) : delay(LAT).then(function () { return demoCall(action, b); });
     return p.then(function (r) {
       if (r && r.error === 'auth' && session()) { endSession(); toast('Сессия закончилась — войдите снова', 'warn'); }
@@ -200,7 +226,7 @@
 
   /* ---------- состояние ---------- */
   var S = { role: '', who: '', tab: 'add', period: 'month', from: '', to: '', data: null, err: '', loading: false, showDeleted: false, last: null, mounted: false, disabled: false, routes: ROUTES.slice() };
-  function newL(mode, phone) { return { step: 'start', readyAt: 0, lockUntil: 0, timer: null, mode: mode || 'admin', phone: phone || '' }; }
+  function newL(mode, phone) { return { step: 'start', readyAt: 0, lockUntil: 0, timer: null, mode: mode || 'admin', phone: phone || '', name: '' }; }
   var L = newL();
   var root = $('#view-root'), tabbar = $('#tabbar'), overlayRoot = $('#overlay-root'), toasts = $('#toasts'), uid = 0;
 
@@ -268,15 +294,17 @@
     v.appendChild(h('p', { class: 'foot', text: LIVE ? (L.mode === 'emp' ? 'Вход для сотрудников открыт с 6:00 до 22:00 по Москве. Если Telegram-бот входа ещё не подключён, код сообщит бригадир.' : 'Код приходит в админский чат Telegram. Если вы уже входили в кабинет админа на этом устройстве, повторный вход не нужен.') : 'Демо-режим · все данные вымышлены' }));
   }
   function loginStart(v) {
-    var emp = L.mode === 'emp', label = emp ? 'Получить код' : 'Получить код в Telegram';
+    var emp = L.mode === 'emp', label = emp ? 'Получить код' : 'Получить код в Telegram', saved = load(WHOK, {});
     var btn = h('button', { class: 'btn', type: 'button', 'data-testid': emp ? 'req-code-emp' : 'req-code' }, ico('send', 'sm'), label), err = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'login-err' });
-    var ph = emp ? h('input', { class: 'inp', type: 'tel', inputmode: 'tel', autocomplete: 'tel', maxlength: '24', placeholder: '+7 900 000-00-01', 'aria-label': 'Номер телефона', 'data-testid': 'emp-phone', value: L.phone }) : null;
+    var ph = h('input', { class: 'inp', type: 'tel', inputmode: 'tel', autocomplete: 'tel', maxlength: '24', placeholder: '+7 900 000-00-01', 'aria-label': emp ? 'Номер телефона' : 'Ваш номер телефона', 'data-testid': emp ? 'emp-phone' : 'adm-phone', value: L.phone || (emp ? '' : saved.phone) || '' });
+    var nm = emp ? null : h('input', { class: 'inp', type: 'text', autocomplete: 'name', maxlength: '80', placeholder: 'Например: Иванов Пётр', 'aria-label': 'Ваше ФИО (по желанию)', 'data-testid': 'adm-name', value: L.name || saved.name || '' });
     function fail(t) { clear(btn); btn.appendChild(ico('send', 'sm')); btn.appendChild(document.createTextNode(label)); btn.disabled = false; err.textContent = t; err.hidden = false; }
     btn.addEventListener('click', function () {
       if (navigator.onLine === false) { err.textContent = ERR.network; err.hidden = false; return; }
-      if (emp) { var d = ph.value.replace(/\D/g, ''); if (d.length < 10 || d.length > 12) { err.textContent = ERR.bad_phone; err.hidden = false; ph.focus(); return; } L.phone = ph.value.trim(); }
+      var d = ph.value.replace(/\D/g, ''); if (d.length < 10 || d.length > 12) { err.textContent = ERR.bad_phone; err.hidden = false; ph.focus(); return; } L.phone = ph.value.trim();
+      if (!emp) { L.name = nm.value.trim(); store(WHOK, { phone: L.phone, name: L.name }); }
       btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…'));
-      (emp ? call('codeRequest', { phone: L.phone, purpose: 'taxi' }) : call('adminCodeRequest', { purpose: 'taxi' })).then(function (r) {
+      (emp ? call('codeRequest', { phone: L.phone, purpose: 'taxi' }) : call('adminCodeRequest', { purpose: 'taxi', phone: L.phone, name: L.name })).then(function (r) {
         if (r.error === 'locked') { L.step = 'code'; L.lockUntil = r.until; return renderLogin(); }
         if (emp && r.ok && r.closed) return fail(errText({ error: 'closed', from: r.from, to: r.to }));
         if (!r.ok) return fail(errText(r));
@@ -284,8 +312,8 @@
       });
     });
     if (ph) ph.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); btn.click(); } });
-    v.appendChild(h('div', { class: 'gap12' }, emp ? h('div', { class: 'field' }, h('label', { class: 'l', text: 'Телефон' }), ph) : null, btn, err));
-    v.appendChild(h('div', { class: 'steps' }, h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: emp ? 'Введите свой номер телефона и нажмите «Получить код»: 4 цифры придут вам в Telegram.' : 'Нажмите «Получить код в Telegram»: 4 цифры придут в ваш админский чат.' })), h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: emp ? 'Введите код. Сессия держится до конца рабочего дня (до 22:00), потом код запросите снова.' : 'Введите код. Сессия держится 12 часов, потом код запросите снова.' }))));
+    v.appendChild(h('div', { class: 'gap12' }, h('div', { class: 'field' }, h('label', { class: 'l', text: emp ? 'Телефон' : 'Ваш телефон' }), ph), nm ? h('div', { class: 'field' }, h('label', { class: 'l' }, 'Ваше ФИО ', h('span', { text: 'по желанию' })), nm) : null, btn, err));
+    v.appendChild(h('div', { class: 'steps' }, h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: emp ? 'Введите свой номер телефона и нажмите «Получить код»: 4 цифры придут вам в Telegram.' : 'Введите свой номер телефона и нажмите «Получить код в Telegram»: админ увидит, кто просит доступ, и 4 цифры придут в админский чат.' })), h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: emp ? 'Введите код. Сессия держится до конца рабочего дня (до 22:00), потом код запросите снова.' : 'Введите код. Сессия держится 12 часов, потом код запросите снова.' }))));
     v.appendChild(h('button', { class: 'link tx-mode', type: 'button', 'data-testid': emp ? 'mode-admin' : 'mode-emp', onclick: function () { L = newL(emp ? 'admin' : 'emp', L.phone); renderLogin(); } }, emp ? 'Я администратор' : 'Я сотрудник: войти по номеру телефона'));
   }
   function loginCode(v) {
@@ -316,7 +344,7 @@
     go.addEventListener('click', submit);
     function tick() { var left = Math.ceil((L.readyAt - Date.now()) / 1000); resend.disabled = left > 0; resend.textContent = left > 0 ? 'Запросить код ещё раз (' + left + ' с)' : 'Запросить код ещё раз'; }
     resend.addEventListener('click', function () {
-      (L.mode === 'emp' ? call('codeRequest', { phone: L.phone, purpose: 'taxi' }) : call('adminCodeRequest', { purpose: 'taxi' })).then(function (r) {
+      (L.mode === 'emp' ? call('codeRequest', { phone: L.phone, purpose: 'taxi' }) : call('adminCodeRequest', { purpose: 'taxi', phone: L.phone, name: L.name })).then(function (r) {
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         if (!r.ok) { toast(errText(r), 'bad'); return; }
         if (r.closed) { toast(errText({ error: 'closed', from: r.from, to: r.to }), 'bad'); return; }
