@@ -85,7 +85,7 @@
   var LIST_ACTION = { adv: 'adminAdvances', expl: 'adminExplanations', inc: 'adminIncidents', apps: 'adminApplications', acc: 'adminAccess' };
 
   /* ---------- рассылка акций: проверка ввода (одна и та же в форме и в демо; на сервере проверка повторяется) ---------- */
-  var PROMO = { head: '📣 Акция от «Азбука Смены»', textMin: 5, textMax: 1000, linkMax: 300, minGapMs: 600000, dupMs: 86400000 };
+  var PROMO = { head: '📣 Акция от «Персональное Решение»', textMin: 5, textMax: 1000, linkMax: 300, minGapMs: 600000, dupMs: 86400000 };
   var PROMO_LINK_RE = /^https:\/\/[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}(?::\d{1,5})?(?:[\/?#][^\s<>"'\u0000-\u001f]*)?$/;
   function promoCheckInput(text, link) {   // → код ошибки или ''
     var t = String(text == null ? '' : text).replace(/\r\n?/g, '\n').trim(), n = Array.from(t).length, l = String(link == null ? '' : link).trim();
