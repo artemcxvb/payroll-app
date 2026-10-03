@@ -144,11 +144,24 @@
 
   /* ---------- «сервер» (эмуляция Apps Script в localStorage) ---------- */
   var SK = 'pr.server', CK = 'pr.cache', SESSK = 'pr.session';
+  /* ---------- согласие на обработку персональных данных ----------
+     ЧЕРНОВИК ДЛЯ ПРОВЕРКИ ЮРИСТОМ: текст ниже не утверждён. Версия должна совпадать с CONSENT_VERSION в backend/Code.gs.
+     Экран включает сервер (Script Property CONSENT_REQUIRED=1); в демо он включён всегда (config.js: consentDemo: false отключает). */
+  var CONSENT_VERSION = '2026-10-черновик';
+  var CONSENT_TITLE = 'Согласие на обработку персональных данных';
+  var CONSENT_TEXT = [
+    'Я, пользователь приложения «Мои выплаты», даю согласие ООО «Персональное Решение» (далее оператор) на обработку моих персональных данных: фамилии, имени, отчества, номера телефона, табельного номера, должности и места работы, сведений о моих сменах, выработке, выплатах и авансах, а также фотографий, актов и объяснительных, которые я сам загружаю в приложение.',
+    'Цели обработки: показать мне мои выплаты и выработку, принять мои заявки на аванс, объяснительные и сведения о происшествиях, отправить мне код входа.',
+    'Срок хранения: данные хранятся, пока я работаю у оператора. Фотографии и файлы хранятся 12 месяцев с даты записи, затем переносятся в архив для удаления.',
+    'Я могу отозвать согласие или попросить удалить мои данные в любой момент, обратившись к бригадиру склада.'
+  ];
+  var MYDATA_ITEMS = ['Фамилия, имя, отчество', 'Номер телефона', 'Табельный номер', 'Ваши заявки на аванс, объяснительные и сведения о происшествиях', 'Фото случаев и происшествий, акты и чеки, которые вы загрузили'];
   function srv() {
     var s = load(SK, null);
     if (!s) { s = { cases: JSON.parse(JSON.stringify(M.cases)), advances: JSON.parse(JSON.stringify(M.advances)), incidents: JSON.parse(JSON.stringify(M.incidents)), codes: {}, locks: {}, attempts: {}, tg: [], lastReq: {}, blocked: {} }; store(SK, s); }
     if (!s.blocked) s.blocked = {};   // демо вкладки «Доступ»: телефон → 1
     if (!s.incidents) s.incidents = [];
+    if (!s.consent) s.consent = {};   // демо вкладки «Согласия»: телефон → { version, at }
     if (!s.applications) s.applications = JSON.parse(JSON.stringify(M.applications || [])).map(function (x) { x.userId = 'ПР-0042'; return x; });
     if (!s.anon) s.anon = { items: [], captchas: {}, hour: [] };   // анонимное хранилище: нет ни телефона, ни ФИО, ни токена
     return s;
@@ -188,9 +201,21 @@
       save(s);
       return { ok: false, error: 'wrong', left: CFG.maxAttempts - att[phone] };
     },
+    consent: function (phone) {
+      if (APPC.consentDemo === false) return { ok: true, version: CONSENT_VERSION, required: false };
+      var c = srv().consent[phone];
+      return c && c.version === CONSENT_VERSION ? { ok: true, version: CONSENT_VERSION, required: true, at: new Date(c.at + 10800000).toISOString().replace('T', ' ').slice(0, 19) } : { ok: false, version: CONSENT_VERSION, required: true };
+    },
+    consentAccept: function (phone, version) {
+      if (APPC.consentDemo === false) return { ok: true, consent: server.consent(phone) };
+      if (version !== CONSENT_VERSION) return { ok: false, error: 'consent_version', version: CONSENT_VERSION };
+      var s = srv(); if (!server.consent(phone).ok) { s.consent[phone] = { version: CONSENT_VERSION, at: Date.now() }; save(s); }
+      return { ok: true, consent: server.consent(phone) };
+    },
     me: function (phone) {
+      var cs = server.consent(phone); if (!cs.ok) return { ok: true, consent: cs, today: M.today, fetchedAt: Date.now() };   // без согласия данные не отдаются
       var s = srv(), u = userByPhone(phone);
-      return { user: u, periods: M.periods, shifts: M.shifts, cases: s.cases, advances: s.advances, incidents: s.incidents, promos: M.promos, jobs: M.jobs, applications: s.applications.filter(function (x) { return x.userId === u.id; }), today: M.today, fetchedAt: Date.now() };
+      return { consent: cs, user: u, periods: M.periods, shifts: M.shifts, cases: s.cases, advances: s.advances, incidents: s.incidents, promos: M.promos, jobs: M.jobs, applications: s.applications.filter(function (x) { return x.userId === u.id; }), today: M.today, fetchedAt: Date.now() };
     },
     submitExplanation: function (id, text, photos) {
       var s = srv(), c = s.cases.filter(function (x) { return x.id === id; })[0];
@@ -367,6 +392,7 @@
       if (isLoginClosed(r) && session()) { rememberHours({ from: r.from, to: r.to, off: false }); logout(closedNotice()); return r; }   // сервер закрыт на ночь: сессия стирается, данные не показываем
       if (r && r.error === 'auth' && session()) { var ck = clockState(session()); logout(ck === 'closed' ? closedNotice() : ck === 'stale' ? staleNotice() : null); if (!ck) toast('Сессия закончилась — войдите снова', 'warn'); }
       if (r && r.error === 'blocked' && session()) onBlocked();
+      if (r && r.error === 'consent' && session()) { openStack.slice().forEach(function (c) { c.close(true); }); S.consent = { ok: false, version: r.version, required: true }; S.data = null; S.calc = null; render(); }   // версия текста сменилась, пока приложение было открыто
       return r; });
   }
   function applyLive(d) {   // справочники и настройки из ответа сервера
@@ -379,10 +405,11 @@
   var backend = LIVE ? {
     requestCode: function (phone) { return post(APPC.backendUrl, { action: 'codeRequest', phone: phone, rid: rid() }); },
     verify: function (phone, code) { return post(APPC.backendUrl, { action: 'codeVerify', phone: phone, code: code }).then(function (r) { if (r.ok && r.token) { store(SESSK, { phone: phone, token: r.token, at: Date.now() }); if (r.loginHours) rememberHours(r.loginHours); } return r; }); },
-    me: function () { return api('me').then(function (r) { if (!r.ok) throw new Error(r.error || 'fail'); r.user.phone = session().phone; if (r.loginHours) rememberHours(r.loginHours); applyLive(r); return r; }); },
+    me: function () { return api('me').then(function (r) { if (!r.ok) throw new Error(r.error || 'fail'); if (r.loginHours) rememberHours(r.loginHours); if (r.consent && r.consent.ok === false) return r; r.user.phone = session().phone; if (r.loginHours) rememberHours(r.loginHours); applyLive(r); return r; }); },
     submitExplanation: function (id, text, photos) { return filesB64(photos).then(function (ph) { return api('explainSubmit', { caseId: id, text: text, photos: ph, rid: rid() }); }); },
     resubmitIncident: function (id, text) { return api('incidentResubmit', { id: id, text: text, rid: rid() }); },
     submitIncident: function (p) { return Promise.all([filesB64(p.scene), filesB64(p.damage), filesB64(p.acts)]).then(function (g) { return api('incidentSubmit', { date: p.date, type: p.type, desc: p.desc, text: p.text, scene: g[0], damage: g[1], acts: g[2], rid: p.rid }); }); },
+    consentAccept: function (version) { return api('consentAccept', { agree: true, version: version }); },
     applyJob: function (jobId, comment) { return api('jobApply', { jobId: jobId, comment: comment, rid: rid() }); },
     createAdvance: function (amount, comment) { return api('advanceCreate', { amount: amount, comment: comment, rid: rid() }); },
     updateAdvance: function (id, amount, comment) { return api('advanceUpdate', { id: id, amount: amount, comment: comment }); },
@@ -399,6 +426,7 @@
     submitExplanation: function (id, text, photos) { return Promise.resolve(server.submitExplanation(id, text, photos.map(function (p) { return { thumb: p.thumb, w: p.w, h: p.h, size: p.size }; }))); },
     resubmitIncident: function (id, text) { return Promise.resolve(server.resubmitIncident(id, text)); },
     submitIncident: function (p) { return Promise.resolve(server.submitIncident(p)); },
+    consentAccept: function (version) { return Promise.resolve(server.consentAccept(session().phone, version)); },
     applyJob: function (jobId, comment) { return Promise.resolve(server.applyJob(session().phone, { jobId: jobId, comment: comment })); },
     createAdvance: function (amount, comment) { return Promise.resolve(server.createAdvance(amount, comment)); },
     updateAdvance: function (id, amount, comment) { return Promise.resolve(server.updateAdvance(id, amount, comment)); },
@@ -463,7 +491,7 @@
   }
 
   /* ---------- состояние клиента ---------- */
-  var S = { data: null, calc: null, stale: false, periodId: M.periods[0].id, calMonth: M.today.slice(0, 7), calSel: null, dedFilter: 'all', perfAll: false, route: 'home', lastRoute: null };
+  var S = { consent: null, data: null, calc: null, stale: false, periodId: M.periods[0].id, calMonth: M.today.slice(0, 7), calSel: null, dedFilter: 'all', perfAll: false, route: 'home', lastRoute: null };
   var session = function () { return load(SESSK, null); };
   var root = $('#view-root'), tabbar = $('#tabbar'), overlayRoot = $('#overlay-root'), toasts = $('#toasts');
 
@@ -486,12 +514,17 @@
     function fromCache() { var c = load(CK, null); if (c && c.phone === se.phone) { if (LIVE) applyLive(c.data); return { data: c.data, stale: true }; } throw new Error('offline'); }
     return delay(LAT).then(function () {
       if (navigator.onLine === false) return fromCache();
-      return backend.me().then(function (d) { store(CK, { phone: se.phone, data: d }); return { data: d, stale: false }; }, function (e) { if (LIVE && e.message !== 'auth' && e.message !== 'blocked' && e.message !== 'closed') return fromCache(); throw e; });
+      return backend.me().then(function (d) { if (!(d.consent && d.consent.ok === false)) store(CK, { phone: se.phone, data: d }); return { data: d, stale: false }; }, function (e) { if (LIVE && e.message !== 'auth' && e.message !== 'blocked' && e.message !== 'closed') return fromCache(); throw e; });
     });
+  }
+  function applyMe(r) {   // без согласия на текущую версию данные не рисуем: только экран согласия
+    var c = r.data && r.data.consent;
+    if (c && c.ok === false) { try { localStorage.removeItem(CK); } catch (e) { /* ignore */ } S.consent = c; S.data = null; S.calc = null; S.stale = false; return; }   // сохранённая копия данных тоже стирается
+    S.consent = null; S.data = r.data; S.stale = r.stale; S.calc = calcAll(r.data);
   }
   function refresh() {
     if (!session()) return Promise.resolve();
-    return fetchMe().then(function (r) { S.data = r.data; S.stale = r.stale; S.calc = calcAll(r.data); render(); }, function () { render(); });
+    return fetchMe().then(function (r) { applyMe(r); render(); }, function () { render(); });
   }
   function requireOnline() { if (navigator.onLine === false) { toast('Нет сети. Это действие доступно только онлайн.', 'warn'); return false; } return true; }
 
@@ -580,7 +613,7 @@
     clear(tabbar);
     TABS.forEach(function (t) {
       var n = t[0] === 'ded' ? waitingCount() + returnedCount() : 0, wn = t[0] === 'ded' ? waitingCount() : 0, rn = t[0] === 'ded' ? returnedCount() : 0;
-      tabbar.appendChild(h('a', { class: 'tab', href: '#/' + t[0], 'aria-current': (S.route === t[0] || (t[0] === 'home' && (S.route === 'promo' || S.route === 'jobs'))) ? 'page' : null, 'data-tab': t[0], 'aria-label': t[1] + (wn ? ', ждут объяснения: ' + wn : '') + (rn ? ', возвращено на доработку: ' + rn : '') },
+      tabbar.appendChild(h('a', { class: 'tab', href: '#/' + t[0], 'aria-current': (S.route === t[0] || (t[0] === 'home' && (S.route === 'promo' || S.route === 'jobs')) || (t[0] === 'me' && S.route === 'mydata')) ? 'page' : null, 'data-tab': t[0], 'aria-label': t[1] + (wn ? ', ждут объяснения: ' + wn : '') + (rn ? ', возвращено на доработку: ' + rn : '') },
         ico(t[2]), h('span', { text: t[1] }), n ? h('span', { class: 'cnt', 'aria-hidden': 'true', text: String(n) }) : null));
     });
   }
@@ -593,7 +626,7 @@
   function onBlocked() {
     localStorage.removeItem(SESSK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.iadd');   // сессия и сохранённые данные стираются
     openStack.slice().forEach(function (c) { c.close(true); });
-    S.data = null; S.calc = null; S.stale = false; S.blocked = true; clearInterval(L.timer); L = { step: 'phone', phone: '', timer: null, readyAt: 0 };
+    S.data = null; S.calc = null; S.stale = false; S.consent = null; S.blocked = true; clearInterval(L.timer); L = { step: 'phone', phone: '', timer: null, readyAt: 0 };
     if (location.hash !== '#/login') location.hash = '#/login';
     renderBlocked();
   }
@@ -1071,7 +1104,7 @@
         tile('jobs', 'briefcase', 'Вакансии в компании', jobs + ' ' + plural(jobs, ['открыта', 'открыты', 'открыто']), function () { location.hash = '#/jobs'; }),
         tile('fb', 'paper', 'Анонимная обратная связь', 'без имени и телефона', openFeedback)));
   }
-  function backTop(title, sub) { return h('div', { class: 'top' }, h('div', null, h('a', { class: 'back', href: '#/home', 'data-testid': 'back' }, ico('cl', 'sm'), 'Назад'), h('h1', { text: title }), sub ? h('p', { class: 'sub', text: sub }) : null)); }
+  function backTop(title, sub, href) { return h('div', { class: 'top' }, h('div', null, h('a', { class: 'back', href: href || '#/home', 'data-testid': 'back' }, ico('cl', 'sm'), 'Назад'), h('h1', { text: title }), sub ? h('p', { class: 'sub', text: sub }) : null)); }
 
   /* --- акции и бонусы --- */
   function promoCard(p) {
@@ -1728,6 +1761,7 @@
     var seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Тема оформления' });
     [['auto', 'Авто'], ['light', 'Светлая'], ['dark', 'Тёмная']].forEach(function (x) { seg.appendChild(h('button', { type: 'button', 'aria-pressed': pref === x[0] ? 'true' : 'false', 'data-theme-set': x[0], onclick: function () { setTheme(x[0]); render(); } }, x[1])); });
     v.appendChild(moreTiles());
+    v.appendChild(h('a', { class: 'btn ghost mydata-link', href: '#/mydata', 'data-testid': 'open-mydata' }, ico('lock', 'sm'), 'Мои данные и согласие'));
     v.appendChild(h('section', { class: 'card gap12', 'aria-labelledby': 'th-h' }, h('h2', { id: 'th-h', text: 'Оформление' }), seg));
     v.appendChild(h('section', { class: 'card gap8', 'aria-labelledby': 'ds-h' }, h('h2', { id: 'ds-h', text: 'Данные' }),
       h('p', { class: 'cap', 'data-testid': 'synced', text: (S.stale ? 'Показаны сохранённые данные (нет сети). ' : 'Данные актуальны. ') + 'Обновлено: ' + stamp(S.data.fetchedAt) + '. Просмотр работает без интернета.' }),
@@ -1742,15 +1776,67 @@
     clearTimeout(autoT); clearInterval(L.timer);
     localStorage.removeItem(SESSK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.iadd');   // сессия, кэш данных, черновики
     openStack.slice().forEach(function (c) { c.close(true); });
-    S.data = null; S.calc = null; S.stale = false; L = { step: 'phone', phone: '', timer: null, readyAt: 0, notice: typeof notice === 'string' ? notice : '' };
+    S.data = null; S.calc = null; S.stale = false; S.consent = null; L = { step: 'phone', phone: '', timer: null, readyAt: 0, notice: typeof notice === 'string' ? notice : '' };
     location.hash = '#/login'; boot(); if (typeof notice !== 'string') toast('Вы вышли из кабинета');
   }
 
+
+  /* ---------- согласие и «Мои данные» ---------- */
+  function renderConsent() {
+    tabbar.hidden = true; $('#offline').hidden = true; clear(root); clearInterval(L.timer);
+    document.title = CONSENT_TITLE + ' · Мои выплаты';
+    var stale = !!(S.consent && S.consent.version && S.consent.version !== CONSENT_VERSION);   // сервер ждёт более новый текст, чем в этой версии приложения
+    var v = h('main', { class: 'login consent', id: 'main', 'data-testid': 'consent-screen' }); root.appendChild(v);
+    v.appendChild(h('div', { class: 'brand' }, h('div', { class: 'logo' }, ico('lock', 'lg')), h('div', null, h('b', { text: 'Персональное Решение' }), h('span', { text: 'Кабинет исполнителя' }))));
+    v.appendChild(h('h1', { text: CONSENT_TITLE, 'data-testid': 'consent-title' }));
+    v.appendChild(h('p', { class: 'lead', text: 'Без вашего согласия показывать выплаты и принимать заявки нельзя.' }));
+    var card = h('section', { class: 'card consent-text', 'aria-label': 'Текст согласия', 'data-testid': 'consent-text', tabindex: '0' });
+    CONSENT_TEXT.forEach(function (t) { card.appendChild(h('p', { text: t })); });
+    card.appendChild(h('p', { class: 'cap', 'data-testid': 'consent-version', text: 'Версия текста: ' + CONSENT_VERSION + (LIVE ? '' : ' (демо, черновик)') }));
+    v.appendChild(card);
+    if (stale) {
+      v.appendChild(h('div', { class: 'tipbox warn', role: 'alert', 'data-testid': 'consent-stale' }, ico('info', 'sm'), h('span', { text: 'Текст согласия обновился. Закройте приложение и откройте его заново.' })));
+      v.appendChild(h('button', { class: 'btn', type: 'button', 'data-testid': 'consent-reload', onclick: function () { location.reload(); } }, 'Обновить'));
+      return;
+    }
+    var chk = h('input', { type: 'checkbox', id: 'consent-chk', 'data-testid': 'consent-check' }), go = h('button', { class: 'btn', type: 'button', 'data-testid': 'consent-yes', disabled: true }, ico('check', 'sm'), 'Согласен и продолжить');
+    chk.addEventListener('change', function () { go.disabled = !chk.checked; });
+    v.appendChild(h('label', { class: 'agree', for: 'consent-chk' }, chk, h('span', { text: 'Я прочитал(а) текст выше и согласен(на) на обработку моих персональных данных' })));
+    go.addEventListener('click', function () {
+      if (!chk.checked || !requireOnline()) return; go.disabled = true;
+      backend.consentAccept(CONSENT_VERSION).then(function (r) {
+        if (r && r.ok) { toast('Спасибо, согласие сохранено'); S.consent = null; S.data = null; render(); refresh(); return; }
+        if (r && r.error === 'consent_version') { S.consent = { ok: false, version: r.version, required: true }; render(); return; }
+        if (r && r.error === 'network') { toast('Нет связи с сервером, повторите', 'bad'); go.disabled = !chk.checked; return; }
+        toast('Не удалось сохранить согласие, повторите', 'bad'); go.disabled = !chk.checked;
+      });
+    });
+    v.appendChild(go);
+    v.appendChild(h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'consent-no', onclick: function () { logout('Без согласия показать выплаты нельзя. Если передумаете, войдите снова.'); } }, 'Не согласен(на), выйти'));
+    v.appendChild(h('p', { class: 'foot', text: LIVE ? 'Данные видны только вам' : 'Демо-прототип · все данные вымышлены' }));
+  }
+  function viewMyData() {
+    var v = h('main', { class: 'view stack', id: 'main', 'data-testid': 'mydata' }), cs = (S.data && S.data.consent) || { ok: true, required: false };
+    v.appendChild(backTop('Мои данные', 'Что хранится о вас и как это изменить', '#/me'));
+    var ul = h('ul', { class: 'plainlist', 'data-testid': 'mydata-list' }); MYDATA_ITEMS.forEach(function (t) { ul.appendChild(h('li', { text: t })); });
+    v.appendChild(h('section', { class: 'card gap8', 'aria-labelledby': 'md1' }, h('h2', { id: 'md1', text: 'Что хранится' }), ul,
+      h('p', { class: 'cap', text: 'На телефоне лежит только копия для просмотра без интернета. При выходе из кабинета она стирается.' })));
+    v.appendChild(h('section', { class: 'card gap8', 'aria-labelledby': 'md2' }, h('h2', { id: 'md2', text: 'Срок хранения' }),
+      h('p', { 'data-testid': 'mydata-term', text: 'Фото и файлы хранятся 12 месяцев с даты записи, затем переносятся в архив для удаления. Остальные данные хранятся, пока вы работаете у оператора.' })));
+    v.appendChild(h('section', { class: 'card gap8', 'aria-labelledby': 'md3' }, h('h2', { id: 'md3', text: 'Как отозвать согласие или удалить данные' }),
+      h('p', { 'data-testid': 'mydata-revoke', text: 'Обратитесь к бригадиру склада. Он примет заявку на отзыв согласия или удаление ваших данных.' })));
+    var st = cs.required ? (cs.ok ? 'Вы дали согласие (версия текста ' + cs.version + (cs.at ? ', ' + dmy(cs.at) : '') + ').' : 'Согласие не дано.') : 'Сейчас приложение не запрашивает согласие.';
+    v.appendChild(h('section', { class: 'card gap8', 'aria-labelledby': 'md4' }, h('h2', { id: 'md4', text: 'Ваше согласие' }), h('p', { 'data-testid': 'mydata-status', text: st }),
+      (function () { var d = h('details', { class: 'consent-details', 'data-testid': 'mydata-text' }, h('summary', { text: 'Показать текст согласия' })); CONSENT_TEXT.forEach(function (t) { d.appendChild(h('p', { class: 'cap', text: t })); }); return d; })()));
+    return v;
+  }
+
   /* ---------- роутер ---------- */
-  var VIEWS = { home: viewHome, ops: viewOps, cal: viewCal, ded: viewDed, adv: viewAdv, me: viewMe, promo: viewPromo, jobs: viewJobs };
-  var TITLES = { promo: 'Акции и бонусы', jobs: 'Вакансии' };
+  var VIEWS = { home: viewHome, ops: viewOps, cal: viewCal, ded: viewDed, adv: viewAdv, me: viewMe, promo: viewPromo, jobs: viewJobs, mydata: viewMyData };
+  var TITLES = { promo: 'Акции и бонусы', jobs: 'Вакансии', mydata: 'Мои данные' };
   function render() {
     if (!session()) return renderLogin();
+    if (S.consent && !S.consent.ok) return renderConsent();
     var r = (location.hash.replace(/^#\//, '') || 'home'); if (!VIEWS[r]) r = 'home'; S.route = r;
     document.title = (TITLES[r] || TABS.filter(function (t) { return t[0] === r; })[0][1]) + ' · Мои выплаты';
     tabbar.hidden = false; offlineBanner();
@@ -1768,9 +1854,9 @@
     if (se0) { var ck = clockState(se0); if (ck) { logout(ck === 'closed' ? closedNotice() : staleNotice()); return; } }   // запуск после 22:00 или со вчерашней сессией: сразу выход, данные не рисуем
     if (!session()) { renderLogin(); return; }
     S.blocked = false; armAuto();
-    if (!/^#\/(home|cal|ops|ded|adv|me|promo|jobs)$/.test(location.hash)) location.hash = '#/home';
+    if (!/^#\/(home|cal|ops|ded|adv|me|promo|jobs|mydata)$/.test(location.hash)) location.hash = '#/home';
     S.data = null; render();
-    fetchMe().then(function (r) { S.data = r.data; S.stale = r.stale; S.calc = calcAll(r.data); render(); }, function () { if (S.blocked || !session()) return; clear(root); root.appendChild(h('div', { class: 'view', id: 'main' }, emptyState('wifioff', 'Нет данных', 'Подключитесь к интернету, чтобы загрузить данные.'), h('button', { class: 'btn', type: 'button', 'data-testid': 'retry-load', onclick: boot }, 'Повторить'))); });
+    fetchMe().then(function (r) { applyMe(r); render(); }, function () { if (S.blocked || !session()) return; clear(root); root.appendChild(h('div', { class: 'view', id: 'main' }, emptyState('wifioff', 'Нет данных', 'Подключитесь к интернету, чтобы загрузить данные.'), h('button', { class: 'btn', type: 'button', 'data-testid': 'retry-load', onclick: boot }, 'Повторить'))); });
   }
 
   /* ---------- панель разработчика: «Telegram администратора» ---------- */

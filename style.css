@@ -523,3 +523,16 @@ textarea.inp { padding: 12px 14px; min-height: 110px; font-size: 16px; resize: v
 /* очень длинные ФИО, названия участков и случаев переносятся, а не растягивают экран */
 .view { overflow-wrap: anywhere; }
 .line > *, .row > *, .hd > .grow { min-width: 0; }
+
+/* согласие на обработку данных и «Мои данные» (этап 1) */
+.consent .consent-text { margin-bottom: 14px; max-height: 46dvh; overflow: auto; }
+.consent .consent-text p { font-size: 15px; line-height: 1.5; margin-bottom: 10px; }
+.consent .consent-text p:last-child { margin-bottom: 0; }
+.consent .agree, .agree { display: flex; align-items: flex-start; gap: 12px; padding: 12px 4px; font-size: 15px; line-height: 1.4; cursor: pointer; }
+.agree input { width: 26px; height: 26px; flex: 0 0 26px; margin-top: 1px; accent-color: var(--primary); }
+.consent .btn { margin-top: 10px; }
+.consent .tipbox { margin-bottom: 8px; }
+.mydata-link { margin-top: 4px; }
+.plainlist { list-style: disc; padding-left: 20px; display: grid; gap: 6px; font-size: 15px; }
+.consent-details summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--primary-strong); font-weight: 600; }
+.consent-details p { margin-top: 8px; }

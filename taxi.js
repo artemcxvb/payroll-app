@@ -1,16 +1,18 @@
-/* Учёт такси «Мои выплаты». Отдельная страница taxi.html (прямой адрес, ссылки из приложения сотрудников нет). Вход — тем же админ-кодом из Telegram,
-   что и в кабинете админа (общий ключ сессии pr.admin.session). Безопасность вывода: любой текст попадает в DOM только через textContent (функция h());
+/* Учёт такси «Мои выплаты». Отдельная страница taxi.html (прямой адрес, ссылки из приложения сотрудников нет). Вход двух видов:
+   админ — админ-код из Telegram (общий ключ сессии pr.admin.session с кабинетом админа); сотрудник — код по номеру телефона (codeRequest/codeVerify
+   с purpose:'taxi', личное сообщение «Вход в учёт такси»), отдельный ключ сессии pr.taxi.session. Сотрудник видит и правит только свои поездки,
+   итогов «по людям» у него нет; админ видит всех. Безопасность вывода: любой текст попадает в DOM только через textContent (функция h());
    inline-скриптов и стилей нет (CSP). Демо (config.js без реального API): вымышленные поездки в localStorage браузера, код входа показан на экране.
-   Live: Apps Script, действия taxiList / taxiAdd / taxiUpdate / taxiDelete / taxiFileLink (только админ-токен). */
+   Live: Apps Script, действия taxiList / taxiAdd / taxiUpdate / taxiDelete / taxiFileLink (токен админа или сотрудника; права проверяет сервер). */
 (function () {
   'use strict';
   var APPC = window.APP_CONFIG || {}, LIVE = APPC.mode === 'live' && /^https:\/\//.test(APPC.backendUrl || '');
   var qs = new URLSearchParams(location.search), LAT = LIVE ? 0 : qs.has('lat') ? +qs.get('lat') : 150;
-  var SESSK = 'pr.admin.session', DEMOK = 'pr.taxi.demo', THEMEK = 'pr.theme', LASTK = 'pr.taxi.last', NBSP = '\u00a0', DEMO_CODE = '4821';
+  var SESSK = 'pr.admin.session', EMPK = 'pr.taxi.session', DEMOK = 'pr.taxi.demo', THEMEK = 'pr.theme', LASTK = 'pr.taxi.last', NBSP = '\u00a0', DEMO_CODE = '4821';
 
   /* ---------- настройки (правятся здесь; на сервере список маршрутов задаётся в Code.gs: TAXI_ROUTES_ или Script Property TAXI_ROUTES) ---------- */
   var OTHER = 'Другое';
-  var ROUTES = ['Дом → Елино (Лемана Про)', 'Елино (Лемана Про) → Дом', 'Химки → Елино', 'Елино → Химки'];   // запасной список для демо; в live приходит с сервера (taxiList.routes)
+  var ROUTES = ['Общежитие Останкино → склад Северная Звезда', 'Склад Северная Звезда → общежитие Останкино', 'Общежитие Усковский проезд → склад д. Елино, К21', 'Склад д. Елино, К21 → общежитие Усковский проезд'];   // запасной список для демо; в live приходит с сервера (taxiList.routes)
   var LIM = { maxAmount: 100000, maxPeople: 8, note: 200, names: 400, other: 80, reason: 200, reasonMin: 3, periodDays: 400, daysBack: 400,
     imgSrcMB: 25, pdfMB: 5, imgOutBytes: 1572864, dupMs: 120000 };   // как у остальных загрузок: фото до 25 МБ на входе, на сервер уходит JPEG ≤ 1,5 МБ; PDF до 5 МБ
   var MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'], DOW = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
@@ -99,18 +101,20 @@
     bad_file: 'Файл не подходит: нужны фото (JPG, PNG) или PDF.', too_big: 'Файл слишком большой (фото до 1,5 МБ после сжатия, PDF до ' + LIM.pdfMB + ' МБ).',
     upload_failed: 'Чек не загрузился на Яндекс Диск, поездка не сохранена. Повторите.', not_found: 'Поездка не найдена. Обновите список.', state: 'Поездка уже удалена. Обновите список.',
     bad_reason: 'Причина: от ' + LIM.reasonMin + ' до ' + LIM.reason + ' символов.', bad_period: 'Период указан неверно (не больше ' + LIM.periodDays + ' дней).',
-    unavailable: 'Чек сейчас недоступен на Яндекс Диске.', demo: 'В демо чеки не открываются.', auth: 'Сессия закончилась — войдите снова.'
+    unavailable: 'Чек сейчас недоступен на Яндекс Диске.', demo: 'В демо чеки не открываются.', closed: 'Вход для сотрудников закрыт: учёт такси работает с 6:00 до 22:00 по Москве.', blocked: 'Доступ закрыт. Обратитесь к бригадиру.', consent: 'Сначала примите согласие в приложении «Мои выплаты», затем вернитесь сюда.', rate: 'Слишком много записей за час. Подождите немного.',
+    bad_phone: 'Введите номер телефона полностью, например +7 900 000-00-01.', auth: 'Сессия закончилась — войдите снова.'
   };
-  function errText(r) { return ERR[r && r.error] || 'Не получилось выполнить действие. Повторите.'; }
+  function errText(r) { if (r && r.error === 'closed' && r.from != null && r.to != null) return 'Вход для сотрудников закрыт: учёт такси работает с ' + (+r.from) + ':00 до ' + (+r.to) + ':00 по Москве.'; return ERR[r && r.error] || 'Не получилось выполнить действие. Повторите.'; }
 
   /* ---------- демо-«сервер» (вымышленные поездки) ---------- */
   function demoSeed() {
     var t = today(), m0 = t.slice(0, 8) + '01', mk = function (n, off, route, amount, people, names, note) {
       var d = addDays(t, -off); if (d < m0) d = m0;
-      return { id: 'TD' + n, date: d, route: route, amount: amount, people: people, perPerson: r2(amount / people), names: names || '', note: note || '', hasFile: true, fileKind: n % 3 === 0 ? 'pdf' : 'image', created: d + ' 08:10:00', status: 'active', reason: '', changed: '' };
+      return { id: 'TD' + n, date: d, route: route, amount: amount, people: people, perPerson: r2(amount / people), names: names || '', note: note || '', hasFile: true, fileKind: n % 3 === 0 ? 'pdf' : 'image', created: d + ' 08:10:00', status: 'active', reason: '', changed: '', by: demoWho(n)[0], byPhone: demoWho(n)[1] };
     };
     return { trips: [mk(1, 1, ROUTES[0], 850, 3, 'Иванов И. И.; Петров П. П.; Сидоров С. С.', ''), mk(2, 1, ROUTES[1], 920, 3, '', 'вечер, пробки'), mk(3, 2, ROUTES[0], 780, 2, '', ''), mk(4, 3, ROUTES[2], 640, 4, 'Демов О. В.', ''), mk(5, 4, ROUTES[0], 1200.5, 5, '', 'ночная смена')], seq: 5 };
   }
+  function demoWho(t) { return t === 3 ? ['Сидоров Сергей Петрович', '79000000003'] : t === 2 || t === 5 ? ['Петрова Анна Ивановна', '79000000002'] : ['админ', '']; }   // вымышленные авторы сидов: часть внёс админ, часть сотрудники
   function demoState() { var s = load(DEMOK, null); if (!s || !s.trips) { s = demoSeed(); store(DEMOK, s); } return s; }
   function demoRes(o) { return Promise.resolve(o); }
   function totalsOf(items) {
@@ -121,11 +125,14 @@
   }
   var demoCodeAt = 0;
   function demoCall(action, d) {
-    var s = demoState(), tok = (load(SESSK, null) || {}).token;
+    var s = demoState(), tok = (load(SESSK, null) || {}).token || (load(EMPK, null) || {}).token, empPhone = /^demo-emp-\d+$/.test(tok || '') ? tok.slice(9) : '', isEmp = !!empPhone, me = isEmp ? ['Демо Сотрудник', empPhone] : ['админ', ''];
     if (action === 'adminCodeRequest') { if (Date.now() - demoCodeAt < 30000 && demoCodeAt) return demoRes({ ok: true, throttled: true, wait: 30 }); demoCodeAt = Date.now(); return demoRes({ ok: true }); }
     if (action === 'adminCodeVerify') return demoRes(String(d.code) === DEMO_CODE ? { ok: true, token: 'demo-admin', expiresAt: Date.now() + 12 * 3600000 } : { ok: false, error: 'wrong', left: 4 });
-    if (tok !== 'demo-admin') return demoRes({ ok: false, error: 'auth' });
-    function find(id) { return s.trips.filter(function (x) { return x.id === id; })[0]; }
+    if (action === 'codeRequest') { var dg = String(d.phone || '').replace(/\D/g, ''); if (dg.length < 10) return demoRes({ ok: false, error: 'bad_phone' }); if (Date.now() - demoCodeAt < 30000 && demoCodeAt) return demoRes({ ok: true, throttled: true, wait: 30 }); demoCodeAt = Date.now(); return demoRes({ ok: true }); }
+    if (action === 'codeVerify') return demoRes(String(d.code) === DEMO_CODE ? { ok: true, token: 'demo-emp-' + String(d.phone || '').replace(/\D/g, ''), expiresAt: Date.now() + 12 * 3600000 } : { ok: false, error: 'wrong', left: 4 });
+    if (tok !== 'demo-admin' && !isEmp) return demoRes({ ok: false, error: 'auth' });
+    function own(x) { return !isEmp || (x.byPhone || '') === empPhone; }   // сотрудник работает только со своими поездками (в демо, как на сервере)
+    function find(id) { return s.trips.filter(function (x) { return x.id === id && own(x); })[0]; }
     function norm(d2) {
       var e = checkTrip(d2, ROUTES), k = Object.keys(e)[0]; if (k) return { error: e[k] };
       var route = ROUTES.indexOf(d2.route) >= 0 ? d2.route : OTHER + ': ' + String(d2.routeText).replace(/\s+/g, ' ').trim(), a = r2(parseAmount(d2.amount)), p = +d2.people;
@@ -134,17 +141,21 @@
     if (action === 'taxiList') {
       var t = today(), from = d.from || t.slice(0, 8) + '01', to = d.to || t;
       if (!validIso(from) || !validIso(to) || from > to || addDays(from, LIM.periodDays) < to) return demoRes({ ok: false, error: 'bad_period' });
-      var items = s.trips.filter(function (x) { return x.date >= from && x.date <= to; }).sort(function (a, b) { return a.date !== b.date ? (a.date < b.date ? 1 : -1) : (a.created < b.created ? 1 : -1); });
-      return demoRes({ ok: true, from: from, to: to, routes: ROUTES.slice(), truncated: false, items: JSON.parse(JSON.stringify(items)), totals: totalsOf(items) });
+      var items = s.trips.filter(function (x) { return own(x) && x.date >= from && x.date <= to; }).sort(function (a, b) { return a.date !== b.date ? (a.date < b.date ? 1 : -1) : (a.created < b.created ? 1 : -1); });
+      var out = JSON.parse(JSON.stringify(items)), bp = null;
+      if (isEmp) out.forEach(function (x) { delete x.byPhone; delete x.by; });
+      else { var pm = {}; out.forEach(function (x) { x.by = x.by || 'админ'; if (x.status !== 'active') return; var k = x.byPhone || 'admin', b = pm[k] || (pm[k] = { name: x.by, phone: x.byPhone || '', count: 0, sum: 0, people: 0 }); b.count++; b.sum += x.amount; b.people += x.people; });
+        bp = Object.keys(pm).map(function (k) { var b = pm[k]; return { name: b.name, phone: b.phone, count: b.count, sum: r2(b.sum), people: b.people, perPerson: b.people ? r2(b.sum / b.people) : 0 }; }).sort(function (a, b) { return b.sum - a.sum; }); }
+      return demoRes({ ok: true, role: isEmp ? 'employee' : 'admin', who: isEmp ? me[0] : 'админ', from: from, to: to, routes: ROUTES.slice(), truncated: false, items: out, byPerson: bp, totals: totalsOf(items) });
     }
     if (action === 'taxiAdd') {
       var n = norm(d); if (n.error) return demoRes({ ok: false, error: n.error });
       if (!d.file || !d.file.b64) return demoRes({ ok: false, error: 'receipt_required' });
       if (d.confirmDup !== true) {
-        var dup = s.trips.filter(function (x) { return x.status === 'active' && x.date === n.v.date && Math.abs(x.amount - n.v.amount) < 0.005 && x.people === n.v.people && Date.now() - (x.at || 0) <= LIM.dupMs; })[0];
+        var dup = s.trips.filter(function (x) { return x.status === 'active' && (x.byPhone || '') === me[1] && x.date === n.v.date && Math.abs(x.amount - n.v.amount) < 0.005 && x.people === n.v.people && Date.now() - (x.at || 0) <= LIM.dupMs; })[0];
         if (dup) return demoRes({ ok: false, error: 'duplicate', id: dup.id, created: dup.created });
       }
-      var tr = n.v; s.seq++; tr.id = 'TD' + s.seq; tr.hasFile = true; tr.fileKind = d.file.pdf ? 'pdf' : 'image'; tr.created = nowMskStr(); tr.at = Date.now(); tr.status = 'active'; tr.reason = ''; tr.changed = '';
+      var tr = n.v; s.seq++; tr.id = 'TD' + s.seq; tr.hasFile = true; tr.fileKind = d.file.pdf ? 'pdf' : 'image'; tr.created = nowMskStr(); tr.at = Date.now(); tr.status = 'active'; tr.reason = ''; tr.changed = ''; tr.by = me[0]; tr.byPhone = me[1];
       s.trips.push(tr); store(DEMOK, s); return demoRes({ ok: true, id: tr.id, perPerson: tr.perPerson });
     }
     if (action === 'taxiUpdate') {
@@ -171,21 +182,26 @@
       .then(function (r) { return r.json(); }).then(function (r) { return r && typeof r === 'object' ? r : { ok: false, error: 'server' }; }).catch(function () { return { ok: false, error: 'network' }; })
       .then(function (r) { if (tm) clearTimeout(tm); return r; });
   }
-  var session = function () { var s = load(SESSK, null); return s && s.token && (!s.exp || s.exp > Date.now()) ? s : null; };
+  var sessionOf = function (k) { var s = load(k, null); return s && s.token && (!s.exp || s.exp > Date.now()) ? s : null; };
+  var session = function () { return sessionOf(SESSK) || sessionOf(EMPK); };
+  function isAdmin() { var se = session(); return !(se && se.role === 'employee'); }
+  function isLoginAction(a) { return /^(adminCode|code)(Request|Verify)$/.test(a); }
   function call(action, body) {
-    var b = {}, k, se = session(); for (k in (body || {})) b[k] = body[k]; b.action = action; if (se && action.indexOf('adminCode') !== 0) b.token = se.token;
+    var b = {}, k, se = session(); for (k in (body || {})) b[k] = body[k]; b.action = action; if (se && !isLoginAction(action)) b.token = se.token;
     var p = LIVE ? post(b) : delay(LAT).then(function () { return demoCall(action, b); });
     return p.then(function (r) {
       if (r && r.error === 'auth' && session()) { endSession(); toast('Сессия закончилась — войдите снова', 'warn'); }
+      if (r && r.error === 'blocked' && session()) { endSession(); toast(ERR.blocked, 'bad'); }
       if (r && r.error === 'disabled') { endSession(); S.disabled = true; renderLogin(); }
       return r;
     });
   }
-  function endSession() { localStorage.removeItem(SESSK); S.data = null; S.last = null; S.mounted = false; L = { step: 'start', readyAt: 0, lockUntil: 0, timer: null }; renderLogin(); }
+  function endSession() { localStorage.removeItem(SESSK); localStorage.removeItem(EMPK); S.role = ''; S.who = ''; S.data = null; S.last = null; S.mounted = false; L = newL(); renderLogin(); }
 
   /* ---------- состояние ---------- */
-  var S = { tab: 'add', period: 'month', from: '', to: '', data: null, err: '', loading: false, showDeleted: false, last: null, mounted: false, disabled: false, routes: ROUTES.slice() };
-  var L = { step: 'start', readyAt: 0, lockUntil: 0, timer: null };
+  var S = { role: '', who: '', tab: 'add', period: 'month', from: '', to: '', data: null, err: '', loading: false, showDeleted: false, last: null, mounted: false, disabled: false, routes: ROUTES.slice() };
+  function newL(mode, phone) { return { step: 'start', readyAt: 0, lockUntil: 0, timer: null, mode: mode || 'admin', phone: phone || '' }; }
+  var L = newL();
   var root = $('#view-root'), tabbar = $('#tabbar'), overlayRoot = $('#overlay-root'), toasts = $('#toasts'), uid = 0;
 
   function toast(msg, tone) {
@@ -247,23 +263,30 @@
     }
     if (L.step === 'code' && L.lockUntil > Date.now()) return loginLocked(v);
     v.appendChild(h('h1', null, 'Учёт такси', LIVE ? null : h('span', { class: 'demobadge', 'data-testid': 'demo-badge', text: 'ДЕМО' })));
-    v.appendChild(h('p', { class: 'lead', text: 'Поездки сотрудников на работу: дата, сумма, сколько человек и чек. Вход — по тому же коду из Telegram, что и в кабинете админа.' }));
+    v.appendChild(h('p', { class: 'lead', text: L.mode === 'emp' ? 'Поездки на работу: дата, сумма, сколько человек и чек. Вход по номеру телефона: код придёт вам в Telegram. Вы видите только свои поездки.' : 'Поездки сотрудников на работу: дата, сумма, сколько человек и чек. Вход администратора — по тому же коду из Telegram, что и в кабинете админа.' }));
     if (L.step === 'start') loginStart(v); else loginCode(v);
-    v.appendChild(h('p', { class: 'foot', text: LIVE ? 'Код приходит в админский чат Telegram. Если вы уже входили в кабинет админа на этом устройстве, повторный вход не нужен.' : 'Демо-режим · все данные вымышлены' }));
+    v.appendChild(h('p', { class: 'foot', text: LIVE ? (L.mode === 'emp' ? 'Вход для сотрудников открыт с 6:00 до 22:00 по Москве. Если Telegram-бот входа ещё не подключён, код сообщит бригадир.' : 'Код приходит в админский чат Telegram. Если вы уже входили в кабинет админа на этом устройстве, повторный вход не нужен.') : 'Демо-режим · все данные вымышлены' }));
   }
   function loginStart(v) {
-    var btn = h('button', { class: 'btn', type: 'button', 'data-testid': 'req-code' }, ico('send', 'sm'), 'Получить код в Telegram'), err = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'login-err' });
+    var emp = L.mode === 'emp', label = emp ? 'Получить код' : 'Получить код в Telegram';
+    var btn = h('button', { class: 'btn', type: 'button', 'data-testid': emp ? 'req-code-emp' : 'req-code' }, ico('send', 'sm'), label), err = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'login-err' });
+    var ph = emp ? h('input', { class: 'inp', type: 'tel', inputmode: 'tel', autocomplete: 'tel', maxlength: '24', placeholder: '+7 900 000-00-01', 'aria-label': 'Номер телефона', 'data-testid': 'emp-phone', value: L.phone }) : null;
+    function fail(t) { clear(btn); btn.appendChild(ico('send', 'sm')); btn.appendChild(document.createTextNode(label)); btn.disabled = false; err.textContent = t; err.hidden = false; }
     btn.addEventListener('click', function () {
       if (navigator.onLine === false) { err.textContent = ERR.network; err.hidden = false; return; }
+      if (emp) { var d = ph.value.replace(/\D/g, ''); if (d.length < 10 || d.length > 12) { err.textContent = ERR.bad_phone; err.hidden = false; ph.focus(); return; } L.phone = ph.value.trim(); }
       btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…'));
-      call('adminCodeRequest').then(function (r) {
+      (emp ? call('codeRequest', { phone: L.phone, purpose: 'taxi' }) : call('adminCodeRequest', { purpose: 'taxi' })).then(function (r) {
         if (r.error === 'locked') { L.step = 'code'; L.lockUntil = r.until; return renderLogin(); }
-        if (!r.ok) { clear(btn); btn.appendChild(ico('send', 'sm')); btn.appendChild(document.createTextNode('Получить код в Telegram')); btn.disabled = false; err.textContent = errText(r); err.hidden = false; return; }
+        if (emp && r.ok && r.closed) return fail(errText({ error: 'closed', from: r.from, to: r.to }));
+        if (!r.ok) return fail(errText(r));
         L.step = 'code'; L.readyAt = Date.now() + (r.throttled ? (r.wait || 30) : 30) * 1000; renderLogin();
       });
     });
-    v.appendChild(h('div', { class: 'gap12' }, btn, err));
-    v.appendChild(h('div', { class: 'steps' }, h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: 'Нажмите «Получить код в Telegram»: 4 цифры придут в ваш админский чат.' })), h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: 'Введите код. Сессия держится 12 часов, потом код запросите снова.' }))));
+    if (ph) ph.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); btn.click(); } });
+    v.appendChild(h('div', { class: 'gap12' }, emp ? h('div', { class: 'field' }, h('label', { class: 'l', text: 'Телефон' }), ph) : null, btn, err));
+    v.appendChild(h('div', { class: 'steps' }, h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: emp ? 'Введите свой номер телефона и нажмите «Получить код»: 4 цифры придут вам в Telegram.' : 'Нажмите «Получить код в Telegram»: 4 цифры придут в ваш админский чат.' })), h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: emp ? 'Введите код. Сессия держится до конца рабочего дня (до 22:00), потом код запросите снова.' : 'Введите код. Сессия держится 12 часов, потом код запросите снова.' }))));
+    v.appendChild(h('button', { class: 'link tx-mode', type: 'button', 'data-testid': emp ? 'mode-admin' : 'mode-emp', onclick: function () { L = newL(emp ? 'admin' : 'emp', L.phone); renderLogin(); } }, emp ? 'Я администратор' : 'Я сотрудник: войти по номеру телефона'));
   }
   function loginCode(v) {
     var boxes = [], busy = false, otp = h('div', { class: 'otp', role: 'group', 'aria-label': 'Код из 4 цифр', 'data-testid': 'otp' }), err = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'code-err' });
@@ -274,9 +297,9 @@
       var c = val(); if (c.length !== 4 || busy) return; busy = true;
       if (navigator.onLine === false) { busy = false; showErr(ERR.network); return; }
       go.disabled = true; clear(go); go.appendChild(h('span', { class: 'spinner' })); go.appendChild(document.createTextNode(' Проверяем…'));
-      call('adminCodeVerify', { code: c }).then(function (r) {
+      (L.mode === 'emp' ? call('codeVerify', { phone: L.phone, code: c, purpose: 'taxi' }) : call('adminCodeVerify', { code: c })).then(function (r) {
         busy = false;
-        if (r.ok && r.token) { store(SESSK, { token: r.token, exp: r.expiresAt, at: Date.now() }); clearInterval(L.timer); L = { step: 'start', readyAt: 0, lockUntil: 0, timer: null }; boot(); return; }
+        if (r.ok && r.token) { if (L.mode === 'emp') store(EMPK, { token: r.token, exp: r.expiresAt, at: Date.now(), role: 'employee' }); else store(SESSK, { token: r.token, exp: r.expiresAt, at: Date.now() }); clearInterval(L.timer); L = newL(); boot(); return; }
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         clear(go); go.appendChild(document.createTextNode('Войти')); go.disabled = true;
         if (r.error === 'wrong') { boxes.forEach(function (b) { b.value = ''; b.setAttribute('aria-invalid', 'true'); }); otp.classList.remove('bad'); void otp.offsetWidth; otp.classList.add('bad'); showErr('Неверный код. Осталось ' + r.left + ' ' + plural(r.left, ['попытка', 'попытки', 'попыток']) + '.'); boxes[0].focus(); }
@@ -293,14 +316,15 @@
     go.addEventListener('click', submit);
     function tick() { var left = Math.ceil((L.readyAt - Date.now()) / 1000); resend.disabled = left > 0; resend.textContent = left > 0 ? 'Запросить код ещё раз (' + left + ' с)' : 'Запросить код ещё раз'; }
     resend.addEventListener('click', function () {
-      call('adminCodeRequest').then(function (r) {
+      (L.mode === 'emp' ? call('codeRequest', { phone: L.phone, purpose: 'taxi' }) : call('adminCodeRequest', { purpose: 'taxi' })).then(function (r) {
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         if (!r.ok) { toast(errText(r), 'bad'); return; }
+        if (r.closed) { toast(errText({ error: 'closed', from: r.from, to: r.to }), 'bad'); return; }
         L.readyAt = Date.now() + (r.throttled ? (r.wait || 30) : 30) * 1000; tick(); toast('Код запрошен повторно: проверьте Telegram'); boxes.forEach(function (b) { b.value = ''; }); boxes[0].focus();
       });
     });
     tick(); L.timer = setInterval(function () { if (!resend.isConnected) return clearInterval(L.timer); tick(); }, 1000);
-    v.appendChild(h('div', { class: 'waitbox', role: 'status', 'data-testid': 'wait-admin' }, ico('send'), h('div', null, h('b', { text: 'Проверьте Telegram' }), h('span', { text: 'Код пришёл в админский чат. Введите 4 цифры.' }))));
+    v.appendChild(h('div', { class: 'waitbox', role: 'status', 'data-testid': L.mode === 'emp' ? 'wait-emp' : 'wait-admin' }, ico('send'), h('div', null, h('b', { text: 'Проверьте Telegram' }), h('span', { text: L.mode === 'emp' ? 'Код пришёл вам личным сообщением «Вход в учёт такси». Введите 4 цифры.' : 'Код пришёл в админский чат. Введите 4 цифры.' }))));
     if (!LIVE) v.appendChild(h('div', { class: 'demohint', 'data-testid': 'demo-code', text: 'Демо: код входа — ' + DEMO_CODE }));
     v.appendChild(h('div', { class: 'gap16' }, h('div', { class: 'gap12' }, otp, err), go, h('div', { class: 'row between' }, resend, h('button', { class: 'link', type: 'button', 'data-testid': 'change', onclick: function () { L.step = 'start'; renderLogin(); } }, 'Назад'))));
     setTimeout(function () { boxes[0].focus(); }, 50);
@@ -450,7 +474,7 @@
   function sendBody(b) { var c = {}, k; for (k in b) if (k !== 'pdfFlag') c[k] = b[k]; if (c.file && b.pdfFlag) c.file = { b64: c.file.b64, pdf: true }; return c; }   // pdf — подсказка для демо; сервер определяет тип по сигнатуре файла
 
   /* ---------- экран ---------- */
-  var addSec, listSec, form, savedBox, listBody;
+  var addSec, listSec, form, savedBox, listBody, whoEl;
   function lastPrefs() { return load(LASTK, {}); }
   function mount() {
     clear(root); S.mounted = true; document.title = 'Учёт такси'; tabbar.hidden = false;
@@ -464,9 +488,9 @@
     listSec = h('section', { class: 'tx-sec tx-listsec', 'aria-label': 'Журнал поездок' }, listBody);
     var themeBtn = h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Сменить тему', 'data-testid': 'theme', onclick: function () { toggleTheme(themeBtn); } }, ico(isDark() ? 'sun' : 'moon'));
     var refBtn = h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Обновить список', title: 'Обновить', 'data-testid': 'refresh', onclick: function () { loadList(); } }, ico('refresh'));
-    var head = h('div', { class: 'adm-title' }, h('div', { class: 'grow' }, h('h1', { text: 'Такси', 'data-testid': 'page-title' }), h('div', { class: 'sub' }, 'Учёт поездок · склад «Елино»', LIVE ? null : h('span', { class: 'demobadge', 'data-testid': 'demo-badge', text: 'ДЕМО' }))),
+    var head = h('div', { class: 'adm-title' }, h('div', { class: 'grow' }, h('h1', { text: 'Такси', 'data-testid': 'page-title' }), h('div', { class: 'sub' }, 'Учёт поездок · склад «Елино»', whoEl = h('span', { class: 'tx-who', 'data-testid': 'who' }), LIVE ? null : h('span', { class: 'demobadge', 'data-testid': 'demo-badge', text: 'ДЕМО' }))),
       h('div', { class: 'adm-tools' }, refBtn, themeBtn, h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Выйти', 'data-testid': 'logout', onclick: function () {
-        confirmAct({ title: 'Выйти из учёта такси?', text: 'Вход в кабинет админа на этом устройстве тоже закроется. Чтобы войти снова, понадобится новый код из Telegram.', yes: 'Выйти' }).then(function (r) { if (r) endSession(); }); } }, ico('logout'))));
+        confirmAct({ title: 'Выйти из учёта такси?', text: isAdmin() ? 'Вход в кабинет админа на этом устройстве тоже закроется. Чтобы войти снова, понадобится новый код из Telegram.' : 'Чтобы войти снова, понадобится новый код из Telegram.', yes: 'Выйти' }).then(function (r) { if (r) endSession(); }); } }, ico('logout'))));
     var wrap = h('main', { class: 'view tx-wrap', id: 'main', 'data-tab': S.tab, 'data-testid': 'tx-wrap' }, head, h('div', { class: 'tx-cols' }, addSec, listSec));
     root.appendChild(wrap); renderTabs(); offlineBanner();
   }
@@ -526,13 +550,14 @@
     var pb = periodBounds(); S.loading = true; S.err = ''; if (!quiet) renderList();
     return call('taxiList', { from: pb.from, to: pb.to }).then(function (r) {
       S.loading = false; if (!session()) return;
-      if (r.ok) { S.data = r; S.err = ''; if (r.routes && r.routes.length) S.routes = r.routes; } else if (r.error !== 'auth') S.err = errText(r);
+      if (r.ok) { S.data = r; S.err = ''; S.role = r.role || S.role; S.who = r.who || S.who; if (r.routes && r.routes.length) S.routes = r.routes; } else if (r.error !== 'auth') S.err = errText(r);
       renderList();
     });
   }
   function seg(label, key) { return h('button', { type: 'button', 'aria-pressed': S.period === key ? 'true' : 'false', 'data-testid': 'per-' + key, onclick: function () { S.period = key; S.data = null; loadList(); } }, label); }
   function renderList() {
     if (!listBody || !S.mounted) return; clear(listBody);
+    if (whoEl) whoEl.textContent = S.who ? ' · ' + (isAdmin() ? 'админ' : S.who) : '';
     var pb = periodBounds(), d = S.data;
     var picker = h('div', { class: 'segrow tx-seg', role: 'group', 'aria-label': 'Период' }, seg('Этот месяц', 'month'), seg('Прошлый', 'prev'), seg('Период', 'custom'));
     var head = h('div', { class: 'card' }, h('div', { class: 'row between' }, h('h2', { text: 'Журнал поездок' }), h('span', { class: 'cap', 'data-testid': 'period-label', text: pb.label })), picker);
@@ -550,6 +575,11 @@
     listBody.appendChild(h('div', { class: 'sumgrid tx-sum', 'data-testid': 'totals' },
       sumCard('Поездок', String(tt.count), '', 't-count'), sumCard('Общая сумма', money(tt.sum), '', 't-sum'),
       sumCard('Пассажиров', String(tt.people), 'человек всего', 't-people'), sumCard('На человека', tt.people ? money(tt.perPerson) : '—', 'в среднем', 't-per')));
+    if (isAdmin() && d.byPerson && d.byPerson.length) {   // итоги по людям: только админу (сервер сотруднику их не отдаёт)
+      var pp = h('div', { class: 'tx-days tx-persons', 'data-testid': 'by-person' });
+      d.byPerson.forEach(function (b) { pp.appendChild(h('div', { class: 'tx-day pr', 'data-testid': 'person-row' }, h('span', { class: 'dd', text: b.name }), h('span', { class: 'dn', text: b.count + ' ' + plural(b.count, ['поездка', 'поездки', 'поездок']) + ' · ' + b.people + ' чел.' }), h('b', { class: 'num', text: money(b.sum) }))); });
+      listBody.appendChild(h('div', { class: 'card' }, h('h2', { text: 'По людям' }), pp));
+    }
     var csvBtn = h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'csv', disabled: !tt.count, onclick: function () { exportCsv(d); } }, ico('download', 'sm'), 'Скачать CSV');
     listBody.appendChild(h('div', { class: 'tx-actions' }, csvBtn, tt.deleted ? h('label', { class: 'tx-chk' }, h('input', { type: 'checkbox', checked: S.showDeleted, 'data-testid': 'show-del', onchange: function (e) { S.showDeleted = e.target.checked; renderList(); } }), h('span', { text: 'Показывать удалённые (' + tt.deleted + ')' })) : null));
     if (tt.byDay.length) {
@@ -572,7 +602,7 @@
     }
     return h('article', { class: 'card acard tx-trip' + (del ? ' deleted' : ''), 'data-testid': 'trip', 'data-id': x.id, 'data-status': x.status },
       h('div', { class: 'hd' }, h('div', { class: 'grow' }, h('div', { class: 'nm', text: dmy(x.date) + ' · ' + dowOf(x.date) }), h('div', { class: 'meta', text: x.route })), h('div', { class: 'amt num', text: money(x.amount) })),
-      h('div', { class: 'tx-meta' }, chip(x.people + ' ' + plural(x.people, ['человек', 'человека', 'человек']), 'info', 'car'), chip('на человека ' + money(x.perPerson), 'gray'), del ? chip('Удалено', 'bad', 'trash') : null, x.changed && !del ? chip('Исправлено', 'warn') : null),
+      h('div', { class: 'tx-meta' }, chip(x.people + ' ' + plural(x.people, ['человек', 'человека', 'человек']), 'info', 'car'), chip('на человека ' + money(x.perPerson), 'gray'), del ? chip('Удалено', 'bad', 'trash') : null, x.changed && !del ? chip('Исправлено', 'warn') : null, isAdmin() && x.by ? h('span', { class: 'chip gray', 'data-testid': 'trip-by', text: 'внёс: ' + x.by }) : null),
       x.names ? h('div', { class: 'txt' }, h('b', { text: 'Пассажиры' }), x.names) : null, x.note ? h('div', { class: 'txt' }, h('b', { text: 'Примечание' }), x.note) : null,
       del ? h('div', { class: 'txt add', 'data-testid': 'del-reason' }, h('b', { text: 'Причина удаления' }), x.reason) : null, acts);
   }
@@ -622,10 +652,10 @@
   }
   function num(n) { return (Math.round(n * 100) / 100).toFixed(2).replace('.', ','); }
   function csvText(d) {
-    var rows = [['Дата', 'Маршрут', 'Сумма, ₽', 'Людей', 'На человека, ₽', 'ФИО пассажиров', 'Примечание', 'ID', 'Создано (МСК)']];
+    var rows = [['Дата', 'Маршрут', 'Сумма, ₽', 'Людей', 'На человека, ₽', 'ФИО пассажиров', 'Примечание', 'ID', 'Создано (МСК)'].concat(isAdmin() ? ['Внёс'] : [])];
     d.items.filter(function (x) { return x.status === 'active'; }).slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.created < b.created ? -1 : 1); })
-      .forEach(function (x) { rows.push([dmy(x.date), x.route, num(x.amount), x.people, num(x.perPerson), x.names, x.note, x.id, x.created]); });
-    var t = d.totals; rows.push(['Итого', 'поездок: ' + t.count, num(t.sum), t.people, t.people ? num(t.perPerson) : '', '', '', '', '']);
+      .forEach(function (x) { rows.push([dmy(x.date), x.route, num(x.amount), x.people, num(x.perPerson), x.names, x.note, x.id, x.created].concat(isAdmin() ? [x.by || 'админ'] : [])); });
+    var t = d.totals; rows.push(['Итого', 'поездок: ' + t.count, num(t.sum), t.people, t.people ? num(t.perPerson) : '', '', '', '', ''].concat(isAdmin() ? [''] : []));
     return '\ufeff' + rows.map(function (r) { return r.map(csvCell).join(';'); }).join('\r\n') + '\r\n';
   }
   function exportCsv(d) {
