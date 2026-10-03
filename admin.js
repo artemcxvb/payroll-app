@@ -128,9 +128,9 @@
   function demoSeed() {
     var n = nowMsk();
     return { adv: [
-        { id: 'A1', created: n, week: '2026-09-28', payDate: '2026-10-03', phone: '79000000001', name: 'Тестов Иван Петрович', amount: 3000, comment: 'На проезд и продукты', status: 'pending', statusText: 'Новая', answer: '', available: 5500, reserve: 1500 },
-        { id: 'A2', created: n, week: '2026-09-28', payDate: '2026-10-03', phone: '79000000002', name: 'Образцова Мария Сергеевна', amount: 5000, comment: '', status: 'approved', statusText: 'Одобрен', answer: '', available: 7000, reserve: 0 },
-        { id: 'A3', created: n, week: '2026-09-21', payDate: '2026-09-26', phone: '79000000003', name: 'Демов Олег Викторович', amount: 2000, comment: '', status: 'issued', statusText: 'Выдан', answer: '', available: 4000, reserve: 0 } ],
+        { id: 'A1', created: n, week: '2026-09-28', payDate: '2026-10-03', phone: '79000000001', name: 'Тестов Иван Петрович', amount: 3000, comment: 'На проезд и продукты', status: 'pending', statusText: 'Новая', answer: '', available: 5500, reserve: 1500, bank: 'Сбербанк', card: '4276000000000009', last4: '0009' },
+        { id: 'A2', created: n, week: '2026-09-28', payDate: '2026-10-03', phone: '79000000002', name: 'Образцова Мария Сергеевна', amount: 5000, comment: '', status: 'approved', statusText: 'Одобрен', answer: '', available: 7000, reserve: 0, bank: 'Т-Банк', card: '5213240000000004', last4: '0004' },
+        { id: 'A3', created: n, week: '2026-09-21', payDate: '2026-09-26', phone: '79000000003', name: 'Демов Олег Викторович', amount: 2000, comment: '', status: 'issued', statusText: 'Выдан', answer: '', available: 4000, reserve: 0, bank: '', card: '', last4: '' } ],
       expl: [ { id: 'X1', created: n, phone: '79000000001', name: 'Тестов Иван Петрович', caseId: 's7', kind: 'брак', caseDate: '2026-09-17', amount: 3000, text: 'Задел стеллаж погрузчиком при развороте, сразу сообщил бригадиру и сфотографировал повреждения.', files: ['app:/Объяснения/2026-09/E1/s7_1.jpg', 'app:/Объяснения/2026-09/E1/s7_2.jpg'], status: 'sent', statusText: 'Отправлено', answer: '' } ],
       inc: [ { id: 'I1', created: n, date: '2026-09-29', phone: '79000000002', name: 'Образцова Мария Сергеевна', type: 'Порча имущества', desc: 'Разбит защитный борт стеллажа', text: 'При разгрузке паллеты погрузчик задел борт. Сообщила бригадиру, борт заменён.', scene: ['app:/Происшествия/2026-09/E2/I1/scene_1.jpg'], damage: ['app:/Происшествия/2026-09/E2/I1/damage_1.jpg'], acts: ['app:/Происшествия/2026-09/E2/I1/act_1.pdf'], status: 'review', statusText: 'Отправлено, ждёт проверки', answer: '', addendum: '[2026-09-30 10:15] Дополнение: акт подписан начальником смены.' } ],
       apps: [ { id: 'J1', created: n, jobId: 'j1', title: 'Бригадир смены', phone: '79000000003', name: 'Демов Олег Викторович', tab: '', comment: 'Есть опыт 3 года', status: 'sent', statusText: 'Отправлен', answer: '' } ],
@@ -477,11 +477,34 @@
     return h('div', { class: 'acts' }, list.map(function (a) { return h('button', { class: 'btn ' + (a.cls === 'ghost' ? 'ghost' : a.cls === 'secondary' ? 'secondary' : a.cls), type: 'button', 'data-testid': 'act-' + a.to + '-' + it.id, onclick: function () { runAct(kind, it, a, card); } }, a.label); }));
   }
   function headRow(it, right, meta) { return h('div', { class: 'hd' }, h('div', { class: 'grow' }, h('div', { class: 'nm', text: it.name || '—' }), h('div', { class: 'meta', text: meta })), right); }
+  function bankMark(name, cls) {   // реальный логотип из banks/ или значок с цветом банка и инициалами
+    var b = window.BANK_API && window.BANK_API.byName ? window.BANK_API.byName(name) : null;
+    if (b && b.logo) return h('img', { class: 'bk-logo ' + (cls || ''), src: b.logo, alt: '', width: '32', height: '32', decoding: 'async', 'data-bank': b.id });
+    var el = h('span', { class: 'bk-ph ' + (cls || ''), 'aria-hidden': 'true', text: (b && b.ini) || String(name || '?').replace(/[^A-Za-z\u0410-\u044f\u0401\u0451]/g, '').slice(0, 2).toUpperCase() || '?', 'data-bank': b ? b.id : 'other' });
+    el.style.background = b && b.color ? b.color : '#566074'; return el;
+  }
+  function cardFmt(d) { return String(d || '').replace(/\D/g, '').replace(/(\d{4})(?=\d)/g, '$1 '); }
+  function copyText(t) {   // буфер обмена: современный способ, запасной - через временное поле
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t);
+    return new Promise(function (res, rej) {
+      var ta = h('textarea', { 'aria-hidden': 'true', tabindex: '-1' }); ta.value = t; ta.className = 'copy-tmp'; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy') ? res() : rej(new Error('copy')); } catch (e) { rej(e); } document.body.removeChild(ta);
+    });
+  }
+  function payRow(it) {   // банк с логотипом, полный номер карты и «Копировать» (виден только администратору)
+    if (!it.bank && !it.card && !it.last4) return h('div', { class: 'payrow none', 'data-testid': 'adm-pay-none-' + it.id, text: 'Банк и карта не указаны (заявка до появления этого поля)' });
+    return h('div', { class: 'payrow', 'data-testid': 'adm-pay-' + it.id }, bankMark(it.bank), h('div', { class: 'grow' }, h('div', { class: 'bnm', 'data-testid': 'adm-bank-' + it.id, text: it.bank || 'Банк не указан' }),
+      h('div', { class: 'cardnum num', 'data-testid': 'adm-card-' + it.id, text: it.card ? cardFmt(it.card) : '•••• ' + it.last4 })),
+      it.card ? h('button', { class: 'btn secondary cp', type: 'button', 'data-testid': 'adm-copy-' + it.id, onclick: function (e) {
+        var b = e.currentTarget; copyText(it.card).then(function () { toast('Номер карты скопирован', 'ok'); b.textContent = 'Скопировано'; setTimeout(function () { b.textContent = 'Копировать'; }, 2000); }, function () { toast('Не удалось скопировать: выделите номер вручную', 'bad'); });
+      } }, 'Копировать') : null);
+  }
   function cardAdv(it) {
     var c = h('article', { class: 'card acard', 'data-testid': 'card-' + it.id, 'data-status': it.status }); 
     c.appendChild(headRow(it, h('div', { class: 'amt num', text: money(it.amount) }), phoneLine(x2(it)) + ' · ' + dmyT(it.created)));
     c.appendChild(h('div', null, statusChip('adv', it)));
     c.appendChild(kv([['Неделя с (пн)', dmy(it.week)], ['Выдача (сб)', dmy(it.payDate)], ['Доступно на момент заявки', it.available ? money(it.available) : ''], ['Резерв', it.reserve ? money(it.reserve) : '']]));
+    c.appendChild(payRow(it));
     add(c, txt('Комментарий сотрудника', it.comment)); add(c, txt('Ответ админа', it.answer, 'ans')); add(c, actsRow('adv', it, c)); return c;
   }
   function x2(it) { return it; }

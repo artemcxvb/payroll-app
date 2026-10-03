@@ -536,3 +536,31 @@ textarea.inp { padding: 12px 14px; min-height: 110px; font-size: 16px; resize: v
 .plainlist { list-style: disc; padding-left: 20px; display: grid; gap: 6px; font-size: 15px; }
 .consent-details summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--primary-strong); font-weight: 600; }
 .consent-details p { margin-top: 8px; }
+
+/* ---------- банк и карта для выплаты ---------- */
+.paybox { border-top: 1px solid var(--line); padding-top: 16px; }
+.mt8 { margin-top: 8px; }
+.bk-logo, .bk-ph { width: 32px; height: 32px; border-radius: 50%; flex: none; object-fit: contain; background: #fff; border: 1px solid var(--line); }
+.bk-ph { display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 12px; letter-spacing: -.3px; border: 0; overflow: hidden; }
+.bk-ph.empty { background: var(--card2); color: var(--muted); border: 1.5px dashed var(--line); }
+.bk-logo.sm, .bk-ph.sm { width: 24px; height: 24px; font-size: 10px; }
+.bankbtn { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 0 14px; background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; font-size: 17px; font-weight: 600; text-align: left; color: var(--text); }
+.bankbtn .bn { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.bankbtn:focus-visible { outline: none; border-color: var(--primary); box-shadow: var(--focus); }
+.bankbtn[aria-expanded="true"] { border-color: var(--primary); }
+.bpanel { margin-top: 8px; border: 1.5px solid var(--line); border-radius: 14px; background: var(--card); padding: 10px; }
+.bpanel[hidden] { display: none; }
+.bsearch { min-height: 46px; font-size: 16px; }
+.blist { margin-top: 8px; max-height: 320px; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 2px; }
+.bopt { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 8px; border-radius: 12px; background: transparent; border: 0; text-align: left; font-size: 16px; color: var(--text); width: 100%; }
+.bopt:active, .bopt:hover { background: var(--primary-soft); }
+.bopt[aria-selected="true"] { background: var(--primary-soft); font-weight: 700; }
+.bopt:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.bopt .bn { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cardinp { letter-spacing: .5px; font-variant-numeric: tabular-nums; }
+.binhint { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: var(--info-bg); color: var(--info); font-size: 13.5px; }
+.binhint[hidden] { display: none; }
+.binhint span { flex: 1; min-width: 160px; }
+.payline { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 13.5px; color: var(--muted); }
+.paybox .agree { padding: 0; align-items: center; }
+.paybox .agree input { width: 44px; height: 44px; flex: 0 0 44px; margin: 0 -4px 0 0; }

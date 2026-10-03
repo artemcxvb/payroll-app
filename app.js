@@ -4,6 +4,7 @@
 (function () {
   'use strict';
   var M = window.MOCK, CFG = M.config;
+  CFG.cardRequired = (window.APP_CONFIG || {}).mode !== 'live' && (window.APP_CONFIG || {}).cardDemo !== false;   // демо: банк и карта обязательны (cardDemo:false отключает); в боевом режиме ответ сервера (ADV_CARD_REQUIRED)
   var APPC = window.APP_CONFIG || {}, BOT_URL = /^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{4,31}$/.test(String(APPC.loginBotUrl || '')) ? APPC.loginBotUrl : 'https://t.me/tableworks_bot', BOT_NAME = '@' + BOT_URL.replace(/^.*\//, ''), LIVE = APPC.mode === 'live' && /^https:\/\//.test(APPC.backendUrl || '');   // demo по умолчанию, пока нет URL бэкенда
   var qs = new URLSearchParams(location.search);
   var LAT = LIVE ? 0 : qs.has('lat') ? +qs.get('lat') : 450;       // задержка «сети», мс (в боевом режиме — настоящая сеть)
@@ -150,12 +151,12 @@
   var CONSENT_VERSION = '2026-10-черновик';
   var CONSENT_TITLE = 'Согласие на обработку персональных данных';
   var CONSENT_TEXT = [
-    'Я, пользователь приложения «Мои выплаты», даю согласие ООО «Персональное Решение» (далее оператор) на обработку моих персональных данных: фамилии, имени, отчества, номера телефона, табельного номера, должности и места работы, сведений о моих сменах, выработке, выплатах и авансах, а также фотографий, актов и объяснительных, которые я сам загружаю в приложение.',
-    'Цели обработки: показать мне мои выплаты и выработку, принять мои заявки на аванс, объяснительные и сведения о происшествиях, отправить мне код входа.',
+    'Я, пользователь приложения «Мои выплаты», даю согласие ООО «Персональное Решение» (далее оператор) на обработку моих персональных данных: фамилии, имени, отчества, номера телефона, табельного номера, должности и места работы, сведений о моих сменах, выработке, выплатах и авансах, банка и номера банковской карты, которые я указываю для выплаты аванса, а также фотографий, актов и объяснительных, которые я сам загружаю в приложение.',
+    'Цели обработки: показать мне мои выплаты и выработку, принять мои заявки на аванс и выплатить аванс на мою карту, принять объяснительные и сведения о происшествиях, отправить мне код входа.',
     'Срок хранения: данные хранятся, пока я работаю у оператора. Фотографии и файлы хранятся 12 месяцев с даты записи, затем переносятся в архив для удаления.',
     'Я могу отозвать согласие или попросить удалить мои данные в любой момент, обратившись к бригадиру склада.'
   ];
-  var MYDATA_ITEMS = ['Фамилия, имя, отчество', 'Номер телефона', 'Табельный номер', 'Ваши заявки на аванс, объяснительные и сведения о происшествиях', 'Фото случаев и происшествий, акты и чеки, которые вы загрузили'];
+  var MYDATA_ITEMS = ['Фамилия, имя, отчество', 'Номер телефона', 'Табельный номер', 'Ваши заявки на аванс, объяснительные и сведения о происшествиях', 'Банк и номер банковской карты для выплаты аванса (сотрудник видит только последние 4 цифры, полный номер видит администратор)', 'Фото случаев и происшествий, акты и чеки, которые вы загрузили'];
   function srv() {
     var s = load(SK, null);
     if (!s) { s = { cases: JSON.parse(JSON.stringify(M.cases)), advances: JSON.parse(JSON.stringify(M.advances)), incidents: JSON.parse(JSON.stringify(M.incidents)), codes: {}, locks: {}, attempts: {}, tg: [], lastReq: {}, blocked: {} }; store(SK, s); }
@@ -297,18 +298,28 @@
       if (amount > av.available) return { ok: false, error: 'over_limit' };
       return { ok: true, av: av };
     },
-    createAdvance: function (amount, comment) {
+    _pay: function (pay, prev) {   // проверка банка и карты; в демо хранится только банк и последние 4 цифры
+      pay = pay || {}; var bank = bankOk(pay.bank), card = String(pay.card || '').replace(/\D/g, ''), any = !!String(pay.bank || '').trim() || !!card;
+      var pb = prev && prev.bank || '', pl = prev && prev.last4 || '';
+      if (!CFG.cardRequired && !any) return { ok: true, bank: pb, last4: pl };
+      if (!bank && !pb) return { ok: false, error: 'bad_bank' };
+      if (card ? !(card.length >= 16 && card.length <= 19 && luhnOk(card)) : !pl) return { ok: false, error: 'bad_card' };
+      return { ok: true, bank: bank || pb, last4: card ? card.slice(-4) : pl };
+    },
+    createAdvance: function (amount, comment, pay) {
       var s = srv(), d = server._data(), av0 = advInfo(d, calcAll(d));
       if (av0.active) return { ok: false, error: 'active' };
       var c = server._advCheck(amount); if (!c.ok) return c;
-      s.advances.unshift({ id: 'a' + rid(), date: M.today, time: NOW.slice(11, 16), week: av0.w.wk, payDate: av0.w.pay, amount: amount, comment: String(comment || '').slice(0, CFG.commentMax), status: 'pending', answer: '' });
+      var pp = server._pay(pay); if (!pp.ok) return pp;
+      s.advances.unshift({ id: 'a' + rid(), date: M.today, time: NOW.slice(11, 16), week: av0.w.wk, payDate: av0.w.pay, amount: amount, comment: String(comment || '').slice(0, CFG.commentMax), status: 'pending', answer: '', bank: pp.bank, last4: pp.last4 });
       save(s); return { ok: true };
     },
-    updateAdvance: function (id, amount, comment) {
+    updateAdvance: function (id, amount, comment, pay) {
       var s = srv(), a = s.advances.filter(function (x) { return x.id === id; })[0];
       if (!a || (a.status !== 'pending' && a.status !== 'approved')) return { ok: false, error: 'not_found' };
       var c = server._advCheck(amount, id); if (!c.ok) return c;
-      a.amount = amount; a.comment = String(comment || '').slice(0, CFG.commentMax); a.status = 'pending'; a.answer = ''; save(s); return { ok: true };
+      var pp = server._pay(pay, a); if (!pp.ok) return pp;
+      a.bank = pp.bank; a.last4 = pp.last4; a.amount = amount; a.comment = String(comment || '').slice(0, CFG.commentMax); a.status = 'pending'; a.answer = ''; save(s); return { ok: true };
     },
     cancelAdvance: function (id) {
       var s = srv(), a = s.advances.filter(function (x) { return x.id === id; })[0];
@@ -334,7 +345,7 @@
     block: function () { var s = srv(), se = session(); if (se) { s.blocked[se.phone] = 1; save(s); } },
     unblockAll: function () { var s = srv(); s.blocked = {}; save(s); },
     unlock: function () { var s = srv(); s.locks = {}; s.attempts = {}; s.lastReq = {}; save(s); },
-    reset: function () { localStorage.removeItem(SK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); devRender(); refresh(); }
+    reset: function () { localStorage.removeItem(SK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.card'); devRender(); refresh(); }
   };
 
 
@@ -399,7 +410,7 @@
     M.promos = d.promos || []; M.jobs = d.jobs || [];
     M.OPS.length = 0; Object.keys(OPI).forEach(function (k) { delete OPI[k]; }); (d.ops || []).forEach(function (o) { M.OPS.push(o); OPI[o.id] = o; });
     if (d.hours) { M.HOURS_SHIFT = d.hours; NORM_SHIFT_H = d.hours; }
-    if (d.cfg) { var c = d.cfg; CFG.advWeekLimit = c.advWeekLimit; CFG.advShare = c.advShare; CFG.advStep = c.advStep; CFG.advMin = c.advMin; CFG.advDeadlineDow = c.advDeadlineDow; CFG.advDeadlineHour = c.advDeadlineHour; CFG.advPayDow = c.advPayDow; CFG.incidentReserve = c.incidentReserve; CFG.deductShare = c.deductShare; M.SHARE = c.payShare; }
+    if (d.cfg) { var c = d.cfg; CFG.advWeekLimit = c.advWeekLimit; CFG.advShare = c.advShare; CFG.advStep = c.advStep; CFG.advMin = c.advMin; CFG.advDeadlineDow = c.advDeadlineDow; CFG.advDeadlineHour = c.advDeadlineHour; CFG.advPayDow = c.advPayDow; CFG.incidentReserve = c.incidentReserve; CFG.deductShare = c.deductShare; M.SHARE = c.payShare; CFG.cardRequired = c.cardRequired === true; }
   }
   function filesB64(a) { return Promise.all((a || []).map(function (f) { return blobB64(f.blob).then(function (b) { return { b64: b }; }); })); }
   var backend = LIVE ? {
@@ -411,8 +422,8 @@
     submitIncident: function (p) { return Promise.all([filesB64(p.scene), filesB64(p.damage), filesB64(p.acts)]).then(function (g) { return api('incidentSubmit', { date: p.date, type: p.type, desc: p.desc, text: p.text, scene: g[0], damage: g[1], acts: g[2], rid: p.rid }); }); },
     consentAccept: function (version) { return api('consentAccept', { agree: true, version: version }); },
     applyJob: function (jobId, comment) { return api('jobApply', { jobId: jobId, comment: comment, rid: rid() }); },
-    createAdvance: function (amount, comment) { return api('advanceCreate', { amount: amount, comment: comment, rid: rid() }); },
-    updateAdvance: function (id, amount, comment) { return api('advanceUpdate', { id: id, amount: amount, comment: comment }); },
+    createAdvance: function (amount, comment, pay) { return api('advanceCreate', { amount: amount, comment: comment, rid: rid(), bank: pay && pay.bank || '', card: pay && pay.card || '' }); },
+    updateAdvance: function (id, amount, comment, pay) { return api('advanceUpdate', { id: id, amount: amount, comment: comment, bank: pay && pay.bank || '', card: pay && pay.card || '' }); },
     cancelAdvance: function (id) { return api('advanceCancel', { id: id }); },
     anonChallenge: function () { return post(APPC.feedbackUrl, { action: 'feedbackChallenge' }); },
     anonSubmit: function (body, blob) {   // отдельный деплой, БЕЗ токена; в теле только тема, текст, ответ, ловушка и (опционально) фото
@@ -428,8 +439,8 @@
     submitIncident: function (p) { return Promise.resolve(server.submitIncident(p)); },
     consentAccept: function (version) { return Promise.resolve(server.consentAccept(session().phone, version)); },
     applyJob: function (jobId, comment) { return Promise.resolve(server.applyJob(session().phone, { jobId: jobId, comment: comment })); },
-    createAdvance: function (amount, comment) { return Promise.resolve(server.createAdvance(amount, comment)); },
-    updateAdvance: function (id, amount, comment) { return Promise.resolve(server.updateAdvance(id, amount, comment)); },
+    createAdvance: function (amount, comment, pay) { return Promise.resolve(server.createAdvance(amount, comment, pay)); },
+    updateAdvance: function (id, amount, comment, pay) { return Promise.resolve(server.updateAdvance(id, amount, comment, pay)); },
     cancelAdvance: function (id) { return Promise.resolve(server.cancelAdvance(id)); },
     anonChallenge: function () { return Promise.resolve(server.anonChallenge()); },
     anonSubmit: function (body) { return Promise.resolve(server.anonSubmit(body)); }
@@ -624,7 +635,7 @@
   var L = { step: 'phone', phone: '', timer: null, readyAt: 0 };
   /* ---------- «Доступ закрыт»: бригадир заблокировал номер (ответ сервера 'blocked' на уже вошедшем) ---------- */
   function onBlocked() {
-    localStorage.removeItem(SESSK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.iadd');   // сессия и сохранённые данные стираются
+    localStorage.removeItem(SESSK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.card'); localStorage.removeItem('pr.iadd');   // сессия и сохранённые данные стираются
     openStack.slice().forEach(function (c) { c.close(true); });
     S.data = null; S.calc = null; S.stale = false; S.consent = null; S.blocked = true; clearInterval(L.timer); L = { step: 'phone', phone: '', timer: null, readyAt: 0 };
     if (location.hash !== '#/login') location.hash = '#/login';
@@ -1464,7 +1475,7 @@
       if (sendBtn.disabled || !requireOnline()) return; sending = true; sendBtn.disabled = true; clear(sendBtn); sendBtn.appendChild(h('span', { class: 'spinner' })); sendBtn.appendChild(document.createTextNode(' Отправляем…'));
       delay(LAT + 300).then(function () { return backend.submitIncident({ rid: rid(), date: date.value, type: type, desc: desc.value, text: text.value, scene: slots.scene.ready(), damage: slots.damage.ready(), acts: slots.acts.ready() }); }).then(function (r) {
         if (!r.ok) { sending = false; sendLabel(); update(); toast(r.error === 'rate_limit' ? 'Слишком много сообщений за сутки' : netMsg(r.error) ? 'Не отправлено: ' + netMsg(r.error) : r.error === 'bad_file' ? 'Не отправлено: файл не подошёл (нужны фото JPG/PNG или PDF)' : r.error === 'too_big' ? 'Не отправлено: файл слишком большой' : 'Не отправлено: проверьте поля (' + r.error + ')', 'bad'); return; }
-        localStorage.removeItem('pr.idraft'); Object.keys(slots).forEach(function (k) { slots[k].release(); });
+        localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.card'); Object.keys(slots).forEach(function (k) { slots[k].release(); });
         ctl.close(true); S.dedFilter = 'all'; toast('Сообщение отправлено. Статус — «Отправлено, ждёт проверки»');
         refresh().then(function () { if (location.hash !== '#/ded') location.hash = '#/ded'; });
       });
@@ -1624,6 +1635,120 @@
       footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') });
   }
 
+  /* ---------- банк и карта для выплаты аванса ---------- */
+  var BANKS = window.BANKS || [], BAPI = window.BANK_API || {}, CARDK = 'pr.card';
+  function luhnOk(d) { var sm = 0, alt = false, i, n; if (!/^\d+$/.test(d)) return false; for (i = d.length - 1; i >= 0; i--) { n = d.charCodeAt(i) - 48; if (alt) { n *= 2; if (n > 9) n -= 9; } sm += n; alt = !alt; } return sm % 10 === 0; }
+  function bankOk(v) { var t = String(v || '').replace(/\s+/g, ' ').trim().slice(0, 60); return t.length >= 2 && /^[A-Za-z\u0410-\u044f\u0401\u04510-9 .,'\u2019"\u00ab\u00bb&()\/+\u2116\-]+$/.test(t) ? t : ''; }
+  function cardFmt(d) { return d.replace(/(\d{4})(?=\d)/g, '$1 '); }
+  function bankOther() { return BANKS.filter(function (b) { return b.id === 'other'; })[0] || { id: 'other', name: 'Другой банк', color: '#566074', ini: '…' }; }
+  function bankByName(nm) { var b = BAPI.byName ? BAPI.byName(nm) : null; return b || null; }
+  function bankMark(b, cls) {   // реальный логотип из banks/ или аккуратный значок с цветом банка и инициалами
+    if (b && b.logo) return h('img', { class: 'bk-logo ' + (cls || ''), src: b.logo, alt: '', width: '32', height: '32', decoding: 'async', 'data-bank': b.id });
+    var el = h('span', { class: 'bk-ph ' + (cls || ''), 'aria-hidden': 'true', text: (b && b.ini) || '?', 'data-bank': b ? b.id : 'other' });
+    if (b && b.color) el.style.background = b.color; return el;
+  }
+  function payLabel(bank, last4) { return bank + (last4 ? ' •••• ' + last4 : ''); }
+  function payLine(a, tid) {   // «Сбербанк •••• 1234» с логотипом; полный номер сотруднику не показывается
+    if (!a || !a.bank) return null;
+    return h('div', { class: 'payline', 'data-testid': tid || 'pay-line' }, bankMark(bankByName(a.bank) || bankOther(), 'sm'), h('span', { text: 'Выплата на карту: ' + payLabel(a.bank, a.last4) }));
+  }
+  function payBlock(o) {   // o: { prev:{bank,last4}|null, required, disabled, onChange }
+    var sel = null, otherName = '', digits = '', stored = null, touched = false, opened = false, prev = o.prev && o.prev.bank ? o.prev : null;
+    try { stored = JSON.parse(localStorage.getItem(CARDK) || 'null'); } catch (e) { stored = null; }
+    if (!stored || typeof stored !== 'object' || !luhnOk(String(stored.card || '')) || String(stored.card).length < 16) stored = null;
+    function setByName(nm) { var b = bankByName(nm); if (b && b.id !== 'other') { sel = b; otherName = ''; } else if (nm) { sel = bankOther(); otherName = nm; } }
+    if (prev) setByName(prev.bank);
+    else if (stored) { var sb = BANKS.filter(function (b) { return b.id === stored.id; })[0]; if (sb) { sel = sb; otherName = sb.id === 'other' ? String(stored.other || '') : ''; digits = String(stored.card); } else stored = null; }
+    var rem = !!stored && !prev;
+    var btn = h('button', { type: 'button', class: 'bankbtn', id: 'pay-bank', 'data-testid': 'bank-btn', 'aria-haspopup': 'listbox', 'aria-expanded': 'false', disabled: !!o.disabled });
+    var search = h('input', { class: 'inp bsearch', type: 'search', 'data-testid': 'bank-search', placeholder: 'Найти банк по названию', autocomplete: 'off', 'aria-label': 'Поиск банка' });
+    var list = h('div', { class: 'blist', role: 'listbox', 'aria-label': 'Банки', 'data-testid': 'bank-list' });
+    var panel = h('div', { class: 'bpanel', hidden: true, 'data-testid': 'bank-panel' }, search, list);
+    var other = h('input', { class: 'inp', type: 'text', id: 'pay-other', 'data-testid': 'bank-other', maxlength: '60', autocomplete: 'off', placeholder: 'Название банка', 'aria-label': 'Название банка', disabled: !!o.disabled, hidden: true });
+    var cardInp = h('input', { class: 'inp cardinp', type: 'text', id: 'pay-card', 'data-testid': 'card-num', inputmode: 'numeric', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', maxlength: '23', placeholder: prev && prev.last4 ? '•••• ' + prev.last4 + ' (оставьте пустым, чтобы не менять)' : '0000 0000 0000 0000', 'aria-describedby': 'card-err card-help', disabled: !!o.disabled });
+    var cardErrEl = h('div', { class: 'err', id: 'card-err', role: 'alert', hidden: true, 'data-testid': 'card-err' });
+    var bankErrEl = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'bank-err' });
+    var hint = h('div', { class: 'binhint', hidden: true, 'data-testid': 'bank-hint' });
+    var chk = h('input', { type: 'checkbox', id: 'pay-rem', 'data-testid': 'card-remember', disabled: !!o.disabled }); chk.checked = rem;
+    var need = h('p', { class: 'help', 'data-testid': 'pay-need', hidden: true });
+    function bankName() { return !sel ? '' : sel.id === 'other' ? bankOk(otherName) : sel.name; }
+    function err() {   // → { bank, card } тексты ошибок ('' = нормально)
+      var any = !!sel || !!digits || !!otherName.trim(), must = !!o.required || any, e = { bank: '', card: '' };
+      if (!must) return e;
+      if (!sel) e.bank = 'Выберите банк'; else if (sel.id === 'other' && !bankOk(otherName)) e.bank = 'Впишите название банка (2–60 знаков, без лишних символов)';
+      if (!digits) { if (!(prev && prev.last4)) e.card = 'Введите номер карты'; }
+      else if (digits.length < 16) e.card = 'В номере карты от 16 до 19 цифр, сейчас ' + digits.length;
+      else if (!luhnOk(digits)) e.card = 'Номер введён с ошибкой: проверьте цифры';
+      return e;
+    }
+    function ok() { var e = err(); return !e.bank && !e.card; }
+    function paint() {
+      var bkey = sel ? sel.id : '';
+      if (btn.getAttribute('data-key') !== bkey || !btn.firstChild) {   // кнопку перерисовываем только при смене банка: иначе тап, начатый во время blur поля карты, теряется
+        clear(btn); btn.setAttribute('data-key', bkey); btn.appendChild(sel ? bankMark(sel) : h('span', { class: 'bk-ph empty', 'aria-hidden': 'true', text: '?' }));
+        btn.appendChild(h('span', { class: 'bn', 'data-testid': 'bank-sel', text: sel ? (sel.id === 'other' ? 'Другой банк' : sel.name) : 'Выберите банк' })); btn.appendChild(ico('cd', 'sm'));
+      }
+      btn.setAttribute('aria-expanded', opened ? 'true' : 'false'); panel.hidden = !opened;
+      other.hidden = !(sel && sel.id === 'other');
+      var e = err(), showC = (touched || digits.length >= 16) && !!e.card, showB = touched && !!e.bank;
+      cardErrEl.hidden = !showC; clear(cardErrEl); if (showC) { cardErrEl.appendChild(ico('alert', 'sm')); cardErrEl.appendChild(document.createTextNode(e.card)); }
+      bankErrEl.hidden = !showB; clear(bankErrEl); if (showB) { bankErrEl.appendChild(ico('alert', 'sm')); bankErrEl.appendChild(document.createTextNode(e.bank)); }
+      cardInp.setAttribute('aria-invalid', showC ? 'true' : 'false');
+      var g = BAPI.byBin ? BAPI.byBin(digits) : null, hk = g && !(sel && sel.id === g.id) ? g.id : '';
+      if (hint.getAttribute('data-key') !== hk) {   // подсказку не перерисовываем зря: тап по «Выбрать» во время blur поля карты не должен теряться
+        clear(hint); hint.setAttribute('data-key', hk);
+        if (hk) {
+          hint.appendChild(bankMark(g, 'sm')); hint.appendChild(h('span', { text: 'Похоже на карту банка «' + g.name + '». Это только подсказка, проверьте.' }));
+          hint.appendChild(h('button', { type: 'button', class: 'qbtn', 'data-testid': 'bank-hint-pick', onclick: function () { pick(g); } }, 'Выбрать'));
+        }
+      }
+      hint.hidden = !hk;
+      var msg = ok() ? '' : (!sel && !digits ? 'Чтобы отправить заказ, выберите банк и введите номер карты.' : !sel ? 'Выберите банк.' : !digits && !(prev && prev.last4) ? 'Введите номер карты.' : 'Проверьте данные карты.');
+      need.hidden = !msg; need.textContent = msg;
+    }
+    function changed() { paint(); if (o.onChange) o.onChange(); }
+    function pick(b) { sel = b; if (b.id !== 'other') otherName = ''; opened = false; paint(); if (o.onChange) o.onChange(); if (b.id === 'other') other.focus(); else btn.focus(); }
+    function renderList() {
+      var q = search.value, n = 0; clear(list);
+      BANKS.forEach(function (b) {
+        if (b.id === 'other' || (BAPI.match && !BAPI.match(b, q))) return; n++;
+        list.appendChild(h('button', { type: 'button', role: 'option', class: 'bopt', 'aria-selected': sel && sel.id === b.id ? 'true' : 'false', 'data-testid': 'bank-opt-' + b.id, onclick: function () { pick(b); } }, bankMark(b), h('span', { class: 'bn', text: b.name })));
+      });
+      if (!n) list.appendChild(h('p', { class: 'help', 'data-testid': 'bank-none', text: 'Такого банка нет в списке. Выберите «Другой банк» и впишите название.' }));
+      var ot = bankOther(); list.appendChild(h('button', { type: 'button', role: 'option', class: 'bopt other', 'aria-selected': sel && sel.id === 'other' ? 'true' : 'false', 'data-testid': 'bank-opt-other', onclick: function () { pick(ot); } }, bankMark(ot), h('span', { class: 'bn', text: 'Другой банк (впишу название)' })));
+    }
+    btn.addEventListener('click', function () { opened = !opened; paint(); if (opened) { search.value = ''; renderList(); search.focus(); } });
+    search.addEventListener('input', renderList);
+    panel.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.stopPropagation(); opened = false; paint(); btn.focus(); } });
+    other.value = otherName; other.addEventListener('input', function () { otherName = other.value; changed(); });
+    cardInp.value = cardFmt(digits);
+    cardInp.addEventListener('input', function () {
+      var pos = cardInp.selectionStart || 0, before = cardInp.value.slice(0, pos).replace(/\D/g, '').length;
+      digits = cardInp.value.replace(/\D/g, '').slice(0, 19); var f = cardFmt(digits); cardInp.value = f;
+      var np = 0, c = 0; while (np < f.length && c < before) { if (/\d/.test(f.charAt(np))) c++; np++; } try { cardInp.setSelectionRange(np, np); } catch (e) { /* не поддерживается */ }
+      changed();
+    });
+    cardInp.addEventListener('blur', function () { touched = true; paint(); if (o.onChange) o.onChange(); });
+    var wrap = h('div', { class: 'paybox gap12', 'data-testid': 'pay-box' },
+      h('div', { class: 'field' }, h('label', { class: 'l', for: 'pay-bank' }, 'Банк для выплаты ', h('span', { text: o.required ? 'обязательно' : 'необязательно' })), btn, panel, h('div', { class: 'mt8' }, other), bankErrEl),
+      h('div', { class: 'field' }, h('label', { class: 'l', for: 'pay-card' }, 'Номер карты ', h('span', { text: '16–19 цифр' })), cardInp, cardErrEl, hint,
+        h('p', { class: 'help', id: 'card-help', text: prev && prev.last4 ? 'Сейчас указана карта •••• ' + prev.last4 + '. Введите новый номер, только если хотите её заменить.' : 'Только ваша карта. После отправки в приложении будут видны лишь последние 4 цифры.' })),
+      h('label', { class: 'agree', for: 'pay-rem' }, chk, h('span', { text: 'Запомнить на этом телефоне' })),
+      h('p', { class: 'help', 'data-testid': 'card-remember-note', text: 'Банк и номер карты сохранятся в памяти этого телефона, чтобы подставляться в новые заявки. Не включайте на чужом или общем телефоне. Снять запоминание: уберите галочку и отправьте заявку, либо выйдите из кабинета.' }), need);
+    paint();
+    return {
+      el: wrap, ok: ok,
+      value: function () { return { bank: bankName(), card: digits }; },
+      label: function () { var b = bankName() || (prev && prev.bank) || ''; var l4 = digits ? digits.slice(-4) : (prev && prev.last4) || ''; return b ? payLabel(b, l4) : ''; },
+      persist: function () {   // после успешной отправки: запомнить или стереть
+        try {
+          if (chk.checked && sel && digits) localStorage.setItem(CARDK, JSON.stringify({ id: sel.id, other: sel.id === 'other' ? otherName : '', card: digits }));
+          else if (!chk.checked) localStorage.removeItem(CARDK);
+        } catch (e) { /* хранилище недоступно */ }
+      }
+    };
+  }
+
   /* ---------- аванс (еженедельный) ---------- */
   function whyLines(i) {
     var L = [];
@@ -1673,7 +1798,7 @@
     if (active && !editing) {
       var st = ADV_ST[active.status];
       v.appendChild(h('section', { class: 'card', 'aria-labelledby': 'ac-h', 'data-testid': 'adv-active' }, h('div', { class: 'card-h' }, h('h2', { id: 'ac-h', text: 'Ваш заказ на неделю' }), chip(st[0], st[1], 'clock')),
-        h('div', { class: 'avail num', text: money(active.amount) }), h('p', { class: 'cap', text: 'Выдача в субботу, ' + dlong(active.payDate || w.pay) + (active.comment ? ' · «' + active.comment + '»' : '') }),
+        h('div', { class: 'avail num', text: money(active.amount) }), h('p', { class: 'cap', text: 'Выдача в субботу, ' + dlong(active.payDate || w.pay) + (active.comment ? ' · «' + active.comment + '»' : '') }), payLine(active, 'adv-active-pay'),
         info.closed ? h('p', { class: 'help', text: 'Приём закрыт — изменить или отменить заказ уже нельзя.' })
           : h('div', { class: 'btnrow mt' }, h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'adv-edit', onclick: function () { S.advEdit = true; render(); } }, 'Изменить'), h('button', { class: 'btn danger', type: 'button', 'data-testid': 'adv-cancel', onclick: function () {
             confirmDlg({ title: 'Отменить заказ аванса?', yes: 'Да, отменить', no: 'Нет, оставить', danger: true, body: [h('p', { class: 'cap', text: 'Заказ на ' + money(active.amount) + ' будет отменён. Новый можно оформить до пятницы ' + hh(CFG.advDeadlineHour) + '.' })] }).then(function (ok) {
@@ -1686,7 +1811,7 @@
         h('div', { class: 'tipbox' }, ico('clock', 'sm'), h('span', { 'data-testid': 'adv-next', text: 'Следующее окно: с понедельника ' + dlong(w.nextWk) + ' до пятницы ' + dlong(w.nextDeadline) + ', ' + hh(CFG.advDeadlineHour) + '. Выдача в субботу, ' + dlong(w.nextPay) + '.' }))));
     } else if (!active || editing) {
       var blocked = !online ? 'Нет сети — заказать аванс можно только онлайн.' : fi.available < CFG.advMin ? (fi.earned === 0 ? 'Пока ничего не заработано за эту неделю — аванс станет доступен после первой смены.' : 'Сейчас доступно меньше ' + money(CFG.advMin) + ' — причины указаны выше. Сумма вырастет после новых смен или закрытия случаев.') : null;
-      var form = h('form', { class: 'card gap16', novalidate: true, 'aria-labelledby': 'rq-h', 'data-testid': 'adv-form' });
+      var pay, form = h('form', { class: 'card gap16', novalidate: true, 'aria-labelledby': 'rq-h', 'data-testid': 'adv-form' });
       form.appendChild(h('h2', { id: 'rq-h', text: editing ? 'Изменить заказ' : 'Заказать аванс' }));
       var inp = h('input', { class: 'inp', id: 'adv-amt', 'data-testid': 'adv-amount', type: 'text', inputmode: 'numeric', autocomplete: 'off', placeholder: '0', 'aria-describedby': 'adv-err adv-help', disabled: !!blocked });
       var err = h('div', { class: 'err', id: 'adv-err', role: 'alert', hidden: true, 'data-testid': 'adv-err' });
@@ -1700,7 +1825,7 @@
         var a = amt(), e = '';
         if (!a) e = 'Введите сумму'; else if (a < CFG.advMin) e = 'Минимальная сумма — ' + money(CFG.advMin); else if (a % CFG.advStep) e = 'Сумма кратна ' + CFG.advStep + ' ₽ (например ' + money(Math.floor(a / CFG.advStep) * CFG.advStep || CFG.advStep) + ')'; else if (a > fi.available) e = 'Нельзя больше доступного: ' + money(fi.available);
         var vis = show && !!e && a > 0; err.hidden = !vis; clear(err); if (e) { err.appendChild(ico('alert', 'sm')); err.appendChild(document.createTextNode(e)); }
-        inp.setAttribute('aria-invalid', vis ? 'true' : 'false'); btn.disabled = !!e || !!blocked;
+        inp.setAttribute('aria-invalid', vis ? 'true' : 'false'); btn.disabled = !!e || !!blocked || !(typeof pay === 'undefined' || pay.ok());
         left.textContent = money(Math.max(0, fi.available - (e ? 0 : a))); if (rng && a >= CFG.advMin && a <= fi.available) rng.value = String(a); return !e;
       }
       inp.addEventListener('input', function () { var a = amt(); inp.value = a ? num(a).replace(/\u00a0/g, ' ') : ''; validate(true); });
@@ -1714,6 +1839,8 @@
         rng ? h('div', { class: 'rangew' }, h('span', { class: 'num', text: num(CFG.advMin) }), rng, h('span', { class: 'num', text: num(fi.available) })) : null,
         h('p', { class: 'help', id: 'adv-help' }, 'Шаг ' + CFG.advStep + ' ₽, не больше ' + money(fi.available) + '. Останется доступно после заказа: ', left), quick));
       form.appendChild(h('div', { class: 'field' }, h('label', { class: 'l', for: 'adv-cm' }, 'Комментарий ', h('span', { text: 'необязательно' })), ta, h('div', { class: 'help row between' }, h('span', { text: 'Для чего нужны деньги' }), cnt)));
+      var pay = payBlock({ prev: editing ? active : null, required: !!CFG.cardRequired, disabled: !!blocked, onChange: function () { validate(false); } });
+      form.appendChild(pay.el);
       if (blocked) form.appendChild(h('div', { class: 'alert info', 'data-testid': 'adv-blocked' }, ico('info'), h('div', null, h('span', { text: blocked }))));
       if (editing) form.appendChild(h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'adv-edit-cancel', onclick: function () { S.advEdit = false; render(); } }, 'Не менять'));
       form.appendChild(btn);
@@ -1724,13 +1851,14 @@
         var a = amt();
         confirmDlg({ title: editing ? 'Изменить заказ аванса?' : 'Отправить заказ на аванс?', yes: editing ? 'Да, изменить' : 'Да, заказать', no: 'Отмена', body: [
           h('div', { class: 'casebox' }, h('b', { class: 'num', 'data-testid': 'confirm-amount', text: money(a) }), h('span', { text: 'Выдача в субботу, ' + dlong(w.pay) + (ta.value.trim() ? ' · ' + ta.value.trim() : '') })),
+          pay.label() ? h('p', { class: 'cap', 'data-testid': 'confirm-pay', text: 'Выплата на карту: ' + pay.label() }) : null,
           h('p', { class: 'cap num', 'data-testid': 'confirm-left', text: 'После заказа останется доступно: ' + money(fi.available - a) + '.' }),
           h('p', { class: 'cap', text: 'Заказ можно изменить или отменить до пятницы ' + hh(CFG.advDeadlineHour) + '. Аванс не гарантирован: итог сверяется при расчёте.' })] })
           .then(function (ok) {
             if (!ok) return; btn.disabled = true;
-            delay(LAT).then(function () { return editing ? backend.updateAdvance(active.id, a, ta.value.trim()) : backend.createAdvance(a, ta.value.trim()); }).then(function (r) {
-              if (!r.ok) { toast('Не отправлено: ' + ({ active: 'на этой неделе уже есть заказ', bad_amount: 'неверная сумма', over_limit: 'сумма больше доступной', closed: 'приём на неделю закрыт', not_found: 'заказ не найден' }[r.error] || netMsg(r.error) || 'ошибка'), 'bad'); S.advEdit = false; return refresh(); }
-              S.advEdit = false; toast(editing ? 'Заказ изменён — «На рассмотрении»' : 'Заказ на ' + money(a) + ' отправлен — «На рассмотрении»'); refresh();
+            delay(LAT).then(function () { return editing ? backend.updateAdvance(active.id, a, ta.value.trim(), pay.value()) : backend.createAdvance(a, ta.value.trim(), pay.value()); }).then(function (r) {
+              if (!r.ok) { toast('Не отправлено: ' + ({ active: 'на этой неделе уже есть заказ', bad_amount: 'неверная сумма', over_limit: 'сумма больше доступной', closed: 'приём на неделю закрыт', not_found: 'заказ не найден', bad_bank: 'проверьте название банка', bad_card: 'проверьте номер карты' }[r.error] || netMsg(r.error) || 'ошибка'), 'bad'); S.advEdit = false; return refresh(); }
+              pay.persist(); S.advEdit = false; toast(editing ? 'Заказ изменён — «На рассмотрении»' : 'Заказ на ' + money(a) + ' отправлен — «На рассмотрении»'); refresh();
             });
           });
       });
@@ -1743,7 +1871,7 @@
       d.advances.slice().sort(function (a, b) { return (a.date + a.time) < (b.date + b.time) ? 1 : -1; }).forEach(function (a) {
         var st = ADV_ST[a.status];
         ul.appendChild(h('div', { class: 'hist', role: 'listitem', 'data-status': a.status }, h('div', { class: 'grow' }, h('div', { class: 'row between' }, h('span', { class: 'am num', text: money(a.amount) }), chip(a.status === 'issued' ? 'Выдан в субботу' : st[0], st[1], a.status === 'issued' ? 'check' : a.status === 'rejected' || a.status === 'cancelled' ? 'x' : 'clock')),
-          h('div', { class: 'cap', text: 'Заказ ' + dmy(a.date) + ' в ' + a.time + (a.payDate ? ' · выдача ' + dm(a.payDate) : '') }), a.comment ? h('div', { class: 'cm', text: '«' + a.comment + '»' }) : null, a.answer || a.status === 'rejected' ? h('div', { class: 'ans', 'data-testid': 'adv-answer', text: (a.status === 'rejected' ? 'Причина: ' : 'Ответ: ') + (a.answer || 'не указана, уточните у администратора') }) : null)));
+          h('div', { class: 'cap', text: 'Заказ ' + dmy(a.date) + ' в ' + a.time + (a.payDate ? ' · выдача ' + dm(a.payDate) : '') }), a.comment ? h('div', { class: 'cm', text: '«' + a.comment + '»' }) : null, payLine(a, 'adv-hist-pay'), a.answer || a.status === 'rejected' ? h('div', { class: 'ans', 'data-testid': 'adv-answer', text: (a.status === 'rejected' ? 'Причина: ' : 'Ответ: ') + (a.answer || 'не указана, уточните у администратора') }) : null)));
       }); hist.appendChild(ul); }
     v.appendChild(hist);
     applyWidths(v); return v;
@@ -1774,7 +1902,7 @@
   }
   function logout(notice) {   // notice (строка) - автовыход с сообщением на экране входа; без неё - обычный выход
     clearTimeout(autoT); clearInterval(L.timer);
-    localStorage.removeItem(SESSK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.iadd');   // сессия, кэш данных, черновики
+    localStorage.removeItem(SESSK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.card'); localStorage.removeItem('pr.iadd');   // сессия, кэш данных, черновики
     openStack.slice().forEach(function (c) { c.close(true); });
     S.data = null; S.calc = null; S.stale = false; S.consent = null; L = { step: 'phone', phone: '', timer: null, readyAt: 0, notice: typeof notice === 'string' ? notice : '' };
     location.hash = '#/login'; boot(); if (typeof notice !== 'string') toast('Вы вышли из кабинета');
