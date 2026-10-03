@@ -117,6 +117,21 @@
     if (String(v.names || '').length > LIM.names) e.names = 'names_long';
     return e;
   }
+  /* геопозиция для запроса кода админа: короткий запрос (до ~8 с), отказ или недоступность не мешают входу; координаты уходят только вместе с запросом кода */
+  function geoGet() {
+    return new Promise(function (res) {
+      if (!LIVE || !navigator.geolocation) return res(null);
+      var done = false, tm = setTimeout(function () { fin(null); }, 8500);
+      function fin(v) { if (done) return; done = true; clearTimeout(tm); res(v); }
+      try {
+        navigator.geolocation.getCurrentPosition(function (p) {
+          var c = p && p.coords; if (!c || typeof c.latitude !== 'number' || typeof c.longitude !== 'number' || !isFinite(c.latitude) || !isFinite(c.longitude)) return fin(null);
+          fin({ lat: c.latitude, lon: c.longitude, accuracy: typeof c.accuracy === 'number' && isFinite(c.accuracy) ? Math.round(c.accuracy) : undefined });
+        }, function () { fin(null); }, { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 });
+      } catch (e) { fin(null); }
+    });
+  }
+  function withGeo(d) { return geoGet().then(function (g) { if (g) { d.lat = g.lat; d.lon = g.lon; if (g.accuracy !== undefined) d.accuracy = g.accuracy; } return d; }); }
   var ERR = {
     network: 'Нет связи с сервером. Проверьте интернет и повторите.', server: 'Сервер ответил ошибкой. Повторите через минуту.', busy: 'Таблица занята другим действием. Повторите через несколько секунд.',
     disabled: 'Вход по админ-коду выключен на сервере (ADMIN_ENABLED=0).', unknown_action: 'Сервер не знает этого действия: вставьте свежий Code.gs (см. DEPLOY.md, раздел «Учёт такси»).',
@@ -298,13 +313,15 @@
     var btn = h('button', { class: 'btn', type: 'button', 'data-testid': emp ? 'req-code-emp' : 'req-code' }, ico('send', 'sm'), label), err = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'login-err' });
     var ph = h('input', { class: 'inp', type: 'tel', inputmode: 'tel', autocomplete: 'tel', maxlength: '24', placeholder: '+7 900 000-00-01', 'aria-label': emp ? 'Номер телефона' : 'Ваш номер телефона', 'data-testid': emp ? 'emp-phone' : 'adm-phone', value: L.phone || (emp ? '' : saved.phone) || '' });
     var nm = emp ? null : h('input', { class: 'inp', type: 'text', autocomplete: 'name', maxlength: '80', placeholder: 'Например: Иванов Пётр', 'aria-label': 'Ваше ФИО (по желанию)', 'data-testid': 'adm-name', value: L.name || saved.name || '' });
-    function fail(t) { clear(btn); btn.appendChild(ico('send', 'sm')); btn.appendChild(document.createTextNode(label)); btn.disabled = false; err.textContent = t; err.hidden = false; }
+    var geoHint = h('p', { class: 'help', role: 'status', hidden: true, 'data-testid': 'geo-hint', text: 'Разрешите определение местоположения: оно уйдёт админу вместе с запросом кода. Если откажете, код всё равно придёт.' });
+    function fail(t) { clear(btn); btn.appendChild(ico('send', 'sm')); btn.appendChild(document.createTextNode(label)); btn.disabled = false; err.textContent = t; err.hidden = false; geoHint.hidden = true; }
     btn.addEventListener('click', function () {
       if (navigator.onLine === false) { err.textContent = ERR.network; err.hidden = false; return; }
       var d = ph.value.replace(/\D/g, ''); if (d.length < 10 || d.length > 12) { err.textContent = ERR.bad_phone; err.hidden = false; ph.focus(); return; } L.phone = ph.value.trim();
       if (!emp) { L.name = nm.value.trim(); store(WHOK, { phone: L.phone, name: L.name }); }
-      btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…'));
-      (emp ? call('codeRequest', { phone: L.phone, purpose: 'taxi' }) : call('adminCodeRequest', { purpose: 'taxi', phone: L.phone, name: L.name })).then(function (r) {
+      btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); err.hidden = true;
+      if (!emp && LIVE) { btn.appendChild(document.createTextNode(' Определяем местоположение…')); geoHint.hidden = false; } else btn.appendChild(document.createTextNode(' Отправляем…'));
+      (emp ? call('codeRequest', { phone: L.phone, purpose: 'taxi' }) : withGeo({ purpose: 'taxi', phone: L.phone, name: L.name }).then(function (d) { clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…')); geoHint.hidden = true; return call('adminCodeRequest', d); })).then(function (r) {
         if (r.error === 'locked') { L.step = 'code'; L.lockUntil = r.until; return renderLogin(); }
         if (emp && r.ok && r.closed) return fail(errText({ error: 'closed', from: r.from, to: r.to }));
         if (!r.ok) return fail(errText(r));
@@ -312,7 +329,7 @@
       });
     });
     if (ph) ph.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); btn.click(); } });
-    v.appendChild(h('div', { class: 'gap12' }, h('div', { class: 'field' }, h('label', { class: 'l', text: emp ? 'Телефон' : 'Ваш телефон' }), ph), nm ? h('div', { class: 'field' }, h('label', { class: 'l' }, 'Ваше ФИО ', h('span', { text: 'по желанию' })), nm) : null, btn, err));
+    v.appendChild(h('div', { class: 'gap12' }, h('div', { class: 'field' }, h('label', { class: 'l', text: emp ? 'Телефон' : 'Ваш телефон' }), ph), nm ? h('div', { class: 'field' }, h('label', { class: 'l' }, 'Ваше ФИО ', h('span', { text: 'по желанию' })), nm) : null, btn, geoHint, err));
     v.appendChild(h('div', { class: 'steps' }, h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: emp ? 'Введите свой номер телефона и нажмите «Получить код»: 4 цифры придут вам в Telegram.' : 'Введите свой номер телефона и нажмите «Получить код в Telegram»: админ увидит, кто просит доступ, и 4 цифры придут в админский чат.' })), h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: emp ? 'Введите код. Сессия держится до конца рабочего дня (до 22:00), потом код запросите снова.' : 'Введите код. Сессия держится 12 часов, потом код запросите снова.' }))));
     v.appendChild(h('button', { class: 'link tx-mode', type: 'button', 'data-testid': emp ? 'mode-admin' : 'mode-emp', onclick: function () { L = newL(emp ? 'admin' : 'emp', L.phone); renderLogin(); } }, emp ? 'Я администратор' : 'Я сотрудник: войти по номеру телефона'));
   }
@@ -344,7 +361,7 @@
     go.addEventListener('click', submit);
     function tick() { var left = Math.ceil((L.readyAt - Date.now()) / 1000); resend.disabled = left > 0; resend.textContent = left > 0 ? 'Запросить код ещё раз (' + left + ' с)' : 'Запросить код ещё раз'; }
     resend.addEventListener('click', function () {
-      (L.mode === 'emp' ? call('codeRequest', { phone: L.phone, purpose: 'taxi' }) : call('adminCodeRequest', { purpose: 'taxi', phone: L.phone, name: L.name })).then(function (r) {
+      (L.mode === 'emp' ? call('codeRequest', { phone: L.phone, purpose: 'taxi' }) : withGeo({ purpose: 'taxi', phone: L.phone, name: L.name }).then(function (d) { return call('adminCodeRequest', d); })).then(function (r) {
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         if (!r.ok) { toast(errText(r), 'bad'); return; }
         if (r.closed) { toast(errText({ error: 'closed', from: r.from, to: r.to }), 'bad'); return; }

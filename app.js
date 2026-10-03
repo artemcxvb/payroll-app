@@ -330,11 +330,16 @@
   };
   /* админские действия (в реальности — админ в таблице/боте) */
   var admin = {
+    paid: function (id, n) {   // демо: админ изменил фактически выданную сумму (на сервере - adminAdvanceSetPaid, Telegram сотруднику не уходит)
+      var s = srv(), a = s.advances.filter(function (x) { return x.id === id; })[0]; if (!a || a.status !== 'issued' || !(n > 0)) return;
+      if (!(a.requested > 0)) a.requested = a.amount; a.amount = n;
+      s.cases.forEach(function (c) { if (c.kind === 'advance' && c.advId === id) c.amount = n; }); save(s); refresh();
+    },
     advance: function (id, st) {
       var s = srv(), a = s.advances.filter(function (x) { return x.id === id; })[0]; if (!a) return;
       a.status = st; a.decidedAt = new Date().toISOString();
       if (st === 'rejected') a.answer = 'Не согласовано: есть незакрытые случаи брака (демо).';
-      if (st === 'issued') s.cases.push({ id: 'c' + rid(), periodId: M.periods[0].id, date: M.today, kind: 'advance', title: 'Аванс (выдан ' + dm(a.payDate || M.today) + ')', amount: a.amount });
+      if (st === 'issued') s.cases.push({ id: 'c' + rid(), periodId: M.periods[0].id, date: M.today, kind: 'advance', advId: a.id, title: 'Аванс (выдан ' + dm(a.payDate || M.today) + ')', amount: a.amount });
       save(s); refresh();
     },
     application: function (id, st) { var s = srv(); s.applications.forEach(function (x) { if (x.id === id) x.status = st; }); save(s); refresh(); },
@@ -1870,8 +1875,8 @@
     else { var ul = h('div', { class: 'gap16', role: 'list' });
       d.advances.slice().sort(function (a, b) { return (a.date + a.time) < (b.date + b.time) ? 1 : -1; }).forEach(function (a) {
         var st = ADV_ST[a.status];
-        ul.appendChild(h('div', { class: 'hist', role: 'listitem', 'data-status': a.status }, h('div', { class: 'grow' }, h('div', { class: 'row between' }, h('span', { class: 'am num', text: money(a.amount) }), chip(a.status === 'issued' ? 'Выдан в субботу' : st[0], st[1], a.status === 'issued' ? 'check' : a.status === 'rejected' || a.status === 'cancelled' ? 'x' : 'clock')),
-          h('div', { class: 'cap', text: 'Заказ ' + dmy(a.date) + ' в ' + a.time + (a.payDate ? ' · выдача ' + dm(a.payDate) : '') }), a.comment ? h('div', { class: 'cm', text: '«' + a.comment + '»' }) : null, payLine(a, 'adv-hist-pay'), a.answer || a.status === 'rejected' ? h('div', { class: 'ans', 'data-testid': 'adv-answer', text: (a.status === 'rejected' ? 'Причина: ' : 'Ответ: ') + (a.answer || 'не указана, уточните у администратора') }) : null)));
+        ul.appendChild(h('div', { class: 'hist', role: 'listitem', 'data-status': a.status }, h('div', { class: 'grow' }, h('div', { class: 'row between' }, h('span', { class: 'am num', 'data-testid': 'adv-hist-amt', text: money(a.amount) }), chip(a.status === 'issued' ? 'Выдан в субботу' : st[0], st[1], a.status === 'issued' ? 'check' : a.status === 'rejected' || a.status === 'cancelled' ? 'x' : 'clock')),
+          h('div', { class: 'cap', text: 'Заказ ' + dmy(a.date) + ' в ' + a.time + (a.payDate ? ' · выдача ' + dm(a.payDate) : '') }), a.status === 'issued' && a.requested > 0 && a.requested !== a.amount ? h('div', { class: 'cap', 'data-testid': 'adv-hist-req', text: 'Выдано ' + money(a.amount) + ', вы запрашивали ' + money(a.requested) }) : null, a.comment ? h('div', { class: 'cm', text: '«' + a.comment + '»' }) : null, payLine(a, 'adv-hist-pay'), a.answer || a.status === 'rejected' ? h('div', { class: 'ans', 'data-testid': 'adv-answer', text: (a.status === 'rejected' ? 'Причина: ' : 'Ответ: ') + (a.answer || 'не указана, уточните у администратора') }) : null)));
       }); hist.appendChild(ul); }
     v.appendChild(hist);
     applyWidths(v); return v;
@@ -2011,6 +2016,10 @@
         box.appendChild(h('div', { class: 'devrow' }, money(a.amount) + ' · ' + ADV_ST[a.status][0], h('br'),
           a.status === 'pending' ? [h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-approve', onclick: function () { admin.advance(a.id, 'approved'); } }, 'Одобрить'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-reject', onclick: function () { admin.advance(a.id, 'rejected'); } }, 'Отклонить')] : null,
           h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-issue', onclick: function () { admin.advance(a.id, 'issued'); } }, 'Выдать')));
+      });
+      if (session()) s.advances.filter(function (a) { return a.status === 'issued'; }).slice(0, 2).forEach(function (a) {
+        box.appendChild(h('div', { class: 'devrow' }, 'Выдано ' + money(a.amount) + (a.requested > 0 && a.requested !== a.amount ? ' (просили ' + money(a.requested) + ')' : ''), h('br'),
+          h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-paid-less', onclick: function () { admin.paid(a.id, Math.max(100, a.amount - 500)); } }, 'Выдано на 500 ₽ меньше')));
       });
       if (session()) s.cases.filter(function (c) { return c.expl && c.expl.status === 'sent'; }).forEach(function (c) { box.appendChild(h('div', { class: 'devrow' }, 'Объяснение: ' + c.title.slice(0, 28), h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-accept', onclick: function () { admin.accept(c.id); } }, 'Принять'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-return', onclick: function () { admin.returnExpl(c.id, 'Фото нечёткое. Снимите повреждение крупнее и приложите ещё одно.'); } }, 'Вернуть'))); });
       if (session()) s.incidents.filter(function (i) { return i.status === 'review'; }).forEach(function (i) { box.appendChild(h('div', { class: 'devrow' }, 'Происшествие: ' + i.desc.slice(0, 26), h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-accept', onclick: function () { admin.acceptIncident(i.id); } }, 'Принять'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-return', onclick: function () { admin.decideIncident(i.id, 'returned', 'Не видно номер паллеты на фото. Добавьте, когда и кого вы уведомили.'); } }, 'Вернуть'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-reject', onclick: function () { admin.decideIncident(i.id, 'rejected', 'Это не ваша смена, случай передан другому сотруднику.'); } }, 'Отклонить'))); });

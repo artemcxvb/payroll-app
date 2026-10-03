@@ -6,7 +6,7 @@
   var APPC = window.APP_CONFIG || {}, LIVE = APPC.mode === 'live' && /^https:\/\//.test(APPC.backendUrl || '');
   var qs = new URLSearchParams(location.search), LAT = LIVE ? 0 : qs.has('lat') ? +qs.get('lat') : 150;
   var WHOK = 'pr.admin.who', SESSK = 'pr.admin.session', DEMOK = 'pr.admin.demo', THEMEK = 'pr.theme', NBSP = '\u00a0';
-  var REASON_MIN = 3, REASON_MAX = 300;
+  var REASON_MIN = 3, REASON_MAX = 300, PAID_MAX = 10000;   // PAID_MAX = лимит аванса на неделю (ADV_WEEK_LIMIT), сервер проверяет ещё раз
 
   /* ---------- утилиты ---------- */
   function h(tag, props) {
@@ -130,7 +130,7 @@
     return { adv: [
         { id: 'A1', created: n, week: '2026-09-28', payDate: '2026-10-03', phone: '79000000001', name: 'Тестов Иван Петрович', amount: 3000, comment: 'На проезд и продукты', status: 'pending', statusText: 'Новая', answer: '', available: 5500, reserve: 1500, bank: 'Сбербанк', card: '4276000000000009', last4: '0009' },
         { id: 'A2', created: n, week: '2026-09-28', payDate: '2026-10-03', phone: '79000000002', name: 'Образцова Мария Сергеевна', amount: 5000, comment: '', status: 'approved', statusText: 'Одобрен', answer: '', available: 7000, reserve: 0, bank: 'Т-Банк', card: '5213240000000004', last4: '0004' },
-        { id: 'A3', created: n, week: '2026-09-21', payDate: '2026-09-26', phone: '79000000003', name: 'Демов Олег Викторович', amount: 2000, comment: '', status: 'issued', statusText: 'Выдан', answer: '', available: 4000, reserve: 0, bank: '', card: '', last4: '' } ],
+        { id: 'A3', created: n, week: '2026-09-21', payDate: '2026-09-26', phone: '79000000003', name: 'Демов Олег Викторович', amount: 2000, comment: '', status: 'issued', statusText: 'Выдан', answer: '', available: 4000, reserve: 0, bank: '', card: '', last4: '', paid: 2000 } ],
       expl: [ { id: 'X1', created: n, phone: '79000000001', name: 'Тестов Иван Петрович', caseId: 's7', kind: 'брак', caseDate: '2026-09-17', amount: 3000, text: 'Задел стеллаж погрузчиком при развороте, сразу сообщил бригадиру и сфотографировал повреждения.', files: ['app:/Объяснения/2026-09/E1/s7_1.jpg', 'app:/Объяснения/2026-09/E1/s7_2.jpg'], status: 'sent', statusText: 'Отправлено', answer: '' } ],
       inc: [ { id: 'I1', created: n, date: '2026-09-29', phone: '79000000002', name: 'Образцова Мария Сергеевна', type: 'Порча имущества', desc: 'Разбит защитный борт стеллажа', text: 'При разгрузке паллеты погрузчик задел борт. Сообщила бригадиру, борт заменён.', scene: ['app:/Происшествия/2026-09/E2/I1/scene_1.jpg'], damage: ['app:/Происшествия/2026-09/E2/I1/damage_1.jpg'], acts: ['app:/Происшествия/2026-09/E2/I1/act_1.pdf'], status: 'review', statusText: 'Отправлено, ждёт проверки', answer: '', addendum: '[2026-09-30 10:15] Дополнение: акт подписан начальником смены.' } ],
       apps: [ { id: 'J1', created: n, jobId: 'j1', title: 'Бригадир смены', phone: '79000000003', name: 'Демов Олег Викторович', tab: '', comment: 'Есть опыт 3 года', status: 'sent', statusText: 'Отправлен', answer: '' } ],
@@ -176,7 +176,8 @@
     if (action === 'adminSummary') {
       var pe = s.adv.filter(function (a) { return a.status === 'pending'; }), ap = s.adv.filter(function (a) { return a.status === 'approved'; });
       function sm(l) { return l.reduce(function (t, x) { return t + x.amount; }, 0); }
-      return demoRes({ ok: true, today: nowMsk().slice(0, 10), payDate: '2026-10-03', advances: { pending: pe.length, pendingSum: sm(pe), approved: ap.length, approvedSum: sm(ap), approvedForPay: ap.length, approvedForPaySum: sm(ap) },
+      var iss = s.adv.filter(function (a) { return a.status === 'issued' && a.payDate === '2026-10-03'; });
+      return demoRes({ ok: true, today: nowMsk().slice(0, 10), payDate: '2026-10-03', advances: { pending: pe.length, pendingSum: sm(pe), approved: ap.length, approvedSum: sm(ap), approvedForPay: ap.length, approvedForPaySum: sm(ap), issued: iss.length, issuedSum: iss.reduce(function (t, x) { return t + x.paid; }, 0), issuedChanged: iss.filter(function (x) { return x.paid !== x.amount; }).length, issuedPayDate: '2026-10-03' },
         explanations: { sent: counts(s.expl, 'sent') }, incidents: { review: counts(s.inc, 'review') }, applications: { sent: counts(s.apps, 'sent') }, blocked: counts(s.acc, 'blocked'),
         notify: { recipients: 12, queue: 0, nextAt: s.notifyAt && s.notifyAt + 1800000 > Date.now() ? s.notifyAt + 1800000 : 0, quiet: false, from: 6, to: 22 },
         promo: promoDemoInfo(s) });
@@ -197,13 +198,23 @@
       return demoRes({ ok: true, sent: 10, failed: 1, skipped: 2, remaining: 0 });
     }
     if (action === 'adminPromoPreview' || action === 'adminPromoSend' || action === 'adminPromoTest' || action === 'adminPromoDiscard') return demoRes(demoPromo(action, d, s, logit));
+    if (action === 'adminAdvanceSetPaid') {   // демо: те же проверки, что на сервере
+      var pa = s.adv.filter(function (x) { return x.id === d.id; })[0], pv = d.paid, why2 = String(d.reason || '').trim();
+      if (typeof pv !== 'number' || !isFinite(pv) || pv !== Math.floor(pv) || pv <= 0) return demoRes({ ok: false, error: 'bad_amount' });
+      if (pv > PAID_MAX) return demoRes({ ok: false, error: 'over_limit' }); if (why2.length > REASON_MAX) return demoRes({ ok: false, error: 'reason_long' });
+      if (!pa) return demoRes({ ok: false, error: 'not_found' }); if (pa.status !== 'issued') return demoRes({ ok: false, error: 'state', status: pa.status, statusText: pa.statusText });
+      var wasP = pa.paid > 0 ? pa.paid : pa.amount; if (d.was != null && d.was !== wasP) return demoRes({ ok: false, error: 'state', status: pa.status, statusText: pa.statusText, paid: wasP });
+      if (pv === wasP) return demoRes({ ok: true, same: true, paid: pv, was: wasP });
+      pa.paid = pv; logit('Аванс: изменена выданная сумма', pa.id, pa.name + ' | было ' + money(wasP) + ' → стало ' + money(pv) + ' (запрошено ' + money(pa.amount) + ')' + (why2 ? ' | причина: ' + why2 : '')); store(DEMOK, s);
+      return demoRes({ ok: true, paid: pv, was: wasP });
+    }
     var key = { adminAdvanceDecide: 'adv', adminExplDecide: 'expl', adminIncidentDecide: 'inc', adminAppMark: 'apps' }[action];
     if (key) {
       var K = KINDS[key], act = K.acts.filter(function (x) { return x.to === d.to; })[0]; if (!act) return demoRes({ ok: false, error: 'bad_action' });
       var reason = String(d.reason || '').trim(); if (act.reason && reason.length < REASON_MIN) return demoRes({ ok: false, error: 'reason_required' });
       var it = s[key].filter(function (x) { return x.id === d.id; })[0]; if (!it) return demoRes({ ok: false, error: 'not_found' });
       if (act.from.indexOf(it.status) < 0) return demoRes({ ok: false, error: 'state', status: it.status, statusText: it.statusText });
-      it.status = CLOSED_CODE[d.to] || d.to; it.statusText = act.text; if (reason) it.answer = reason;
+      it.status = CLOSED_CODE[d.to] || d.to; it.statusText = act.text; if (reason) it.answer = reason; if (key === 'adv' && d.to === 'issued' && !(it.paid > 0)) it.paid = it.amount;
       logit(K.label + ': ' + act.text, it.id, it.name + (reason ? ' | причина: ' + reason : '')); store(DEMOK, s); return demoRes({ ok: true, status: it.status, statusText: act.text });
     }
     if (action === 'adminBlock' || action === 'adminUnblock') {
@@ -240,7 +251,22 @@
     });
   }
   function endSession() { localStorage.removeItem(SESSK); S.promo = { text: '', link: '', pick: '', res: null, busy: false }; S.promoItems = []; S.sum = null; S.log = null; S.data = {}; S.err = {}; L = { step: 'start', readyAt: 0, lockUntil: 0, wait: false }; render(); }
-  var ERR = { network: 'Нет связи с сервером. Проверьте интернет и повторите.', server: 'Сервер ответил ошибкой. Повторите через минуту.', busy: 'Таблица занята другим действием. Повторите через несколько секунд.', disabled: 'Кабинет админа выключен (ADMIN_ENABLED=0).', unknown_action: 'Сервер не знает этого действия: обновите Code.gs (см. DEPLOY.md).', not_found: 'Запись не найдена — возможно, строку удалили в таблице.', bad_phone: 'Нужен мобильный номер РФ, например +7 900 123-45-67.', reason_required: 'Укажите причину (не короче 3 символов).', reason_long: 'Причина слишком длинная (до 300 символов).', unavailable: 'Файл сейчас недоступен на Яндекс Диске.', demo: 'В демо файлы не открываются.' };
+  /* геопозиция для запроса кода админа: короткий запрос (до ~8 с), отказ или недоступность не мешают входу; координаты уходят только вместе с запросом кода */
+  function geoGet() {
+    return new Promise(function (res) {
+      if (!LIVE || !navigator.geolocation) return res(null);
+      var done = false, tm = setTimeout(function () { fin(null); }, 8500);
+      function fin(v) { if (done) return; done = true; clearTimeout(tm); res(v); }
+      try {
+        navigator.geolocation.getCurrentPosition(function (p) {
+          var c = p && p.coords; if (!c || typeof c.latitude !== 'number' || typeof c.longitude !== 'number' || !isFinite(c.latitude) || !isFinite(c.longitude)) return fin(null);
+          fin({ lat: c.latitude, lon: c.longitude, accuracy: typeof c.accuracy === 'number' && isFinite(c.accuracy) ? Math.round(c.accuracy) : undefined });
+        }, function () { fin(null); }, { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 });
+      } catch (e) { fin(null); }
+    });
+  }
+  function withGeo(d) { return geoGet().then(function (g) { if (g) { d.lat = g.lat; d.lon = g.lon; if (g.accuracy !== undefined) d.accuracy = g.accuracy; } return d; }); }
+  var ERR = { network: 'Нет связи с сервером. Проверьте интернет и повторите.', server: 'Сервер ответил ошибкой. Повторите через минуту.', busy: 'Таблица занята другим действием. Повторите через несколько секунд.', disabled: 'Кабинет админа выключен (ADMIN_ENABLED=0).', unknown_action: 'Сервер не знает этого действия: обновите Code.gs (см. DEPLOY.md).', not_found: 'Запись не найдена — возможно, строку удалили в таблице.', bad_phone: 'Нужен мобильный номер РФ, например +7 900 123-45-67.', reason_required: 'Укажите причину (не короче 3 символов).', bad_amount: 'Сумма должна быть целым числом больше нуля.', over_limit: 'Сумма больше лимита аванса на неделю (' + PAID_MAX + ' ₽).', reason_long: 'Причина слишком длинная (до 300 символов).', unavailable: 'Файл сейчас недоступен на Яндекс Диске.', demo: 'В демо файлы не открываются.' };
   function errText(r) { return ERR[r && r.error] || 'Не получилось выполнить действие. Повторите.'; }
   function mskHm(ms) { return new Date(ms + 3 * 3600000).toISOString().slice(11, 16); }
   function notifyErr(r) {   // человеческие тексты отказов рассылки
@@ -344,19 +370,20 @@
     var saved = load(WHOK, {}), btn = h('button', { class: 'btn', type: 'button', 'data-testid': 'req-code' }, ico('send', 'sm'), 'Получить код в Telegram'), err = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'login-err' });
     var ph = h('input', { class: 'inp', type: 'tel', inputmode: 'tel', autocomplete: 'tel', maxlength: '24', placeholder: '+7 900 000-00-01', 'aria-label': 'Ваш номер телефона', 'data-testid': 'adm-phone', value: L.phone || saved.phone || '' });
     var nm = h('input', { class: 'inp', type: 'text', autocomplete: 'name', maxlength: '80', placeholder: 'Например: Иванов Пётр', 'aria-label': 'Ваше ФИО (по желанию)', 'data-testid': 'adm-name', value: L.name || saved.name || '' });
-    function fail(t) { clear(btn); btn.appendChild(ico('send', 'sm')); btn.appendChild(document.createTextNode('Получить код в Telegram')); btn.disabled = false; err.textContent = t; err.hidden = false; }
+    var geoHint = h('p', { class: 'help', role: 'status', hidden: true, 'data-testid': 'geo-hint', text: 'Разрешите определение местоположения: оно уйдёт админу вместе с запросом кода. Если откажете, код всё равно придёт.' });
+    function fail(t) { clear(btn); btn.appendChild(ico('send', 'sm')); btn.appendChild(document.createTextNode('Получить код в Telegram')); btn.disabled = false; err.textContent = t; err.hidden = false; geoHint.hidden = true; }
     btn.addEventListener('click', function () {
       if (navigator.onLine === false) { err.textContent = ERR.network; err.hidden = false; return; }
       var dg = ph.value.replace(/\D/g, ''); if (dg.length < 10 || dg.length > 12) { err.textContent = ERR.bad_phone; err.hidden = false; ph.focus(); return; }
       L.phone = ph.value.trim(); L.name = nm.value.trim(); store(WHOK, { phone: L.phone, name: L.name });
-      btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…'));
-      call('adminCodeRequest', { phone: L.phone, name: L.name }).then(function (r) {
+      btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(LIVE ? ' Определяем местоположение…' : ' Отправляем…')); geoHint.hidden = !LIVE; err.hidden = true;
+      withGeo({ phone: L.phone, name: L.name }).then(function (d) { clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…')); geoHint.hidden = true; return call('adminCodeRequest', d); }).then(function (r) {
         if (r.error === 'locked') { L.step = 'code'; L.lockUntil = r.until; return renderLogin(); }
         if (!r.ok) return fail(errText(r));
         L.step = 'code'; L.readyAt = Date.now() + (r.throttled ? (r.wait || 30) : 30) * 1000; renderLogin();
       });
     });
-    v.appendChild(h('div', { class: 'gap12' }, h('div', { class: 'field' }, h('label', { class: 'l', text: 'Ваш телефон' }), ph), h('div', { class: 'field' }, h('label', { class: 'l' }, 'Ваше ФИО ', h('span', { text: 'по желанию' })), nm), btn, err));
+    v.appendChild(h('div', { class: 'gap12' }, h('div', { class: 'field' }, h('label', { class: 'l', text: 'Ваш телефон' }), ph), h('div', { class: 'field' }, h('label', { class: 'l' }, 'Ваше ФИО ', h('span', { text: 'по желанию' })), nm), btn, geoHint, err));
     v.appendChild(h('div', { class: 'steps' }, h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: 'Введите свой номер телефона и нажмите «Получить код в Telegram»: админ увидит, кто просит доступ, и 4 цифры придут в админский чат.' })), h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: 'Введите код. Он действует 10 минут, вход держится 12 часов.' }))));
   }
   function loginCode(v) {
@@ -387,7 +414,7 @@
     go.addEventListener('click', submit);
     function tick() { var left = Math.ceil((L.readyAt - Date.now()) / 1000); resend.disabled = left > 0; resend.textContent = left > 0 ? 'Запросить код ещё раз (' + left + ' с)' : 'Запросить код ещё раз'; }
     resend.addEventListener('click', function () {
-      call('adminCodeRequest', { phone: L.phone, name: L.name }).then(function (r) {
+      resend.disabled = true; withGeo({ phone: L.phone, name: L.name }).then(function (d) { return call('adminCodeRequest', d); }).then(function (r) {
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         if (!r.ok) { toast(errText(r), 'bad'); return; }
         L.readyAt = Date.now() + (r.throttled ? (r.wait || 30) : 30) * 1000; tick(); toast('Код запрошен повторно — проверьте Telegram'); boxes.forEach(function (b) { b.value = ''; }); boxes[0].focus();
@@ -446,6 +473,39 @@
       });
     });
   }
+  /* «Изменить сумму»: фактически выданный аванс (может отличаться от запрошенного, в том числе у уже выданных). Сотруднику Telegram не уходит */
+  function paidFlow(it, cur) {
+    var done = false, ctl, busy = false;
+    function fin() { if (done) return; done = true; ctl.close(true); }
+    var inp = h('input', { class: 'inp', type: 'text', inputmode: 'numeric', autocomplete: 'off', maxlength: '6', 'data-testid': 'paid-amt', 'aria-label': 'Выдано, ₽', value: String(cur) });
+    var why = h('textarea', { class: 'inp', maxlength: String(REASON_MAX), 'data-testid': 'paid-reason', 'aria-label': 'Причина изменения (по желанию)', placeholder: 'Например: выдали на руки меньше' });
+    var err = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'paid-err' }), cnt = h('div', { class: 'cnt2', 'aria-hidden': 'true' });
+    var yes = h('button', { class: 'btn', type: 'button', 'data-testid': 'paid-save' }, 'Сохранить');
+    function parse() { var t = inp.value.replace(/[\s\u00a0]/g, ''); if (!/^\d+$/.test(t)) return NaN; return parseInt(t, 10); }
+    function check() {
+      var v = parse(), m = '';
+      if (inp.value.trim() === '') m = 'Введите сумму.'; else if (!isFinite(v) || v <= 0) m = ERR.bad_amount; else if (v > PAID_MAX) m = ERR.over_limit;
+      err.textContent = m; err.hidden = !m; inp.setAttribute('aria-invalid', m ? 'true' : 'false'); cnt.textContent = why.value.length + ' / ' + REASON_MAX; yes.disabled = !!m || busy; return !m;
+    }
+    inp.addEventListener('input', check); why.addEventListener('input', check);
+    yes.addEventListener('click', function () {
+      if (busy || !check()) return; var v = parse(); busy = true; yes.disabled = true; yes.textContent = 'Сохраняем…';
+      call('adminAdvanceSetPaid', { id: it.id, paid: v, was: cur, reason: why.value.trim() }).then(function (r) {
+        busy = false; yes.textContent = 'Сохранить';
+        if (r.ok) { fin(); toast(r.same ? 'Сумма не изменилась' : 'Выдано: ' + money(r.paid) + (r.was != null ? ' (было ' + money(r.was) + ')' : '')); reloadAfter('adv'); return; }
+        if (r.error === 'state') { fin(); toast('Уже изменено: ' + (r.paid != null ? 'выдано ' + money(r.paid) : 'статус «' + (r.statusText || r.status) + '»') + '. Список обновлён.', 'warn'); reloadAfter('adv'); return; }
+        if (r.error === 'auth' || r.error === 'disabled') { fin(); return; }
+        check(); err.textContent = errText(r); err.hidden = false;
+      });
+    });
+    var body = h('div', { class: 'gap12' }, h('p', { class: 'nm', 'data-testid': 'paid-who', text: it.name + ' · запрошено ' + money(it.amount) }),
+      h('div', { class: 'field' }, h('label', { class: 'l', text: 'Выдано, ₽' }), inp, err),
+      h('div', { class: 'reasonbox' }, h('label', { class: 'l' }, 'Причина изменения ', h('span', { text: 'по желанию' })), why, cnt),
+      h('p', { class: 'help', text: 'Сотрудник увидит новую сумму в приложении. Сообщение в Telegram ему не отправляется; изменение записывается в журнал.' }));
+    ctl = openDialog({ title: 'Изменить выданную сумму', dialog: true, alert: true, focus: function () { inp.focus(); inp.select(); }, onClose: function () { done = true; }, body: body,
+      footer: h('div', { class: 'btnrow' }, h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'paid-cancel', onclick: fin }, 'Отмена'), yes) });
+    check();
+  }
   function reloadAfter(tab) { loadTab(tab, true); loadSummary(); }
   function blockFlow(phone, name, fromForm) {
     var ph = String(phone || '').trim();
@@ -501,8 +561,12 @@
   }
   function cardAdv(it) {
     var c = h('article', { class: 'card acard', 'data-testid': 'card-' + it.id, 'data-status': it.status }); 
-    c.appendChild(headRow(it, h('div', { class: 'amt num', text: money(it.amount) }), phoneLine(x2(it)) + ' · ' + dmyT(it.created)));
+    var issued = it.status === 'issued', paid = issued ? (it.paid > 0 ? it.paid : it.amount) : 0;
+    c.appendChild(headRow(it, h('div', { class: 'amt num', 'data-testid': 'adm-amt-' + it.id, text: money(issued ? paid : it.amount) }), phoneLine(x2(it)) + ' · ' + dmyT(it.created)));
     c.appendChild(h('div', null, statusChip('adv', it)));
+    if (issued) c.appendChild(h('div', { class: 'paidrow' + (paid !== it.amount ? ' diff' : ''), 'data-testid': 'adm-paid-' + it.id },
+      h('div', { class: 'grow' }, h('div', { class: 'pl', text: 'Выдано' }), h('div', { class: 'pv num', 'data-testid': 'adm-paidv-' + it.id, text: money(paid) }), h('div', { class: 'cap', 'data-testid': 'adm-req-' + it.id, text: paid !== it.amount ? 'запрошено ' + money(it.amount) + ' · изменено админом' : 'запрошено ' + money(it.amount) })),
+      h('button', { class: 'btn secondary cp', type: 'button', 'data-testid': 'adm-paid-edit-' + it.id, onclick: function () { paidFlow(it, paid); } }, 'Изменить сумму')));
     c.appendChild(kv([['Неделя с (пн)', dmy(it.week)], ['Выдача (сб)', dmy(it.payDate)], ['Доступно на момент заявки', it.available ? money(it.available) : ''], ['Резерв', it.reserve ? money(it.reserve) : '']]));
     c.appendChild(payRow(it));
     add(c, txt('Комментарий сотрудника', it.comment)); add(c, txt('Ответ админа', it.answer, 'ans')); add(c, actsRow('adv', it, c)); return c;
@@ -600,6 +664,7 @@
     function tile(tab, n, label, sub, id) { return h('button', { class: 'card sumcard', type: 'button', 'data-testid': id, onclick: function () { go(tab); } }, h('span', { class: 'n num' + (n > 0 && tab !== 'acc' ? ' hot' : ''), text: String(n) }), h('span', { class: 'l', text: label }), sub ? h('span', { class: 's', text: sub }) : null); }
     g.appendChild(tile('adv', s.advances.pending, 'Авансы на рассмотрении', s.advances.pending ? 'на ' + money(s.advances.pendingSum) : 'новых нет', 'sum-adv'));
     g.appendChild(tile('adv', s.advances.approved, 'Одобрено, ждёт выдачи', s.advances.approved ? 'на ' + money(s.advances.approvedSum) + (s.payDate ? ' · выдача ' + dmy(s.payDate) : '') : 'нет', 'sum-adv-ok'));
+    if (s.advances.issued) { var pt = tile('adv', s.advances.issued, 'Выдано на ' + (s.advances.issuedPayDate ? dmy(s.advances.issuedPayDate) : 'эту субботу'), 'на ' + money(s.advances.issuedSum) + (s.advances.issuedChanged ? ' · сумма изменена: ' + s.advances.issuedChanged : ''), 'sum-adv-paid'); pt.firstChild.classList.remove('hot'); g.appendChild(pt); }
     g.appendChild(tile('expl', s.explanations.sent, 'Объяснения на проверке', '', 'sum-expl'));
     g.appendChild(tile('inc', s.incidents.review, 'Происшествия на проверке', '', 'sum-inc'));
     g.appendChild(tile('apps', s.applications.sent, 'Новые отклики', '', 'sum-apps'));
