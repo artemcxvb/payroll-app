@@ -151,12 +151,12 @@
   var CONSENT_VERSION = '2026-10-черновик';
   var CONSENT_TITLE = 'Согласие на обработку персональных данных';
   var CONSENT_TEXT = [
-    'Я, пользователь приложения «Мои выплаты», даю согласие ООО «Персональное Решение» (далее оператор) на обработку моих персональных данных: фамилии, имени, отчества, номера телефона, табельного номера, должности и места работы, сведений о моих сменах, выработке, выплатах и авансах, банка и номера банковской карты, которые я указываю для выплаты аванса, а также фотографий, актов и объяснительных, которые я сам загружаю в приложение.',
-    'Цели обработки: показать мне мои выплаты и выработку, принять мои заявки на аванс и выплатить аванс на мою карту, принять объяснительные и сведения о происшествиях, отправить мне код входа.',
-    'Срок хранения: данные хранятся, пока я работаю у оператора. Фотографии и файлы хранятся 12 месяцев с даты записи, затем переносятся в архив для удаления.',
+    'Я, пользователь приложения «Мои выплаты», даю согласие ООО «Персональное Решение» (далее оператор) на обработку моих персональных данных: фамилии, имени, отчества, номера телефона, табельного номера, должности и места работы, сведений о моих сменах, выработке, выплатах и авансах, банка и номера банковской карты, которые я указываю для выплаты аванса, а также фотографий, актов и объяснительных, которые я сам загружаю в приложение, а также моего местоположения (координат и точности) в момент запроса кода входа.',
+    'Цели обработки: показать мне мои выплаты и выработку, принять мои заявки на аванс и выплатить аванс на мою карту, принять объяснительные и сведения о происшествиях, отправить мне код входа и показать администратору, откуда запрошен код входа.',
+    'Срок хранения: данные хранятся, пока я работаю у оператора. Фотографии и файлы хранятся 12 месяцев с даты записи, затем переносятся в архив для удаления. Местоположение при запросе кода входа не хранится: оно передаётся один раз вместе с запросом и показывается администратору в Telegram.',
     'Я могу отозвать согласие или попросить удалить мои данные в любой момент, обратившись к бригадиру склада.'
   ];
-  var MYDATA_ITEMS = ['Фамилия, имя, отчество', 'Номер телефона', 'Табельный номер', 'Ваши заявки на аванс, объяснительные и сведения о происшествиях', 'Банк и номер банковской карты для выплаты аванса (сотрудник видит только последние 4 цифры, полный номер видит администратор)', 'Фото случаев и происшествий, акты и чеки, которые вы загрузили'];
+  var MYDATA_ITEMS = ['Фамилия, имя, отчество', 'Номер телефона', 'Табельный номер', 'Ваши заявки на аванс, объяснительные и сведения о происшествиях', 'Банк и номер банковской карты для выплаты аванса (сотрудник видит только последние 4 цифры, полный номер видит администратор)', 'Фото случаев и происшествий, акты и чеки, которые вы загрузили', 'Местоположение в момент запроса кода входа (обязательно для входа): передаётся только вместе с запросом, видно администратору в Telegram и нигде не сохраняется'];
   function srv() {
     var s = load(SK, null);
     if (!s) { s = { cases: JSON.parse(JSON.stringify(M.cases)), advances: JSON.parse(JSON.stringify(M.advances)), incidents: JSON.parse(JSON.stringify(M.incidents)), codes: {}, locks: {}, attempts: {}, tg: [], lastReq: {}, blocked: {} }; store(SK, s); }
@@ -169,13 +169,18 @@
   }
   function save(s) { store(SK, s); devRender(); }
   function userByPhone(p) { return M.users.filter(function (u) { return u.phone === p; })[0]; }
+  function lim(s, phone, now) {   // демо-копия серверных лимитов входа (Code.gs: llParse_), окно скользящее
+    if (!s.lim) s.lim = {}; var st = s.lim[phone] || { r: [], w: [], b: 0 }, from = now - CFG.windowH * 3600000;
+    st.r = st.r.filter(function (t) { return t > from; }); st.w = st.w.filter(function (t) { return t > from; }); if (st.b <= now) st.b = 0; s.lim[phone] = st; return st;
+  }
   var server = {
     requestCode: function (phone) {
-      var s = srv(), now = Date.now(), u = userByPhone(phone);
-      var lk = s.locks[phone]; if (lk && lk.until > now) return { ok: false, error: 'locked', until: lk.until };
+      var s = srv(), now = Date.now(), u = userByPhone(phone), st = lim(s, phone, now);   // лимиты входа: 3 запроса кода и 2 неверных кода за скользящие 3 часа на номер
+      if (st.b > now) return { ok: false, error: 'locked', until: st.b };
+      if (st.r.length >= CFG.reqMax) return { ok: false, error: 'req_limit', until: st.r[0] + CFG.windowH * 3600000 };
       var last = s.lastReq[phone] || 0;
       if (now - last < CFG.resendSec * 1000) return { ok: true, throttled: true, wait: Math.ceil((CFG.resendSec * 1000 - (now - last)) / 1000) };
-      s.lastReq[phone] = now;
+      s.lastReq[phone] = now; st.r.push(now);
       if (s.blocked[phone]) { /* заблокирован: кода нет, админу ничего, ответ клиенту тот же */ }
       else if (u) {
         var a = new Uint32Array(1); crypto.getRandomValues(a);
@@ -189,18 +194,18 @@
       return { ok: true };
     },
     verify: function (phone, code) {
-      var s = srv(), now = Date.now(), lk = s.locks[phone];
-      if (lk && lk.until > now) return { ok: false, error: 'locked', until: lk.until };
-      var rec = s.codes[phone], att = s.attempts;
+      var s = srv(), now = Date.now(), st = lim(s, phone, now);
+      if (st.b > now) return { ok: false, error: 'locked', until: st.b };
+      var rec = s.codes[phone];
       if (rec && rec.exp > now && rec.code === code && !s.blocked[phone]) {
-        delete s.codes[phone]; att[phone] = 0; save(s);
+        delete s.codes[phone]; save(s);
         store(SESSK, { phone: phone, token: rid(), at: now });
         return { ok: true };
       }
-      att[phone] = (att[phone] || 0) + 1;
-      if (att[phone] >= CFG.maxAttempts) { s.locks[phone] = { until: now + CFG.lockMin * 60000 }; att[phone] = 0; delete s.codes[phone]; save(s); return { ok: false, error: 'locked', until: s.locks[phone].until }; }
+      st.w.push(now);
+      if (st.w.length >= CFG.wrongMax) { st.b = st.w[0] + CFG.windowH * 3600000; st.w = []; delete s.codes[phone]; save(s); return { ok: false, error: 'locked', until: st.b }; }   // код сгорает, вход закрыт до конца окна
       save(s);
-      return { ok: false, error: 'wrong', left: CFG.maxAttempts - att[phone] };
+      return { ok: false, error: 'wrong', left: CFG.wrongMax - st.w.length };
     },
     consent: function (phone) {
       if (APPC.consentDemo === false) return { ok: true, version: CONSENT_VERSION, required: false };
@@ -349,7 +354,7 @@
     accept: function (id) { var s = srv(); s.cases.forEach(function (c) { if (c.id === id && c.expl) c.expl.status = 'accepted'; }); save(s); refresh(); },
     block: function () { var s = srv(), se = session(); if (se) { s.blocked[se.phone] = 1; save(s); } },
     unblockAll: function () { var s = srv(); s.blocked = {}; save(s); },
-    unlock: function () { var s = srv(); s.locks = {}; s.attempts = {}; s.lastReq = {}; save(s); },
+    unlock: function () { var s = srv(); s.locks = {}; s.attempts = {}; s.lastReq = {}; s.lim = {}; save(s); },   // демо: «Сбросить лимиты» из кабинета админа (окно 3 часа, блокировка, троттлинг)
     reset: function () { localStorage.removeItem(SK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.card'); devRender(); refresh(); }
   };
 
@@ -367,6 +372,34 @@
     return fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: raw, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store', redirect: 'follow', signal: ctl ? ctl.signal : undefined })
       .then(function (r) { return r.json(); }).then(function (r) { return r && typeof r === 'object' ? r : { ok: false, error: 'server' }; }).catch(function () { return { ok: false, error: 'network' }; })
       .then(function (r) { if (tm) clearTimeout(tm); return r; });
+  }
+  /* ---------- геопозиция при запросе кода: ОБЯЗАТЕЛЬНА (только live; в демо не требуется). Без разрешения запрос кода не уходит. Координаты нигде не сохраняются: идут только в запрос кода ---------- */
+  function geoGet() {
+    return new Promise(function (res) {
+      if (!navigator.geolocation) return res({ ok: false, reason: 'unsupported' });
+      var done = false, tm = setTimeout(function () { fin({ ok: false, reason: 'timeout' }); }, 11000);
+      function fin(v) { if (done) return; done = true; clearTimeout(tm); res(v); }
+      try {
+        navigator.geolocation.getCurrentPosition(function (p) {
+          var c = p && p.coords; if (!c || typeof c.latitude !== 'number' || typeof c.longitude !== 'number' || !isFinite(c.latitude) || !isFinite(c.longitude)) return fin({ ok: false, reason: 'unavailable' });
+          fin({ ok: true, lat: c.latitude, lon: c.longitude, accuracy: typeof c.accuracy === 'number' && isFinite(c.accuracy) ? Math.round(c.accuracy) : undefined });
+        }, function (e) { fin({ ok: false, reason: e && e.code === 1 ? 'denied' : e && e.code === 3 ? 'timeout' : 'unavailable' }); }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
+      } catch (e) { fin({ ok: false, reason: 'unavailable' }); }
+    });
+  }
+  var GEO_WHY = {
+    denied: 'Доступ к местоположению запрещён для этой страницы.', unavailable: 'Телефон не смог определить местоположение. Включите геолокацию (GPS) в настройках телефона.',
+    timeout: 'Местоположение не определилось за 10 секунд. Выйдите на открытое место, включите GPS и повторите.', unsupported: 'Этот браузер не умеет определять местоположение. Откройте приложение в Chrome или Safari.'
+  };
+  function geoNeed(reason, onRetry) {   // инструкция и кнопка «Повторить» (общий вид для экрана номера)
+    return h('div', { class: 'geoneed', role: 'alert', 'data-testid': 'geo-need' },
+      h('b', { text: 'Нужно разрешить определение местоположения' }),
+      h('p', { text: (GEO_WHY[reason] || GEO_WHY.denied) + ' Без этого код не запрашивается. Местоположение уходит только вместе с запросом кода и нигде не сохраняется.' }),
+      h('ul', null,
+        h('li', { text: 'iPhone: Настройки → Конфиденциальность и безопасность → Службы геолокации: включить, затем найти Safari (или «Мои выплаты») и выбрать «При использовании».' }),
+        h('li', { text: 'Android: нажмите на значок замка слева от адреса → Разрешения → Местоположение → Разрешить. Для установленного приложения: Настройки → Приложения → Мои выплаты → Разрешения → Местоположение.' }),
+        h('li', { text: 'Компьютер: значок замка слева от адреса → Местоположение → Разрешить.' })),
+      h('button', { class: 'btn', type: 'button', 'data-testid': 'geo-retry', onclick: onRetry }, 'Повторить'));
   }
   /* ---------- автовыход: после LOGIN_HOUR_TO (22:00 МСК) приложение закрыто, утром вход заново по коду (только live; в демо времени нет) ---------- */
   var HRSK = 'pr.hours', autoT = null;
@@ -419,7 +452,12 @@
   }
   function filesB64(a) { return Promise.all((a || []).map(function (f) { return blobB64(f.blob).then(function (b) { return { b64: b }; }); })); }
   var backend = LIVE ? {
-    requestCode: function (phone) { return post(APPC.backendUrl, { action: 'codeRequest', phone: phone, rid: rid() }); },
+    requestCode: function (phone) {
+      return geoGet().then(function (g) {
+        if (!g.ok) return { ok: false, error: 'geo', reason: g.reason };
+        return post(APPC.backendUrl, { action: 'codeRequest', phone: phone, rid: rid(), lat: g.lat, lon: g.lon, accuracy: g.accuracy });
+      });
+    },
     verify: function (phone, code) { return post(APPC.backendUrl, { action: 'codeVerify', phone: phone, code: code }).then(function (r) { if (r.ok && r.token) { store(SESSK, { phone: phone, token: r.token, at: Date.now() }); if (r.loginHours) rememberHours(r.loginHours); } return r; }); },
     me: function () { return api('me').then(function (r) { if (!r.ok) throw new Error(r.error || 'fail'); if (r.loginHours) rememberHours(r.loginHours); if (r.consent && r.consent.ok === false) return r; r.user.phone = session().phone; if (r.loginHours) rememberHours(r.loginHours); applyLive(r); return r; }); },
     submitExplanation: function (id, text, photos) { return filesB64(photos).then(function (ph) { return api('explainSubmit', { caseId: id, text: text, photos: ph, rid: rid() }); }); },
@@ -660,13 +698,18 @@
     if (S.blocked) return renderBlocked();
     tabbar.hidden = true; $('#offline').hidden = true; clear(root); clearInterval(L.timer);
     var v = h('main', { class: 'login', id: 'main' }); root.appendChild(v);
-    var lu = L.phone ? (LIVE ? (L.lockUntil || 0) : ((srv().locks[L.phone] || {}).until || 0)) : 0;
+    var lu = L.phone ? (LIVE ? (L.lockUntil || 0) : Math.max(L.lockUntil || 0, ((srv().lim || {})[L.phone] || {}).b || 0)) : 0;
     if (L.step === 'code' && lu > Date.now()) { loginLocked(v, lu); devRender(); return; }
     v.appendChild(h('div', { class: 'brand' }, h('div', { class: 'logo' }, ico('star', 'lg')), h('div', null, h('b', { text: 'Персональное Решение' }), h('span', { text: 'Кабинет исполнителя · СК Северная Звезда' }))));
     if (L.step === 'phone') loginPhone(v); else loginCode(v);
     v.appendChild(h('p', { class: 'foot', text: LIVE ? 'Данные видны только вам' : 'Демо-прототип · все данные вымышлены' }));
     devRender();
   }
+  function mskWhen(ms) {   // время по Москве: «17:10» или «05.10 в 02:40», если это не сегодня
+    var d = new Date(ms + 10800000), n = new Date(Date.now() + 10800000), hm = ('0' + d.getUTCHours()).slice(-2) + ':' + ('0' + d.getUTCMinutes()).slice(-2);
+    return d.toISOString().slice(0, 10) === n.toISOString().slice(0, 10) ? hm : ('0' + d.getUTCDate()).slice(-2) + '.' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + ' в ' + hm;
+  }
+  function reqLimitMsg(until) { return 'Лимит запросов кода исчерпан, обратитесь к администратору. Новый код можно будет запросить после ' + mskWhen(until) + ' (МСК).'; }
   function closedMsg(r) { return 'Вход возможен только с ' + (r && r.from >= 0 ? r.from : 6) + ':00 до ' + (r && r.to > 0 ? r.to : 22) + ':00 по Москве. Попробуйте позже.'; }   // часы входа задаёт сервер (6–22 МСК по умолчанию)
   function loginPhone(v) {
     var inp, btn, err = h('div', { class: 'err', id: 'ph-err', role: 'alert', hidden: true, 'data-testid': 'ph-err' });
@@ -678,24 +721,28 @@
     inp.value = fmt(L.phone.replace(/^7/, ''));
     btn = h('button', { class: 'btn', type: 'submit', 'data-testid': 'req-code' }, ico('send', 'sm'), 'Запросить код');
     btn.disabled = digits().length !== 10;
-    var form = h('form', { class: 'gap16', novalidate: true, onsubmit: function (e) {
-      e.preventDefault(); var d = digits(); if (d.length !== 10 || btn.disabled) return; L.notice = '';
+    var form = h('form', { class: 'gap16', novalidate: true, onsubmit: function (e) { e.preventDefault(); doReq(); } },
+      h('div', { class: 'field' }, h('label', { class: 'l', for: 'phone', text: 'Номер телефона' }), h('div', { class: 'phone' }, h('span', { class: 'pre', 'aria-hidden': 'true', text: '+7' }), inp), err, h('p', { class: 'help', id: 'ph-help', text: 'Тот номер, который вы сообщили бригадиру при оформлении.' })), L.geoErr ? geoNeed(L.geoErr, function () { doReq(true); }) : null, btn);
+    function doReq(retry) {
+      var d = digits(); if (d.length !== 10 || (btn.disabled && !retry)) return; L.notice = ''; L.reqUntil = 0;
       if (navigator.onLine === false) { err.textContent = 'Нет сети. Подключитесь к интернету и повторите.'; err.hidden = false; return; }
-      btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…'));
+      btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(LIVE ? ' Определяем местоположение…' : ' Отправляем…'));
       var phone = '7' + d;
       delay(LAT).then(function () { return backend.requestCode(phone); }).then(function (r) {
+        if (r.error === 'geo' || r.error === 'bad_geo') { L.phone = phone; L.step = 'phone'; L.geoErr = r.reason || 'unavailable'; return renderLogin(); }   // без геопозиции код не запрашивается: показываем инструкцию и «Повторить»
+        L.geoErr = '';
         if (r.error === 'network' || r.error === 'server' || r.error === 'bad_phone') { toast(r.error === 'bad_phone' ? 'Проверьте номер телефона' : 'Нет связи с сервером. Повторите позже.', 'bad'); return renderLogin(); }
         if (r.closed) { L.phone = phone; L.step = 'phone'; L.notice = closedMsg(r); return renderLogin(); }   // вне часов входа: остаёмся на вводе номера, код не запрашивался, таймера нет
+        if (r.error === 'req_limit') { L.phone = phone; L.step = 'phone'; L.lockUntil = 0; L.notice = reqLimitMsg(r.until); return renderLogin(); }   // остаёмся на вводе номера с понятным сообщением
         L.lockUntil = r.error === 'locked' ? r.until : 0;
         L.phone = phone; L.step = 'code'; L.readyAt = Date.now() + (r.throttled ? r.wait * 1000 : CFG.resendSec * 1000); renderLogin();
       });
-    } },
-      h('div', { class: 'field' }, h('label', { class: 'l', for: 'phone', text: 'Номер телефона' }), h('div', { class: 'phone' }, h('span', { class: 'pre', 'aria-hidden': 'true', text: '+7' }), inp), err, h('p', { class: 'help', id: 'ph-help', text: 'Тот номер, который вы сообщили бригадиру при оформлении.' })), btn);
+    }
     v.appendChild(h('h1', { text: 'Вход для исполнителей' }));
     v.appendChild(h('p', { class: 'lead', text: 'Доступ только по личному коду, который приходит вам в Telegram.' }));
     v.appendChild(form);
     v.appendChild(h('div', { class: 'steps' },
-      h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: 'Введите номер телефона и нажмите «Запросить код».' })),
+      h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: 'Введите номер телефона, нажмите «Запросить код» и разрешите определение местоположения: без него код не выдаётся.' })),
       h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: 'Код придёт вам лично в Telegram от бота ' + BOT_NAME + '. Впервые? Откройте бота, нажмите «Старт» и «Поделиться номером».' })),
       h('div', { class: 'stepi' }, h('i', { text: '3' }), h('span', { text: 'Введите 4 цифры — увидите только свои данные.' }))));
     setTimeout(function () { inp.focus(); }, 50);
@@ -719,7 +766,7 @@
         boxes.forEach(function (b) { b.value = ''; b.setAttribute('aria-invalid', 'true'); });
         otp.classList.remove('bad'); void otp.offsetWidth; otp.classList.add('bad');
         clear(go); go.appendChild(document.createTextNode('Войти')); go.disabled = true;
-        showErr('Неверный код. Осталось ' + r.left + ' ' + plural(r.left, ['попытка', 'попытки', 'попыток']) + '.');
+        showErr('Неверный код. Осталось ' + r.left + ' ' + plural(r.left, ['попытка', 'попытки', 'попыток']) + (r.left === 1 ? '. После ещё одной ошибки вход закроется на ' + CFG.windowH + ' часа.' : '.'));
         boxes[0].focus();
       });
     }
@@ -736,12 +783,15 @@
     go.addEventListener('click', submit);
     function tick() {
       var left = Math.ceil((L.readyAt - Date.now()) / 1000);
-      resend.disabled = left > 0; resend.textContent = left > 0 ? 'Запросить код ещё раз (' + left + ' с)' : 'Запросить код ещё раз';
+      var limOn = (L.reqUntil || 0) > Date.now();
+      resend.disabled = left > 0 || limOn; resend.textContent = limOn ? 'Лимит запросов кода исчерпан' : left > 0 ? 'Запросить код ещё раз (' + left + ' с)' : 'Запросить код ещё раз';
     }
     resend.addEventListener('click', function () {
       backend.requestCode(L.phone).then(function (r) {
+        if (r.error === 'geo' || r.error === 'bad_geo') { clearInterval(L.timer); L.step = 'phone'; L.geoErr = r.reason || 'unavailable'; return renderLogin(); }
         if (r.closed) { clearInterval(L.timer); L.step = 'phone'; L.notice = closedMsg(r); return renderLogin(); }
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
+        if (r.error === 'req_limit') { L.reqUntil = r.until; showErr(reqLimitMsg(r.until)); tick(); return; }   // вводить уже выданный код можно, новый не запросить
         if (r.error === 'network' || r.error === 'server') { toast('Нет связи с сервером. Повторите позже.', 'bad'); return; }
         L.readyAt = Date.now() + (r.throttled ? r.wait * 1000 : CFG.resendSec * 1000); tick(); toast('Код запрошен повторно — проверьте Telegram'); boxes.forEach(function (b) { b.value = ''; }); boxes[0].focus();
       });
@@ -750,18 +800,18 @@
     v.appendChild(h('h1', { text: 'Введите код' }));
     // подсказка одинакова для любого номера (не раскрываем, есть ли он в CRM и привязан ли Telegram)
     v.appendChild(h('div', { class: 'waitbox', 'data-testid': 'wait-admin', role: 'status' }, ico('send'), h('div', null, h('b', { text: 'Проверьте Telegram' }),
-      h('span', { 'data-testid': 'tg-hint', text: 'Код придёт вам в Telegram. Если вы ещё не запускали бота, откройте ' + BOT_NAME + ' (кнопка со ссылкой ' + BOT_URL + '), нажмите «Старт» и «Поделиться номером», затем запросите код снова. Код действует ' + CFG.codeTtlMin + ' минут.' }),
+      h('span', { 'data-testid': 'tg-hint', text: 'Код придёт вам в Telegram. Если вы ещё не запускали бота, откройте ' + BOT_NAME + ' (кнопка со ссылкой ' + BOT_URL + '), нажмите «Старт» и «Поделиться номером», затем запросите код снова. Пока бот не подключён, код получит администратор и передаст его вам лично. Код действует ' + CFG.codeTtlMin + ' минут.' }),
       h('a', { class: 'btn ghost botlink', href: BOT_URL, target: '_blank', rel: 'noopener noreferrer', 'data-testid': 'tg-bot-link' }, ico('send', 'sm'), 'Открыть ' + BOT_NAME + ' в Telegram'))));
     v.appendChild(h('div', { class: 'gap16' }, h('div', { class: 'gap12' }, otp, err), go,
-      h('div', { class: 'row between' }, resend, h('button', { class: 'link', type: 'button', 'data-testid': 'change-phone', onclick: function () { L.step = 'phone'; renderLogin(); } }, 'Изменить номер'))));
-    v.appendChild(h('p', { class: 'foot', text: 'После ' + CFG.maxAttempts + ' неверных попыток вход блокируется на ' + CFG.lockMin + ' минут.' }));
+      h('div', { class: 'row between' }, resend, h('button', { class: 'link', type: 'button', 'data-testid': 'change-phone', onclick: function () { L.step = 'phone'; L.reqUntil = 0; renderLogin(); } }, 'Изменить номер'))));
+    v.appendChild(h('p', { class: 'foot', 'data-testid': 'limits-note', text: 'За ' + CFG.windowH + ' часа можно запросить код не более ' + CFG.reqMax + ' раз и ошибиться не более ' + CFG.wrongMax + ' раз. После двух ошибок вход закрывается на ' + CFG.windowH + ' часа.' }));
     setTimeout(function () { boxes[0].focus(); }, 50);
   }
   function loginLocked(v, until) {
     var t = h('div', { class: 't num', 'data-testid': 'lock-timer' });
-    function tick() { var s = Math.max(0, Math.ceil((until - Date.now()) / 1000)); t.textContent = ('0' + Math.floor(s / 60)).slice(-2) + ':' + ('0' + s % 60).slice(-2); if (s <= 0) { clearInterval(L.timer); L.step = 'phone'; renderLogin(); } }
+    function tick() { var s = Math.max(0, Math.ceil((until - Date.now()) / 1000)); t.textContent = ('0' + Math.floor(s / 3600)).slice(-2) + ':' + ('0' + Math.floor(s % 3600 / 60)).slice(-2) + ':' + ('0' + s % 60).slice(-2); if (s <= 0) { clearInterval(L.timer); L.step = 'phone'; renderLogin(); } }
     v.appendChild(h('div', { class: 'brand' }, h('div', { class: 'logo' }, ico('lock', 'lg')), h('div', null, h('b', { text: 'Вход временно закрыт' }), h('span', { text: 'Слишком много неверных кодов' }))));
-    v.appendChild(h('div', { class: 'lockbox', role: 'alert', 'data-testid': 'lockbox' }, ico('lock', 'lg'), h('p', { text: 'Повторить попытку можно через' }), t, h('p', { text: 'Когда блокировка закончится, запросите новый код — он придёт в Telegram.' })));
+    v.appendChild(h('div', { class: 'lockbox', role: 'alert', 'data-testid': 'lockbox' }, ico('lock', 'lg'), h('p', { 'data-testid': 'lock-until', text: 'Вход закрыт до ' + mskWhen(until) + ' по Москве. Повторить попытку можно через' }), t, h('p', { text: 'Когда блокировка закончится, запросите новый код: он придёт в Telegram. Нужен доступ раньше? Обратитесь к администратору: он может снять ограничение.' })));
     v.appendChild(h('div', { class: 'gap12 lockbtn' }, h('button', { class: 'btn ghost', type: 'button', onclick: function () { clearInterval(L.timer); L.step = 'phone'; renderLogin(); } }, 'Вернуться к вводу номера')));
     tick(); L.timer = setInterval(tick, 1000);
   }
@@ -2025,7 +2075,7 @@
       if (session()) s.incidents.filter(function (i) { return i.status === 'review'; }).forEach(function (i) { box.appendChild(h('div', { class: 'devrow' }, 'Происшествие: ' + i.desc.slice(0, 26), h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-accept', onclick: function () { admin.acceptIncident(i.id); } }, 'Принять'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-return', onclick: function () { admin.decideIncident(i.id, 'returned', 'Не видно номер паллеты на фото. Добавьте, когда и кого вы уведомили.'); } }, 'Вернуть'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-reject', onclick: function () { admin.decideIncident(i.id, 'rejected', 'Это не ваша смена, случай передан другому сотруднику.'); } }, 'Отклонить'))); });
       if (session()) s.applications.filter(function (x) { return x.status === 'sent' || x.status === 'viewed'; }).slice(0, 2).forEach(function (x) { box.appendChild(h('div', { class: 'devrow' }, 'Отклик: ' + x.jobId, h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-app-invite', onclick: function () { admin.application(x.id, 'invited'); } }, 'Пригласить'))); });
       box.appendChild(h('div', { class: 'devrow' }, h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-block', onclick: function () { admin.block(); refresh(); } }, 'Заблокировать доступ'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-unblock', onclick: function () { admin.unblockAll(); toast('Доступ возвращён'); } }, 'Вернуть доступ')));
-      box.appendChild(h('div', { class: 'devrow' }, h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-unlock', onclick: function () { admin.unlock(); toast('Блокировки сняты'); } }, 'Снять блокировку'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-reset', onclick: function () { admin.reset(); } }, 'Сбросить демо')));
+      box.appendChild(h('div', { class: 'devrow' }, h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-unlock', onclick: function () { admin.unlock(); toast('Лимиты входа сброшены'); } }, 'Сбросить лимиты входа'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-reset', onclick: function () { admin.reset(); } }, 'Сбросить демо')));
       wrap.appendChild(box);
     }
     wrap.appendChild(h('button', { class: 'devpill', type: 'button', 'aria-expanded': devOpen ? 'true' : 'false', 'data-testid': 'dev-toggle', onclick: function () { devOpen = !devOpen; devRender(); } }, ico('paper', 'sm'), devOpen ? 'Скрыть DEV' : 'DEV: Telegram админа'));

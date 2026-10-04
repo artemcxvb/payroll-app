@@ -8,7 +8,7 @@
   'use strict';
   var APPC = window.APP_CONFIG || {}, LIVE = APPC.mode === 'live' && /^https:\/\//.test(APPC.backendUrl || '');
   var qs = new URLSearchParams(location.search), LAT = LIVE ? 0 : qs.has('lat') ? +qs.get('lat') : 150;
-  var WHOK = 'pr.admin.who', SESSK = 'pr.admin.session', EMPK = 'pr.taxi.session', DEMOK = 'pr.taxi.demo', THEMEK = 'pr.theme', LASTK = 'pr.taxi.last', NBSP = '\u00a0', DEMO_CODE = '4821';
+  var WHOK = 'pr.admin.who', SESSK = 'pr.admin.session', EMPK = 'pr.taxi.session', DEMOK = 'pr.taxi.demo', THEMEK = 'pr.theme', LASTK = 'pr.taxi.last', NBSP = '\u00a0', DEMO_CODE = '4821', BOT_URL = /^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{4,31}$/.test(String(APPC.loginBotUrl || '')) ? APPC.loginBotUrl : 'https://t.me/tableworks_bot', BOT_NAME = '@' + BOT_URL.replace(/^.*\//, '');
 
   /* ---------- настройки (правятся здесь; на сервере список маршрутов задаётся в Code.gs: TAXI_ROUTES_ или Script Property TAXI_ROUTES) ---------- */
   var OTHER = 'Другое';
@@ -131,6 +131,34 @@
       } catch (e) { fin(null); }
     });
   }
+  /* вход СОТРУДНИКА: геопозиция обязательна (только live). Без разрешения запрос кода не уходит. Координаты нигде не сохраняются */
+  function geoStrict() {
+    return new Promise(function (res) {
+      if (!navigator.geolocation) return res({ ok: false, reason: 'unsupported' });
+      var done = false, tm = setTimeout(function () { fin({ ok: false, reason: 'timeout' }); }, 11000);
+      function fin(v) { if (done) return; done = true; clearTimeout(tm); res(v); }
+      try {
+        navigator.geolocation.getCurrentPosition(function (p) {
+          var c = p && p.coords; if (!c || typeof c.latitude !== 'number' || typeof c.longitude !== 'number' || !isFinite(c.latitude) || !isFinite(c.longitude)) return fin({ ok: false, reason: 'unavailable' });
+          fin({ ok: true, lat: c.latitude, lon: c.longitude, accuracy: typeof c.accuracy === 'number' && isFinite(c.accuracy) ? Math.round(c.accuracy) : undefined });
+        }, function (e) { fin({ ok: false, reason: e && e.code === 1 ? 'denied' : e && e.code === 3 ? 'timeout' : 'unavailable' }); }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
+      } catch (e) { fin({ ok: false, reason: 'unavailable' }); }
+    });
+  }
+  var GEO_WHY = {
+    denied: 'Доступ к местоположению запрещён для этой страницы.', unavailable: 'Телефон не смог определить местоположение. Включите геолокацию (GPS) в настройках телефона.',
+    timeout: 'Местоположение не определилось за 10 секунд. Выйдите на открытое место, включите GPS и повторите.', unsupported: 'Этот браузер не умеет определять местоположение. Откройте страницу в Chrome или Safari.'
+  };
+  function geoNeed(reason, onRetry) {
+    return h('div', { class: 'geoneed', role: 'alert', 'data-testid': 'geo-need' },
+      h('b', { text: 'Нужно разрешить определение местоположения' }),
+      h('p', { text: (GEO_WHY[reason] || GEO_WHY.denied) + ' Без этого код не запрашивается. Местоположение уходит только вместе с запросом кода и нигде не сохраняется.' }),
+      h('ul', null,
+        h('li', { text: 'iPhone: Настройки → Конфиденциальность и безопасность → Службы геолокации: включить, затем найти Safari и выбрать «При использовании».' }),
+        h('li', { text: 'Android: нажмите на значок замка слева от адреса → Разрешения → Местоположение → Разрешить. Для установленного приложения: Настройки → Приложения → Мои выплаты → Разрешения → Местоположение.' }),
+        h('li', { text: 'Компьютер: значок замка слева от адреса → Местоположение → Разрешить.' })),
+      h('button', { class: 'btn', type: 'button', 'data-testid': 'geo-retry', onclick: onRetry }, 'Повторить'));
+  }
   function withGeo(d) { return geoGet().then(function (g) { if (g) { d.lat = g.lat; d.lon = g.lon; if (g.accuracy !== undefined) d.accuracy = g.accuracy; } return d; }); }
   var ERR = {
     network: 'Нет связи с сервером. Проверьте интернет и повторите.', server: 'Сервер ответил ошибкой. Повторите через минуту.', busy: 'Таблица занята другим действием. Повторите через несколько секунд.',
@@ -143,9 +171,13 @@
     upload_failed: 'Чек не загрузился на Яндекс Диск, поездка не сохранена. Повторите.', not_found: 'Поездка не найдена. Обновите список.', state: 'Поездка уже удалена. Обновите список.',
     bad_reason: 'Причина: от ' + LIM.reasonMin + ' до ' + LIM.reason + ' символов.', bad_period: 'Период указан неверно (не больше ' + LIM.periodDays + ' дней).',
     unavailable: 'Чек сейчас недоступен на Яндекс Диске.', demo: 'В демо чеки не открываются.', closed: 'Вход для сотрудников закрыт: учёт такси работает с 6:00 до 22:00 по Москве.', blocked: 'Доступ закрыт. Обратитесь к бригадиру.', consent: 'Сначала примите согласие в приложении «Мои выплаты», затем вернитесь сюда.', rate: 'Слишком много записей за час. Подождите немного.',
-    bad_phone: 'Введите номер телефона полностью, например +7 900 000-00-01.', auth: 'Сессия закончилась — войдите снова.'
+    bad_geo: 'Нужно разрешить определение местоположения: без него код не запрашивается.', bad_phone: 'Введите номер телефона полностью, например +7 900 000-00-01.', auth: 'Сессия закончилась — войдите снова.'
   };
-  function errText(r) { if (r && r.error === 'closed' && r.from != null && r.to != null) return 'Вход для сотрудников закрыт: учёт такси работает с ' + (+r.from) + ':00 до ' + (+r.to) + ':00 по Москве.'; return ERR[r && r.error] || 'Не получилось выполнить действие. Повторите.'; }
+  function mskWhen(ms) {   // время по Москве: «17:10» или «05.10 в 02:40», если это не сегодня
+    var d = new Date(ms + 10800000), n = new Date(Date.now() + 10800000), hm = ('0' + d.getUTCHours()).slice(-2) + ':' + ('0' + d.getUTCMinutes()).slice(-2);
+    return d.toISOString().slice(0, 10) === n.toISOString().slice(0, 10) ? hm : ('0' + d.getUTCDate()).slice(-2) + '.' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + ' в ' + hm;
+  }
+  function errText(r) { if (r && r.error === 'req_limit') return 'Лимит запросов кода исчерпан, обратитесь к администратору.' + (r.until ? ' Новый код можно будет запросить после ' + mskWhen(r.until) + ' (МСК).' : ''); if (r && r.error === 'closed' && r.from != null && r.to != null) return 'Вход для сотрудников закрыт: учёт такси работает с ' + (+r.from) + ':00 до ' + (+r.to) + ':00 по Москве.'; return ERR[r && r.error] || 'Не получилось выполнить действие. Повторите.'; }
 
   /* ---------- демо-«сервер» (вымышленные поездки) ---------- */
   function demoSeed() {
@@ -164,13 +196,19 @@
     return { count: act.length, sum: r2(sum), people: ppl, perPerson: ppl ? r2(sum / ppl) : 0, deleted: items.length - act.length,
       byDay: Object.keys(days).sort().reverse().map(function (k) { var b = days[k]; return { date: b.date, count: b.count, sum: r2(b.sum), people: b.people, perPerson: b.people ? r2(b.sum / b.people) : 0 }; }) };
   }
-  var demoCodeAt = 0;
+  var demoCodeAt = 0, demoEmp = { r: [], w: [], b: 0 };
   function demoCall(action, d) {
     var s = demoState(), tok = (load(SESSK, null) || {}).token || (load(EMPK, null) || {}).token, empPhone = /^demo-emp-\d+$/.test(tok || '') ? tok.slice(9) : '', isEmp = !!empPhone, me = isEmp ? ['Демо Сотрудник', empPhone] : ['админ', ''];
     if (action === 'adminCodeRequest') { if (String(d.phone || '').replace(/\D/g, '').length < 10) return demoRes({ ok: false, error: 'bad_phone' }); if (Date.now() - demoCodeAt < 30000 && demoCodeAt) return demoRes({ ok: true, throttled: true, wait: 30 }); demoCodeAt = Date.now(); return demoRes({ ok: true }); }
     if (action === 'adminCodeVerify') return demoRes(String(d.code) === DEMO_CODE ? { ok: true, token: 'demo-admin', expiresAt: Date.now() + 12 * 3600000 } : { ok: false, error: 'wrong', left: 4 });
-    if (action === 'codeRequest') { var dg = String(d.phone || '').replace(/\D/g, ''); if (dg.length < 10) return demoRes({ ok: false, error: 'bad_phone' }); if (Date.now() - demoCodeAt < 30000 && demoCodeAt) return demoRes({ ok: true, throttled: true, wait: 30 }); demoCodeAt = Date.now(); return demoRes({ ok: true }); }
-    if (action === 'codeVerify') return demoRes(String(d.code) === DEMO_CODE ? { ok: true, token: 'demo-emp-' + String(d.phone || '').replace(/\D/g, ''), expiresAt: Date.now() + 12 * 3600000 } : { ok: false, error: 'wrong', left: 4 });
+    if (action === 'codeRequest') { var dg = String(d.phone || '').replace(/\D/g, ''); if (dg.length < 10) return demoRes({ ok: false, error: 'bad_phone' }); if (demoEmp.b > Date.now()) return demoRes({ ok: false, error: 'locked', until: demoEmp.b }); demoEmp.r = demoEmp.r.filter(function (t) { return t > Date.now() - 10800000; }); if (demoEmp.r.length >= 3) return demoRes({ ok: false, error: 'req_limit', until: demoEmp.r[0] + 10800000 }); if (Date.now() - demoCodeAt < 30000 && demoCodeAt) return demoRes({ ok: true, throttled: true, wait: 30 }); demoCodeAt = Date.now(); demoEmp.r.push(demoCodeAt); return demoRes({ ok: true }); }
+    if (action === 'codeVerify') {   // демо повторяет лимит входа сотрудника: 2 неверных кода за 3 часа
+      if (demoEmp.b > Date.now()) return demoRes({ ok: false, error: 'locked', until: demoEmp.b });
+      if (String(d.code) === DEMO_CODE) return demoRes({ ok: true, token: 'demo-emp-' + String(d.phone || '').replace(/\D/g, ''), expiresAt: Date.now() + 12 * 3600000 });
+      demoEmp.w = demoEmp.w.filter(function (t) { return t > Date.now() - 10800000; }); demoEmp.w.push(Date.now());
+      if (demoEmp.w.length >= 2) { demoEmp.b = demoEmp.w[0] + 10800000; demoEmp.w = []; return demoRes({ ok: false, error: 'locked', until: demoEmp.b }); }
+      return demoRes({ ok: false, error: 'wrong', left: 2 - demoEmp.w.length });
+    }
     if (tok !== 'demo-admin' && !isEmp) return demoRes({ ok: false, error: 'auth' });
     function own(x) { return !isEmp || (x.byPhone || '') === empPhone; }   // сотрудник работает только со своими поездками (в демо, как на сервере)
     function find(id) { return s.trips.filter(function (x) { return x.id === id && own(x); })[0]; }
@@ -306,7 +344,7 @@
     v.appendChild(h('h1', null, 'Учёт такси', LIVE ? null : h('span', { class: 'demobadge', 'data-testid': 'demo-badge', text: 'ДЕМО' })));
     v.appendChild(h('p', { class: 'lead', text: L.mode === 'emp' ? 'Поездки на работу: дата, сумма, сколько человек и чек. Вход по номеру телефона: код придёт вам в Telegram. Вы видите только свои поездки.' : 'Поездки сотрудников на работу: дата, сумма, сколько человек и чек. Вход администратора — по тому же коду из Telegram, что и в кабинете админа.' }));
     if (L.step === 'start') loginStart(v); else loginCode(v);
-    v.appendChild(h('p', { class: 'foot', text: LIVE ? (L.mode === 'emp' ? 'Вход для сотрудников открыт с 6:00 до 22:00 по Москве. Если Telegram-бот входа ещё не подключён, код сообщит бригадир.' : 'Код приходит в админский чат Telegram. Если вы уже входили в кабинет админа на этом устройстве, повторный вход не нужен.') : 'Демо-режим · все данные вымышлены' }));
+    v.appendChild(h('p', { class: 'foot', text: LIVE ? (L.mode === 'emp' ? 'Вход для сотрудников открыт с 6:00 до 22:00 по Москве. Бот входа: ' + BOT_NAME + '. Если вы его ещё не подключали, код получит администратор и передаст вам лично.' : 'Код приходит в админский чат Telegram. Если вы уже входили в кабинет админа на этом устройстве, повторный вход не нужен.') : 'Демо-режим · все данные вымышлены' }));
   }
   function loginStart(v) {
     var emp = L.mode === 'emp', label = emp ? 'Получить код' : 'Получить код в Telegram', saved = load(WHOK, {});
@@ -320,8 +358,14 @@
       var d = ph.value.replace(/\D/g, ''); if (d.length < 10 || d.length > 12) { err.textContent = ERR.bad_phone; err.hidden = false; ph.focus(); return; } L.phone = ph.value.trim();
       if (!emp) { L.name = nm.value.trim(); store(WHOK, { phone: L.phone, name: L.name }); }
       btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); err.hidden = true;
-      if (!emp && LIVE) { btn.appendChild(document.createTextNode(' Определяем местоположение…')); geoHint.hidden = false; } else btn.appendChild(document.createTextNode(' Отправляем…'));
-      (emp ? call('codeRequest', { phone: L.phone, purpose: 'taxi' }) : withGeo({ purpose: 'taxi', phone: L.phone, name: L.name }).then(function (d) { clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…')); geoHint.hidden = true; return call('adminCodeRequest', d); })).then(function (r) {
+      if (LIVE) { btn.appendChild(document.createTextNode(' Определяем местоположение…')); if (!emp) geoHint.hidden = false; } else btn.appendChild(document.createTextNode(' Отправляем…'));
+      (emp ? (LIVE ? geoStrict() : Promise.resolve({ ok: true })).then(function (g) {
+        if (!g.ok) return { ok: false, error: 'geo', reason: g.reason };
+        clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…'));
+        var q = { phone: L.phone, purpose: 'taxi' }; if (LIVE) { q.lat = g.lat; q.lon = g.lon; if (g.accuracy !== undefined) q.accuracy = g.accuracy; } return call('codeRequest', q);
+      }) : withGeo({ purpose: 'taxi', phone: L.phone, name: L.name }).then(function (d) { clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…')); geoHint.hidden = true; return call('adminCodeRequest', d); })).then(function (r) {
+        if (emp && (r.error === 'geo' || r.error === 'bad_geo')) { L.geoErr = r.reason || 'unavailable'; fail(''); err.hidden = true; showGeoNeed(L.geoErr); return; }
+        if (emp) { L.geoErr = ''; showGeoNeed(''); }
         if (r.error === 'locked') { L.step = 'code'; L.lockUntil = r.until; return renderLogin(); }
         if (emp && r.ok && r.closed) return fail(errText({ error: 'closed', from: r.from, to: r.to }));
         if (!r.ok) return fail(errText(r));
@@ -329,8 +373,11 @@
       });
     });
     if (ph) ph.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); btn.click(); } });
-    v.appendChild(h('div', { class: 'gap12' }, h('div', { class: 'field' }, h('label', { class: 'l', text: emp ? 'Телефон' : 'Ваш телефон' }), ph), nm ? h('div', { class: 'field' }, h('label', { class: 'l' }, 'Ваше ФИО ', h('span', { text: 'по желанию' })), nm) : null, btn, geoHint, err));
-    v.appendChild(h('div', { class: 'steps' }, h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: emp ? 'Введите свой номер телефона и нажмите «Получить код»: 4 цифры придут вам в Telegram.' : 'Введите свой номер телефона и нажмите «Получить код в Telegram»: админ увидит, кто просит доступ, и 4 цифры придут в админский чат.' })), h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: emp ? 'Введите код. Сессия держится до конца рабочего дня (до 22:00), потом код запросите снова.' : 'Введите код. Сессия держится 12 часов, потом код запросите снова.' }))));
+    var geoBox = h('div', { class: 'geoslot' });
+    function showGeoNeed(reason) { clear(geoBox); if (reason) geoBox.appendChild(geoNeed(reason, function () { btn.click(); })); }
+    if (emp && L.geoErr) showGeoNeed(L.geoErr);
+    v.appendChild(h('div', { class: 'gap12' }, h('div', { class: 'field' }, h('label', { class: 'l', text: emp ? 'Телефон' : 'Ваш телефон' }), ph), nm ? h('div', { class: 'field' }, h('label', { class: 'l' }, 'Ваше ФИО ', h('span', { text: 'по желанию' })), nm) : null, geoBox, btn, geoHint, err));
+    v.appendChild(h('div', { class: 'steps' }, h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: emp ? 'Введите свой номер телефона, нажмите «Получить код» и разрешите определение местоположения (без него код не выдаётся): 4 цифры придут вам в Telegram.' : 'Введите свой номер телефона и нажмите «Получить код в Telegram»: админ увидит, кто просит доступ, и 4 цифры придут в админский чат.' })), h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: emp ? 'Введите код. Сессия держится до конца рабочего дня (до 22:00), потом код запросите снова.' : 'Введите код. Сессия держится 12 часов, потом код запросите снова.' }))));
     v.appendChild(h('button', { class: 'link tx-mode', type: 'button', 'data-testid': emp ? 'mode-admin' : 'mode-emp', onclick: function () { L = newL(emp ? 'admin' : 'emp', L.phone); renderLogin(); } }, emp ? 'Я администратор' : 'Я сотрудник: войти по номеру телефона'));
   }
   function loginCode(v) {
@@ -361,7 +408,11 @@
     go.addEventListener('click', submit);
     function tick() { var left = Math.ceil((L.readyAt - Date.now()) / 1000); resend.disabled = left > 0; resend.textContent = left > 0 ? 'Запросить код ещё раз (' + left + ' с)' : 'Запросить код ещё раз'; }
     resend.addEventListener('click', function () {
-      (L.mode === 'emp' ? call('codeRequest', { phone: L.phone, purpose: 'taxi' }) : withGeo({ purpose: 'taxi', phone: L.phone, name: L.name }).then(function (d) { return call('adminCodeRequest', d); })).then(function (r) {
+      (L.mode === 'emp' ? (LIVE ? geoStrict() : Promise.resolve({ ok: true })).then(function (g) {
+        if (!g.ok) return { ok: false, error: 'geo', reason: g.reason };
+        var q = { phone: L.phone, purpose: 'taxi' }; if (LIVE) { q.lat = g.lat; q.lon = g.lon; if (g.accuracy !== undefined) q.accuracy = g.accuracy; } return call('codeRequest', q);
+      }) : withGeo({ purpose: 'taxi', phone: L.phone, name: L.name }).then(function (d) { return call('adminCodeRequest', d); })).then(function (r) {
+        if (r.error === 'geo' || r.error === 'bad_geo') { clearInterval(L.timer); L.step = 'start'; L.geoErr = r.reason || 'unavailable'; return renderLogin(); }
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         if (!r.ok) { toast(errText(r), 'bad'); return; }
         if (r.closed) { toast(errText({ error: 'closed', from: r.from, to: r.to }), 'bad'); return; }
@@ -369,16 +420,18 @@
       });
     });
     tick(); L.timer = setInterval(function () { if (!resend.isConnected) return clearInterval(L.timer); tick(); }, 1000);
-    v.appendChild(h('div', { class: 'waitbox', role: 'status', 'data-testid': L.mode === 'emp' ? 'wait-emp' : 'wait-admin' }, ico('send'), h('div', null, h('b', { text: 'Проверьте Telegram' }), h('span', { text: L.mode === 'emp' ? 'Код пришёл вам личным сообщением «Вход в учёт такси». Введите 4 цифры.' : 'Код пришёл в админский чат. Введите 4 цифры.' }))));
+    v.appendChild(h('div', { class: 'waitbox', role: 'status', 'data-testid': L.mode === 'emp' ? 'wait-emp' : 'wait-admin' }, ico('send'), h('div', null, h('b', { text: 'Проверьте Telegram' }), h('span', { text: L.mode === 'emp' ? 'Код придёт вам личным сообщением «Вход в учёт такси» от бота ' + BOT_NAME + '. Введите 4 цифры.' : 'Код пришёл в админский чат. Введите 4 цифры.' }))));
+    if (L.mode === 'emp') v.appendChild(h('div', { class: 'tghint', 'data-testid': 'tg-hint' }, h('span', { text: 'Сообщения нет? Вы ещё не подключали бота: откройте ' + BOT_NAME + ' (ссылка ' + BOT_URL + '), нажмите «Старт» и «Поделиться номером», затем запросите код снова. Пока бот не подключён, код получит администратор и передаст его вам лично.' }), h('a', { class: 'btn ghost', href: BOT_URL, target: '_blank', rel: 'noopener noreferrer', 'data-testid': 'tg-bot-link' }, 'Открыть ' + BOT_NAME + ' в Telegram')));
     if (!LIVE) v.appendChild(h('div', { class: 'demohint', 'data-testid': 'demo-code', text: 'Демо: код входа — ' + DEMO_CODE }));
     v.appendChild(h('div', { class: 'gap16' }, h('div', { class: 'gap12' }, otp, err), go, h('div', { class: 'row between' }, resend, h('button', { class: 'link', type: 'button', 'data-testid': 'change', onclick: function () { L.step = 'start'; renderLogin(); } }, 'Назад'))));
+    if (L.mode === 'emp') v.appendChild(h('p', { class: 'foot', 'data-testid': 'limits-note', text: 'За 3 часа можно запросить код не более 3 раз и ошибиться не более 2 раз. После двух ошибок вход закрывается на 3 часа.' }));
     setTimeout(function () { boxes[0].focus(); }, 50);
   }
   function loginLocked(v) {
     var t = h('div', { class: 't num', 'data-testid': 'lock-timer' });
-    function tick() { var s = Math.max(0, Math.ceil((L.lockUntil - Date.now()) / 1000)); t.textContent = ('0' + Math.floor(s / 60)).slice(-2) + ':' + ('0' + s % 60).slice(-2); if (s <= 0) { clearInterval(L.timer); L.step = 'start'; L.lockUntil = 0; renderLogin(); } }
+    function tick() { var s = Math.max(0, Math.ceil((L.lockUntil - Date.now()) / 1000)); t.textContent = (s >= 3600 ? ('0' + Math.floor(s / 3600)).slice(-2) + ':' : '') + ('0' + Math.floor(s % 3600 / 60)).slice(-2) + ':' + ('0' + s % 60).slice(-2); if (s <= 0) { clearInterval(L.timer); L.step = 'start'; L.lockUntil = 0; renderLogin(); } }
     v.appendChild(h('h1', { text: 'Вход временно закрыт' }));
-    v.appendChild(h('div', { class: 'lockbox', role: 'alert', 'data-testid': 'lockbox' }, ico('lock', 'lg'), h('p', { text: 'Слишком много неверных кодов. Повторить можно через' }), t));
+    v.appendChild(h('div', { class: 'lockbox', role: 'alert', 'data-testid': 'lockbox' }, ico('lock', 'lg'), h('p', { 'data-testid': 'lock-until', text: 'Слишком много неверных кодов. Вход закрыт до ' + mskWhen(L.lockUntil) + ' по Москве. Повторить можно через' }), t, L.mode === 'emp' ? h('p', { text: 'Нужен доступ раньше? Обратитесь к администратору: он может снять ограничение.' }) : null));
     tick(); L.timer = setInterval(tick, 1000);
   }
 

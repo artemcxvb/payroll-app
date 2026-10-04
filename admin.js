@@ -138,6 +138,7 @@
       jobs: [ { cols: [{ k: 'ID', v: 'j1' }, { k: 'Должность', v: 'Бригадир смены' }, { k: 'Участок', v: 'WH' }, { k: 'Статус', v: 'Открыта' }] } ],
       promos: [ { cols: [{ k: 'ID', v: 'p1' }, { k: 'Название', v: 'Бонус за выходные' }, { k: 'Бонус', v: '+10%' }, { k: 'Описание', v: 'Каждую субботу и воскресенье +10% к ставке за выход на смену.' }, { k: 'Показывать', v: 'да' }] },
                 { cols: [{ k: 'ID', v: 'p2' }, { k: 'Название', v: 'Приведи друга' }, { k: 'Бонус', v: '3 000 ₽' }, { k: 'Описание', v: 'Порекомендуйте нового сотрудника: выплатим бонус после его 20-й смены.' }, { k: 'Показывать', v: 'да' }] } ],
+      limited: [ { phone: '79000000004', name: 'Лимитов Сергей Петрович', kind: 'wrong', off: 9000000, requests: 2, wrong: 0 }, { phone: '79000000005', name: 'Запросов Анна Ивановна', kind: 'requests', off: 5400000, requests: 3, wrong: 1 } ],
       log: [] };
   }
   function promoDemoInfo(s) { var p = s.pr || {}, q = p.q > 0 ? p.q : 0; return { queue: q, nextAt: !q && p.last && p.last + PROMO.minGapMs > Date.now() ? p.last + PROMO.minGapMs : 0 }; }
@@ -186,10 +187,15 @@
     if (action === 'adminExplanations') return demoRes({ ok: true, items: needs(s.expl, ['sent']) });
     if (action === 'adminIncidents') return demoRes({ ok: true, items: needs(s.inc, ['review']) });
     if (action === 'adminApplications') return demoRes({ ok: true, items: needs(s.apps, ['sent']) });
-    if (action === 'adminAccess') return demoRes({ ok: true, items: s.acc });
+    if (action === 'adminAccess') return demoRes({ ok: true, items: s.acc, limited: (s.limited || []).map(function (x) { return { phone: x.phone, name: x.name, kind: x.kind, until: Date.now() + x.off, requests: x.requests, wrong: x.wrong }; }) });
     if (action === 'adminJobs') return demoRes({ ok: true, items: s.jobs });
     if (action === 'adminPromos') return demoRes({ ok: true, items: s.promos });
     if (action === 'adminLog') return demoRes({ ok: true, items: s.log.slice().reverse().slice(0, 50) });
+    if (action === 'adminResetLimits') {
+      var rph = String(d.phone || '').replace(/\D/g, '').replace(/^8(?=\d{10}$)/, '7'); if (rph.length === 10) rph = '7' + rph; if (!/^79\d{9}$/.test(rph)) return demoRes({ ok: false, error: 'bad_phone' });
+      var ri = (s.limited || []).filter(function (x) { return x.phone === rph; })[0]; if (!ri) return demoRes({ ok: true, same: true });
+      s.limited = s.limited.filter(function (x) { return x !== ri; }); s.log.push({ at: nowMsk(), action: 'Доступ: сброшены лимиты входа', object: fmtPhone(rph), details: ri.name + ' | запросов кода: ' + ri.requests + ', неверных: ' + ri.wrong }); store(DEMOK, s); return demoRes({ ok: true, reset: true });
+    }
     if (action === 'adminFileLink') return demoRes({ ok: false, error: 'demo' });
     function logit(a, o, t) { s.log.push({ at: nowMsk(), action: a, object: o, details: t }); }
     if (action === 'adminNotifyUpdate') {   // демо: вымышленные получатели; ночную тишину не имитируем (как и часы входа в демо), 30 минут между рассылками имитируем
@@ -266,7 +272,7 @@
     });
   }
   function withGeo(d) { return geoGet().then(function (g) { if (g) { d.lat = g.lat; d.lon = g.lon; if (g.accuracy !== undefined) d.accuracy = g.accuracy; } return d; }); }
-  var ERR = { network: 'Нет связи с сервером. Проверьте интернет и повторите.', server: 'Сервер ответил ошибкой. Повторите через минуту.', busy: 'Таблица занята другим действием. Повторите через несколько секунд.', disabled: 'Кабинет админа выключен (ADMIN_ENABLED=0).', unknown_action: 'Сервер не знает этого действия: обновите Code.gs (см. DEPLOY.md).', not_found: 'Запись не найдена — возможно, строку удалили в таблице.', bad_phone: 'Нужен мобильный номер РФ, например +7 900 123-45-67.', reason_required: 'Укажите причину (не короче 3 символов).', bad_amount: 'Сумма должна быть целым числом больше нуля.', over_limit: 'Сумма больше лимита аванса на неделю (' + PAID_MAX + ' ₽).', reason_long: 'Причина слишком длинная (до 300 символов).', unavailable: 'Файл сейчас недоступен на Яндекс Диске.', demo: 'В демо файлы не открываются.' };
+  var ERR = { network: 'Нет связи с сервером. Проверьте интернет и повторите.', server: 'Сервер ответил ошибкой. Повторите через минуту.', busy: 'Таблица занята другим действием. Повторите через несколько секунд.', disabled: 'Кабинет админа выключен (ADMIN_ENABLED=0).', unknown_action: 'Сервер не знает этого действия: обновите Code.gs (см. DEPLOY.md).', not_found: 'Запись не найдена — возможно, строку удалили в таблице.', bad_phone: 'Нужен мобильный номер РФ, например +7 900 123-45-67.', reason_required: 'Укажите причину (не короче 3 символов).', req_limit: 'Лимит запросов кода исчерпан.', bad_amount: 'Сумма должна быть целым числом больше нуля.', over_limit: 'Сумма больше лимита аванса на неделю (' + PAID_MAX + ' ₽).', reason_long: 'Причина слишком длинная (до 300 символов).', unavailable: 'Файл сейчас недоступен на Яндекс Диске.', demo: 'В демо файлы не открываются.' };
   function errText(r) { return ERR[r && r.error] || 'Не получилось выполнить действие. Повторите.'; }
   function mskHm(ms) { return new Date(ms + 3 * 3600000).toISOString().slice(11, 16); }
   function notifyErr(r) {   // человеческие тексты отказов рассылки
@@ -618,7 +624,7 @@
   function viewList(tab) {
     var v = h('main', { class: 'view adm-tabs-pad', id: 'main' }), items = S.data[tab], f = S.filter[tab] || 'need', q = S.q[tab] || '';
     v.appendChild(pageHead(TITLES[tab]));
-    if (tab === 'acc') v.appendChild(accForm());
+    if (tab === 'acc') { v.appendChild(accForm()); v.appendChild(limitsCard()); }
     var seg = h('div', { class: 'segrow', role: 'group', 'aria-label': 'Фильтр по статусу', 'data-testid': 'filters' }), names = tab === 'acc' ? FLT_ACC : FLT;
     Object.keys(names).forEach(function (k) {
       var n = items ? items.filter(function (it) { return matches(tab, it, k, ''); }).length : null;
@@ -643,6 +649,37 @@
       var wrap = h('div', { class: 'alist' }); list.forEach(function (it) { wrap.appendChild(CARD[tab](it)); }); box.appendChild(wrap);
     }
     fillList(); return v;
+  }
+  function mskWhen(ms) {   // время по Москве: «17:10» или «05.10 в 02:40», если это не сегодня
+    var d = new Date(ms + 10800000), n = new Date(Date.now() + 10800000), hm = ('0' + d.getUTCHours()).slice(-2) + ':' + ('0' + d.getUTCMinutes()).slice(-2);
+    return d.toISOString().slice(0, 10) === n.toISOString().slice(0, 10) ? hm : ('0' + d.getUTCDate()).slice(-2) + '.' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + ' в ' + hm;
+  }
+  /* «Сбросить лимиты»: сотрудник за 3 часа запросил код 3 раза или дважды ошибся в коде. Сброс снимает блокировку и счётчики, в журнал пишется */
+  function resetLimitsFlow(phone, name) {
+    var ph = String(phone || '').trim();
+    return confirmAct({ title: 'Сбросить лимиты входа?', who: (name ? name + ' · ' : '') + (fmtPhone(normPhone(ph)) || ph), text: 'Снимется блокировка за неверные коды и счётчик запросов кода (3 за 3 часа). Сотрудник сможет сразу запросить новый код. Действие запишется в журнал.', yes: 'Сбросить' }).then(function (ans) {
+      if (!ans) return null;
+      return call('adminResetLimits', { phone: ph }).then(function (r) {
+        if (r.ok) { toast(r.same ? 'Лимитов у этого номера нет' : 'Лимиты сброшены', r.same ? 'warn' : undefined); reloadAfter('acc'); return r; }
+        if (r.error !== 'auth') toast(errText(r), 'bad'); return r;
+      });
+    });
+  }
+  function limitsCard() {
+    var lst = S.limited || [], inp = h('input', { class: 'inp', type: 'tel', inputmode: 'tel', 'data-testid': 'acc-reset-phone', 'aria-label': 'Телефон сотрудника для сброса лимитов', placeholder: '+7 900 123-45-67', autocomplete: 'off', maxlength: '24' });
+    var c = h('section', { class: 'card blockform', 'aria-labelledby': 'lim-h', 'data-testid': 'limits-card' }, h('h2', { id: 'lim-h', text: 'Лимиты входа сотрудников' }),
+      h('p', { class: 'help', text: 'За 3 часа сотрудник может запросить код не более 3 раз и ввести неверный код не более 2 раз. Потом вход закрывается до конца 3 часов, пока вы не сбросите лимиты.' }));
+    if (!lst.length) c.appendChild(h('p', { class: 'cap', 'data-testid': 'limits-none', text: 'Сейчас никто не закрыт лимитами.' }));
+    lst.forEach(function (x) {
+      c.appendChild(h('div', { class: 'payrow limrow', 'data-testid': 'limit-' + x.phone }, h('div', { class: 'grow' }, h('div', { class: 'bnm', text: (x.name || 'Номер не из CRM') + ' · ' + fmtPhone(x.phone) }),
+        h('div', { class: 'cap', 'data-testid': 'limit-why-' + x.phone, text: (x.kind === 'wrong' ? 'Два неверных кода: вход закрыт до ' : 'Лимит запросов кода (3): до ') + mskWhen(x.until) + ' МСК' })),
+        h('button', { class: 'btn secondary cp', type: 'button', 'data-testid': 'acc-reset-' + x.phone, onclick: function () { resetLimitsFlow(x.phone, x.name); } }, 'Сбросить лимиты')));
+    });
+    c.appendChild(h('div', { class: 'field' }, h('label', { class: 'l', text: 'Сбросить по телефону' }), inp));
+    c.appendChild(h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'acc-reset-btn', onclick: function () {
+      if (inp.value.replace(/\D/g, '').length < 10) { toast(ERR.bad_phone, 'bad'); inp.focus(); return; }
+      resetLimitsFlow(inp.value, '').then(function (r) { if (r && r.ok) inp.value = ''; }); } }, 'Сбросить лимиты'));
+    return c;
   }
   function accForm() {
     var inp = h('input', { class: 'inp', type: 'tel', inputmode: 'tel', 'data-testid': 'acc-phone', 'aria-label': 'Телефон сотрудника', placeholder: '+7 900 123-45-67', autocomplete: 'off', maxlength: '24' });
@@ -853,7 +890,7 @@
     S.loading.any = true; if (force || !S.data[tab]) render();
     return call(LIST_ACTION[tab]).then(function (r) {
       S.loading.any = false; if (!session()) return;
-      if (r.ok) { S.data[tab] = r.items; delete S.err[tab]; } else if (r.error !== 'auth') S.err[tab] = errText(r);
+      if (r.ok) { S.data[tab] = r.items; if (tab === 'acc') S.limited = r.limited || []; delete S.err[tab]; } else if (r.error !== 'auth') S.err[tab] = errText(r);
       render();
     });
   }

@@ -104,3 +104,8 @@ body.adminpage .app { max-width: 520px; }
 .paidrow .cap { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 .paidrow .cp { min-height: 44px; padding: 0 14px; width: auto; flex: none; }
 @media (max-width: 400px) { .paidrow { flex-wrap: wrap; } .paidrow .cp { width: 100%; } }
+
+/* лимиты входа сотрудников (вкладка «Доступ») */
+.limrow { flex-wrap: wrap; }
+.limrow .cap { font-size: 13px; color: var(--muted); }
+@media (max-width: 400px) { .limrow .cp { width: 100%; } }
