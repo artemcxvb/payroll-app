@@ -1067,7 +1067,7 @@
       if (mine && C.driver && C.driver.status !== 'off') acts.appendChild(h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'dr-edit', onclick: function () { editDrive(x); } }, ico('edit', 'sm'), 'Исправить'));
       acts.appendChild(h('button', { class: 'btn danger', type: 'button', 'data-testid': 'dr-del', onclick: function () { deleteDrive(x, mine); } }, ico('trash', 'sm'), 'Удалить'));
     }
-    return h('article', { class: 'card acard tx-trip' + (del ? ' deleted' : ''), 'data-testid': 'drive', 'data-id': x.id, 'data-status': x.status },
+    return h('article', { class: 'card acard tx-drv' + (del ? ' deleted' : ''), 'data-testid': 'drive', 'data-id': x.id, 'data-status': x.status },
       h('div', { class: 'hd' }, h('div', { class: 'grow' }, h('div', { class: 'nm', text: dmy(x.date) + ' · ' + dowOf(x.date) }), h('div', { class: 'meta', text: x.route }), mine ? null : h('div', { class: 'meta', 'data-testid': 'drive-driver', text: x.driver + ' · ' + x.plate }))),
       h('div', { class: 'tx-meta' }, chip(x.people + ' ' + plural(x.people, ['пассажир', 'пассажира', 'пассажиров']), 'info', 'car'), chip('Личный авто', 'gray'), x.km ? chip(pnum(x.km) + ' км', 'gray') : null, x.amount ? chip(money(x.amount), 'gray') : null, del ? chip('Удалено', 'bad', 'trash') : null, x.changed && !del ? chip('Исправлено', 'warn') : null),
       x.names ? h('div', { class: 'txt' }, h('b', { text: 'Пассажиры' }), x.names) : null, x.note ? h('div', { class: 'txt' }, h('b', { text: 'Примечание' }), x.note) : null,

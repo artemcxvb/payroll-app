@@ -62,9 +62,9 @@ body.taxipage .app { max-width: 520px; }
 .tx-day .dd { font-weight: 700; font-variant-numeric: tabular-nums; }
 .tx-day .dn { color: var(--muted); font-size: 13px; }
 .tx-trips { margin-top: 0; }
-.tx-trip .tx-meta { display: flex; flex-wrap: wrap; gap: 6px; }
-.tx-trip.deleted { opacity: .8; border-style: dashed; }
-.tx-trip.deleted .amt { text-decoration: line-through; color: var(--muted); }
+.tx-trip .tx-meta, .tx-drv .tx-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.tx-trip.deleted, .tx-drv.deleted { opacity: .8; border-style: dashed; }
+.tx-trip.deleted .amt, .tx-drv.deleted .amt { text-decoration: line-through; color: var(--muted); }
 .tx-acts { grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); }
 .tx-acts .btn { min-height: 52px; font-size: 15px; padding: 0 8px; }
 
