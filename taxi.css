@@ -98,3 +98,19 @@ body.taxipage .app { max-width: 520px; }
 /* вход сотрудника: подсказка про бота @tableworks_bot */
 .tghint { margin: 12px 0 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--muted, var(--faint)); font-size: 13.5px; line-height: 1.45; }
 .tghint a.btn { display: inline-flex; align-items: center; justify-content: center; margin-top: 10px; min-height: 44px; padding: 0 16px; font-size: 14px; text-decoration: none; }
+
+/* «Я вожу людей на своём авто»: третья вкладка (сотрудник: «Мой авто», админ: «Водители») */
+.tabbar.t3 { grid-template-columns: repeat(3, 1fr); }
+.tx-carsec { display: none; }
+.tx-wrap[data-tab="car"] .tx-carsec { display: block; }
+.tx-profile { display: grid; gap: 4px; }
+.tx-profile .nm { font-weight: 700; font-size: 17px; }
+.plate { display: inline-block; align-self: start; padding: 4px 10px; border: 2px solid var(--text); border-radius: 8px; font-weight: 800; letter-spacing: 1px; font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tx-day .ds { color: var(--muted); font-size: 13px; text-align: right; }
+@media (max-width: 979px) {
+  .tx-wrap[data-tab="car"] .tx-add, .tx-wrap[data-tab="car"] .tx-listsec { display: none; }
+}
+@media (min-width: 980px) {
+  .tx-wrap[data-tab] .tx-carsec { display: block; grid-column: 1 / -1; }
+  .tx-carsec { margin-top: 8px; }
+}
