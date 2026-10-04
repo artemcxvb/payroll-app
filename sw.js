@@ -1,5 +1,5 @@
 /* Service worker: оболочка приложения кэшируется, чтобы данные можно было смотреть без сети. */
-var CACHE = 'pr-shell-v28';
+var CACHE = 'pr-shell-v29';
 var SHELL = ['banks/banks.js', 'banks/absolut.png', 'banks/akbars.png', 'banks/alfa.png', 'banks/atb.png', 'banks/bankkazani.png', 'banks/centrinvest.png', 'banks/crediteurope.png', 'banks/domrf.png', 'banks/homecredit.png', 'banks/khlynov.png', 'banks/mkb.png', 'banks/modul.png', 'banks/mts.png', 'banks/otkritie.png', 'banks/otp.png', 'banks/ozon.png', 'banks/raiffeisen.png', 'banks/renaissance.png', 'banks/rosbank.png', 'banks/sber.png', 'banks/sinara.png', 'banks/sovcom.png', 'banks/tbank.png', 'banks/tochka.png', 'banks/ubrr.png', 'banks/veb.png', 'banks/vtb.png', 'banks/wb.png', 'banks/yandex.png', 'banks/yoomoney.png', 'banks/zenit.png', './', 'index.html', 'app.js', 'style.css', 'mock-data.js', 'config.js', 'manifest.webmanifest', 'company-banner.jpg', 'admin.html', 'admin.js', 'admin.css', 'taxi.html', 'taxi.js', 'taxi.css',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];   // фото демо-режима в кэш при установке не берём (в боевом режиме они не нужны), они попадают в кэш при первом показе
 
@@ -14,7 +14,20 @@ self.addEventListener('activate', function (e) {
 self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
-  // stale-while-revalidate для своих статических файлов
+  // код приложения (html, js, css): сначала сеть, чтобы обновления видны сразу; кэш только без сети
+  var path = new URL(req.url).pathname;
+  if (req.mode === 'navigate' || /\.(html|js|css)$/.test(path)) {
+    e.respondWith(fetch(req).then(function (res) {
+      if (res && res.ok) { var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); }
+      return res;
+    }).catch(function () {
+      return caches.match(req, { ignoreSearch: true }).then(function (hit) {
+        return hit || (req.mode === 'navigate' ? caches.match((/\/(admin|taxi)\.html$/.exec(path) || [0, 'index'])[1] + '.html') : Response.error());
+      });
+    }));
+    return;
+  }
+  // остальное (иконки, логотипы банков): stale-while-revalidate
   e.respondWith(caches.match(req, { ignoreSearch: true }).then(function (hit) {
     var net = fetch(req).then(function (res) {
       if (res && res.ok) { var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put(req, copy); }); }
