@@ -179,7 +179,7 @@
       if (st.b > now) return { ok: false, error: 'locked', until: st.b };
       if (st.r.length >= CFG.reqMax) return { ok: false, error: 'req_limit', until: st.r[0] + CFG.windowH * 3600000 };
       var last = s.lastReq[phone] || 0;
-      if (now - last < CFG.resendSec * 1000) return { ok: true, throttled: true, wait: Math.ceil((CFG.resendSec * 1000 - (now - last)) / 1000) };
+      if (now - last < CFG.resendSec * 1000) return { ok: true, throttled: true, wait: Math.ceil((CFG.resendSec * 1000 - (now - last)) / 1000), left: CFG.reqMax - st.r.length };
       s.lastReq[phone] = now; st.r.push(now);
       if (s.blocked[phone]) { /* заблокирован: кода нет, админу ничего, ответ клиенту тот же */ }
       else if (u) {
@@ -191,7 +191,7 @@
         s.tg.unshift({ t: now, kind: 'unknown', phone: phone });   // код не создаётся; клиенту отвечаем так же, как для известного номера
       }
       save(s);
-      return { ok: true };
+      return { ok: true, left: CFG.reqMax - st.r.length };
     },
     verify: function (phone, code) {
       var s = srv(), now = Date.now(), st = lim(s, phone, now);
@@ -734,7 +734,7 @@
         if (r.error === 'network' || r.error === 'server' || r.error === 'bad_phone') { toast(r.error === 'bad_phone' ? 'Проверьте номер телефона' : 'Нет связи с сервером. Повторите позже.', 'bad'); return renderLogin(); }
         if (r.closed) { L.phone = phone; L.step = 'phone'; L.notice = closedMsg(r); return renderLogin(); }   // вне часов входа: остаёмся на вводе номера, код не запрашивался, таймера нет
         if (r.error === 'req_limit') { L.phone = phone; L.step = 'phone'; L.lockUntil = 0; L.notice = reqLimitMsg(r.until); return renderLogin(); }   // остаёмся на вводе номера с понятным сообщением
-        L.lockUntil = r.error === 'locked' ? r.until : 0;
+        L.lockUntil = r.error === 'locked' ? r.until : 0; if (typeof r.left === 'number') L.left = r.left;
         L.phone = phone; L.step = 'code'; L.readyAt = Date.now() + (r.throttled ? r.wait * 1000 : CFG.resendSec * 1000); renderLogin();
       });
     }
@@ -749,7 +749,7 @@
   }
   function loginCode(v) {
     var boxes = [], otp = h('div', { class: 'otp', role: 'group', 'aria-label': 'Код из 4 цифр', 'data-testid': 'otp' }), err = h('div', { class: 'err', id: 'code-err', role: 'alert', hidden: true, 'data-testid': 'code-err' }), busy = false;
-    var resend = h('button', { class: 'link', type: 'button', 'data-testid': 'resend' });
+    var resend = h('button', { class: 'link', type: 'button', 'data-testid': 'resend' }), boundBtn = h('button', { class: 'btn', type: 'button', 'data-testid': 'resend-bound' }), leftEl = h('p', { class: 'cap tgleft', 'data-testid': 'req-left' });
     var go = h('button', { class: 'btn', type: 'button', 'data-testid': 'login-btn', disabled: true }, 'Войти');
     function val() { return boxes.map(function (b) { return b.value; }).join(''); }
     function showErr(t) { err.hidden = false; clear(err); err.appendChild(ico('alert', 'sm')); err.appendChild(document.createTextNode(t)); }
@@ -784,15 +784,20 @@
     function tick() {
       var left = Math.ceil((L.readyAt - Date.now()) / 1000);
       var limOn = (L.reqUntil || 0) > Date.now();
+      var out = limOn || L.left === 0;
       resend.disabled = left > 0 || limOn; resend.textContent = limOn ? 'Лимит запросов кода исчерпан' : left > 0 ? 'Запросить код ещё раз (' + left + ' с)' : 'Запросить код ещё раз';
+      boundBtn.disabled = left > 0 || out; boundBtn.textContent = out ? 'Лимит запросов исчерпан' : left > 0 ? 'Я подключил(а), отправить код ещё раз (' + left + ' с)' : 'Я подключил(а), отправить код ещё раз';
+      leftEl.textContent = typeof L.left === 'number' ? (out ? 'Запросов кода не осталось (лимит ' + CFG.reqMax + ' за ' + CFG.windowH + ' часа). Чтобы узнать, когда лимит освободится, нажмите «Запросить код ещё раз».' : 'Осталось запросов кода: ' + L.left + ' из ' + CFG.reqMax + ' (за ' + CFG.windowH + ' часа). Не расходуйте их зря: сначала подключите бота.') : 'Запросить код можно не более ' + CFG.reqMax + ' раз за ' + CFG.windowH + ' часа.';
     }
+    boundBtn.addEventListener('click', function () { if (!resend.disabled) resend.click(); });
     resend.addEventListener('click', function () {
       backend.requestCode(L.phone).then(function (r) {
         if (r.error === 'geo' || r.error === 'bad_geo') { clearInterval(L.timer); L.step = 'phone'; L.geoErr = r.reason || 'unavailable'; return renderLogin(); }
         if (r.closed) { clearInterval(L.timer); L.step = 'phone'; L.notice = closedMsg(r); return renderLogin(); }
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
-        if (r.error === 'req_limit') { L.reqUntil = r.until; showErr(reqLimitMsg(r.until)); tick(); return; }   // вводить уже выданный код можно, новый не запросить
+        if (r.error === 'req_limit') { L.reqUntil = r.until; L.left = 0; showErr(reqLimitMsg(r.until)); tick(); return; }   // вводить уже выданный код можно, новый не запросить
         if (r.error === 'network' || r.error === 'server') { toast('Нет связи с сервером. Повторите позже.', 'bad'); return; }
+        if (typeof r.left === 'number') L.left = r.left;
         L.readyAt = Date.now() + (r.throttled ? r.wait * 1000 : CFG.resendSec * 1000); tick(); toast('Код запрошен повторно — проверьте Telegram'); boxes.forEach(function (b) { b.value = ''; }); boxes[0].focus();
       });
     });
@@ -800,10 +805,13 @@
     v.appendChild(h('h1', { text: 'Введите код' }));
     // подсказка одинакова для любого номера (не раскрываем, есть ли он в CRM и привязан ли Telegram)
     v.appendChild(h('div', { class: 'waitbox', 'data-testid': 'wait-admin', role: 'status' }, ico('send'), h('div', null, h('b', { text: 'Проверьте Telegram' }),
-      h('span', { 'data-testid': 'tg-hint', text: 'Код придёт вам в Telegram. Если вы ещё не запускали бота, откройте ' + BOT_NAME + ' (кнопка со ссылкой ' + BOT_URL + '), нажмите «Старт» и «Поделиться номером», затем запросите код снова. Пока бот не подключён, код получит администратор и передаст его вам лично. Код действует ' + CFG.codeTtlMin + ' минут.' }),
-      h('a', { class: 'btn ghost botlink', href: BOT_URL, target: '_blank', rel: 'noopener noreferrer', 'data-testid': 'tg-bot-link' }, ico('send', 'sm'), 'Открыть ' + BOT_NAME + ' в Telegram'))));
+      h('span', { text: 'Код придёт вам личным сообщением в Telegram. Код действует ' + CFG.codeTtlMin + ' минут.' }))));
     v.appendChild(h('div', { class: 'gap16' }, h('div', { class: 'gap12' }, otp, err), go,
       h('div', { class: 'row between' }, resend, h('button', { class: 'link', type: 'button', 'data-testid': 'change-phone', onclick: function () { L.step = 'phone'; L.reqUntil = 0; renderLogin(); } }, 'Изменить номер'))));
+    v.appendChild(h('div', { class: 'tgcard', 'data-testid': 'tg-hint' }, h('b', { text: 'Код не пришёл? Один раз подключите бота' }),
+      h('p', { class: 'tgwhy', text: 'Бот ' + BOT_NAME + ' не может написать первым: пока вы его не подключили, код получит администратор. Чтобы коды приходили вам, сделайте по порядку:' }),
+      h('ol', { class: 'tgsteps', 'data-testid': 'tg-steps' }, h('li', { text: 'Нажмите «Открыть бота» ниже (или откройте ' + BOT_URL + ').' }), h('li', { text: 'В Telegram нажмите «Старт» (Start).' }), h('li', { text: 'Нажмите «Поделиться номером».' }), h('li', { text: 'Вернитесь сюда и нажмите «Я подключил(а), отправить код ещё раз».' })),
+      h('a', { class: 'btn ghost botlink', href: BOT_URL, target: '_blank', rel: 'noopener noreferrer', 'data-testid': 'tg-bot-link' }, ico('send', 'sm'), 'Открыть бота ' + BOT_NAME), boundBtn, leftEl));
     v.appendChild(h('p', { class: 'foot', 'data-testid': 'limits-note', text: 'За ' + CFG.windowH + ' часа можно запросить код не более ' + CFG.reqMax + ' раз и ошибиться не более ' + CFG.wrongMax + ' раз. После двух ошибок вход закрывается на ' + CFG.windowH + ' часа.' }));
     setTimeout(function () { boxes[0].focus(); }, 50);
   }

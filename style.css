@@ -571,3 +571,12 @@ textarea.inp { padding: 12px 14px; min-height: 110px; font-size: 16px; resize: v
 .geoneed p { margin: 0; }
 .geoneed ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--muted, var(--faint)); font-size: 13px; }
 .geoneed .btn { margin-top: 4px; }
+
+/* экран кода: карточка «один раз подключите бота» (сотрудник) */
+.tgcard { margin: 0 0 18px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--muted, var(--faint)); font-size: 13.5px; line-height: 1.45; }
+.tgcard b { display: block; color: var(--text); font-size: 15px; }
+.tgcard .tgwhy { margin: 6px 0 0; }
+.tgcard .tgsteps { margin: 8px 0 0; padding-left: 22px; color: var(--text); font-size: 14px; }
+.tgcard .tgsteps li { margin: 4px 0; }
+.tgcard .btn { display: flex; width: 100%; margin-top: 10px; min-height: 48px; text-decoration: none; align-items: center; justify-content: center; }
+.tgcard .tgleft { margin: 10px 0 0; }

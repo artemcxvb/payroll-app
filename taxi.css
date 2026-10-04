@@ -114,3 +114,13 @@ body.taxipage .app { max-width: 520px; }
   .tx-wrap[data-tab] .tx-carsec { display: block; grid-column: 1 / -1; }
   .tx-carsec { margin-top: 8px; }
 }
+
+/* вход: сотрудник по умолчанию, вход админа спрятан внизу; карточка «подключите бота» */
+.tx-adminlink { margin-top: 28px; text-align: center; }
+.tx-adminlink .link { font-size: 12.5px; color: var(--muted, var(--faint)); text-decoration: underline; min-height: 44px; padding: 0 12px; }
+.tgcard b { display: block; color: var(--text); font-size: 15px; }
+.tgcard .tgwhy { margin: 6px 0 0; }
+.tgcard .tgsteps { margin: 8px 0 0; padding-left: 22px; color: var(--text); font-size: 14px; }
+.tgcard .tgsteps li { margin: 4px 0; }
+.tgcard .btn { display: flex; width: 100%; margin-top: 10px; min-height: 48px; }
+.tgcard .tgleft { margin: 10px 0 0; }

@@ -273,7 +273,7 @@
     var s = demoState(), tok = (load(SESSK, null) || {}).token || (load(EMPK, null) || {}).token, empPhone = /^demo-emp-\d+$/.test(tok || '') ? tok.slice(9) : '', isEmp = !!empPhone, me = isEmp ? ['Демо Сотрудник', empPhone] : ['админ', ''];
     if (action === 'adminCodeRequest') { if (String(d.phone || '').replace(/\D/g, '').length < 10) return demoRes({ ok: false, error: 'bad_phone' }); if (Date.now() - demoCodeAt < 30000 && demoCodeAt) return demoRes({ ok: true, throttled: true, wait: 30 }); demoCodeAt = Date.now(); return demoRes({ ok: true }); }
     if (action === 'adminCodeVerify') return demoRes(String(d.code) === DEMO_CODE ? { ok: true, token: 'demo-admin', expiresAt: Date.now() + 12 * 3600000 } : { ok: false, error: 'wrong', left: 4 });
-    if (action === 'codeRequest') { var dg = String(d.phone || '').replace(/\D/g, ''); if (dg.length < 10) return demoRes({ ok: false, error: 'bad_phone' }); if (demoEmp.b > Date.now()) return demoRes({ ok: false, error: 'locked', until: demoEmp.b }); demoEmp.r = demoEmp.r.filter(function (t) { return t > Date.now() - 10800000; }); if (demoEmp.r.length >= 3) return demoRes({ ok: false, error: 'req_limit', until: demoEmp.r[0] + 10800000 }); if (Date.now() - demoCodeAt < 30000 && demoCodeAt) return demoRes({ ok: true, throttled: true, wait: 30 }); demoCodeAt = Date.now(); demoEmp.r.push(demoCodeAt); return demoRes({ ok: true }); }
+    if (action === 'codeRequest') { var dg = String(d.phone || '').replace(/\D/g, ''); if (dg.length < 10) return demoRes({ ok: false, error: 'bad_phone' }); if (demoEmp.b > Date.now()) return demoRes({ ok: false, error: 'locked', until: demoEmp.b }); demoEmp.r = demoEmp.r.filter(function (t) { return t > Date.now() - 10800000; }); if (demoEmp.r.length >= 3) return demoRes({ ok: false, error: 'req_limit', until: demoEmp.r[0] + 10800000 }); if (Date.now() - demoCodeAt < 30000 && demoCodeAt) return demoRes({ ok: true, throttled: true, wait: 30, left: 3 - demoEmp.r.length }); demoCodeAt = Date.now(); demoEmp.r.push(demoCodeAt); return demoRes({ ok: true, left: 3 - demoEmp.r.length }); }
     if (action === 'codeVerify') {   // демо повторяет лимит входа сотрудника: 2 неверных кода за 3 часа
       if (demoEmp.b > Date.now()) return demoRes({ ok: false, error: 'locked', until: demoEmp.b });
       if (String(d.code) === DEMO_CODE) return demoRes({ ok: true, token: 'demo-emp-' + String(d.phone || '').replace(/\D/g, ''), expiresAt: Date.now() + 12 * 3600000 });
@@ -352,7 +352,7 @@
 
   /* ---------- состояние ---------- */
   var S = { role: '', who: '', tab: 'add', period: 'month', from: '', to: '', data: null, err: '', loading: false, showDeleted: false, last: null, mounted: false, disabled: false, routes: ROUTES.slice() };
-  function newL(mode, phone) { return { step: 'start', readyAt: 0, lockUntil: 0, timer: null, mode: mode || 'admin', phone: phone || '', name: '' }; }
+  function newL(mode, phone) { return { step: 'start', readyAt: 0, lockUntil: 0, timer: null, mode: mode || 'emp', phone: phone || '', name: '' }; }
   var L = newL();
   var root = $('#view-root'), tabbar = $('#tabbar'), overlayRoot = $('#overlay-root'), toasts = $('#toasts'), uid = 0;
 
@@ -417,7 +417,8 @@
     v.appendChild(h('h1', null, 'Учёт такси', LIVE ? null : h('span', { class: 'demobadge', 'data-testid': 'demo-badge', text: 'ДЕМО' })));
     v.appendChild(h('p', { class: 'lead', text: L.mode === 'emp' ? 'Поездки на работу: дата, сумма, сколько человек и чек. Вход по номеру телефона: код придёт вам в Telegram. Вы видите только свои поездки.' : 'Поездки сотрудников на работу: дата, сумма, сколько человек и чек. Вход администратора — по тому же коду из Telegram, что и в кабинете админа.' }));
     if (L.step === 'start') loginStart(v); else loginCode(v);
-    v.appendChild(h('p', { class: 'foot', text: LIVE ? (L.mode === 'emp' ? 'Вход для сотрудников открыт с 6:00 до 22:00 по Москве. Бот входа: ' + BOT_NAME + '. Если вы его ещё не подключали, код получит администратор и передаст вам лично.' : 'Код приходит в админский чат Telegram. Если вы уже входили в кабинет админа на этом устройстве, повторный вход не нужен.') : 'Демо-режим · все данные вымышлены' }));
+    v.appendChild(h('p', { class: 'foot', text: LIVE ? (L.mode === 'emp' ? 'Вход для сотрудников открыт с 6:00 до 22:00 по Москве. Бот входа: ' + BOT_NAME + '. Если вы его ещё не подключали, после «Получить код» появится короткая инструкция; пока бот не подключён, код получит администратор и передаст вам лично.' : 'Код приходит в админский чат Telegram. Если вы уже входили в кабинет админа на этом устройстве, повторный вход не нужен.') : 'Демо-режим · все данные вымышлены' }));
+    if (L.mode === 'emp' && L.step === 'start') v.appendChild(h('div', { class: 'tx-adminlink' }, h('button', { class: 'link', type: 'button', 'data-testid': 'mode-admin', onclick: function () { L = newL('admin', L.phone); renderLogin(); } }, 'Вход для администратора')));
   }
   function loginStart(v) {
     var emp = L.mode === 'emp', label = emp ? 'Получить код' : 'Получить код в Telegram', saved = load(WHOK, {});
@@ -442,6 +443,7 @@
         if (r.error === 'locked') { L.step = 'code'; L.lockUntil = r.until; return renderLogin(); }
         if (emp && r.ok && r.closed) return fail(errText({ error: 'closed', from: r.from, to: r.to }));
         if (!r.ok) return fail(errText(r));
+        if (typeof r.left === 'number') L.left = r.left;
         L.step = 'code'; L.readyAt = Date.now() + (r.throttled ? (r.wait || 30) : 30) * 1000; renderLogin();
       });
     });
@@ -451,7 +453,7 @@
     if (emp && L.geoErr) showGeoNeed(L.geoErr);
     v.appendChild(h('div', { class: 'gap12' }, h('div', { class: 'field' }, h('label', { class: 'l', text: emp ? 'Телефон' : 'Ваш телефон' }), ph), nm ? h('div', { class: 'field' }, h('label', { class: 'l' }, 'Ваше ФИО ', h('span', { text: 'по желанию' })), nm) : null, geoBox, btn, geoHint, err));
     v.appendChild(h('div', { class: 'steps' }, h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: emp ? 'Введите свой номер телефона, нажмите «Получить код» и разрешите определение местоположения (без него код не выдаётся): 4 цифры придут вам в Telegram.' : 'Введите свой номер телефона и нажмите «Получить код в Telegram»: админ увидит, кто просит доступ, и 4 цифры придут в админский чат.' })), h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: emp ? 'Введите код. Сессия держится до конца рабочего дня (до 22:00), потом код запросите снова.' : 'Введите код. Сессия держится 12 часов, потом код запросите снова.' }))));
-    v.appendChild(h('button', { class: 'link tx-mode', type: 'button', 'data-testid': emp ? 'mode-admin' : 'mode-emp', onclick: function () { L = newL(emp ? 'admin' : 'emp', L.phone); renderLogin(); } }, emp ? 'Я администратор' : 'Я сотрудник: войти по номеру телефона'));
+    if (!emp) v.appendChild(h('button', { class: 'btn ghost tx-mode', type: 'button', 'data-testid': 'mode-emp', onclick: function () { L = newL('emp', L.phone); renderLogin(); } }, 'Я сотрудник: войти по номеру телефона'));
   }
   function loginCode(v) {
     var boxes = [], busy = false, otp = h('div', { class: 'otp', role: 'group', 'aria-label': 'Код из 4 цифр', 'data-testid': 'otp' }), err = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'code-err' });
@@ -479,7 +481,14 @@
       boxes.push(b); otp.appendChild(b);
     })(i);
     go.addEventListener('click', submit);
-    function tick() { var left = Math.ceil((L.readyAt - Date.now()) / 1000); resend.disabled = left > 0; resend.textContent = left > 0 ? 'Запросить код ещё раз (' + left + ' с)' : 'Запросить код ещё раз'; }
+    var boundBtn = L.mode === 'emp' ? h('button', { class: 'btn', type: 'button', 'data-testid': 'resend-bound' }) : null, leftEl = L.mode === 'emp' ? h('p', { class: 'cap tgleft', 'data-testid': 'req-left' }) : null;
+    function tick() {
+      var left = Math.ceil((L.readyAt - Date.now()) / 1000), out = L.left === 0;
+      resend.disabled = left > 0; resend.textContent = left > 0 ? 'Запросить код ещё раз (' + left + ' с)' : 'Запросить код ещё раз';   // при left=0 ссылка остаётся: сервер ответит, до какого времени лимит
+      if (boundBtn) { boundBtn.disabled = left > 0 || out; boundBtn.textContent = out ? 'Лимит запросов исчерпан' : left > 0 ? 'Я подключил(а), отправить код ещё раз (' + left + ' с)' : 'Я подключил(а), отправить код ещё раз'; }
+      if (leftEl) leftEl.textContent = typeof L.left === 'number' ? (out ? 'Запросов кода не осталось (лимит 3 за 3 часа). Чтобы узнать, когда лимит освободится, нажмите «Запросить код ещё раз».' : 'Осталось запросов кода: ' + L.left + ' из 3 (за 3 часа). Не расходуйте их зря: сначала подключите бота.') : 'Запросить код можно не более 3 раз за 3 часа.';
+    }
+    if (boundBtn) boundBtn.addEventListener('click', function () { if (!resend.disabled) resend.click(); });
     resend.addEventListener('click', function () {
       (L.mode === 'emp' ? (LIVE ? geoStrict() : Promise.resolve({ ok: true })).then(function (g) {
         if (!g.ok) return { ok: false, error: 'geo', reason: g.reason };
@@ -487,16 +496,20 @@
       }) : withGeo({ purpose: 'taxi', phone: L.phone, name: L.name }).then(function (d) { return call('adminCodeRequest', d); })).then(function (r) {
         if (r.error === 'geo' || r.error === 'bad_geo') { clearInterval(L.timer); L.step = 'start'; L.geoErr = r.reason || 'unavailable'; return renderLogin(); }
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
-        if (!r.ok) { toast(errText(r), 'bad'); return; }
+        if (!r.ok) { if (r.error === 'req_limit') L.left = 0; toast(errText(r), 'bad'); tick(); return; }
         if (r.closed) { toast(errText({ error: 'closed', from: r.from, to: r.to }), 'bad'); return; }
+        if (typeof r.left === 'number') L.left = r.left;
         L.readyAt = Date.now() + (r.throttled ? (r.wait || 30) : 30) * 1000; tick(); toast('Код запрошен повторно: проверьте Telegram'); boxes.forEach(function (b) { b.value = ''; }); boxes[0].focus();
       });
     });
     tick(); L.timer = setInterval(function () { if (!resend.isConnected) return clearInterval(L.timer); tick(); }, 1000);
     v.appendChild(h('div', { class: 'waitbox', role: 'status', 'data-testid': L.mode === 'emp' ? 'wait-emp' : 'wait-admin' }, ico('send'), h('div', null, h('b', { text: 'Проверьте Telegram' }), h('span', { text: L.mode === 'emp' ? 'Код придёт вам личным сообщением «Вход в учёт такси» от бота ' + BOT_NAME + '. Введите 4 цифры.' : 'Код пришёл в админский чат. Введите 4 цифры.' }))));
-    if (L.mode === 'emp') v.appendChild(h('div', { class: 'tghint', 'data-testid': 'tg-hint' }, h('span', { text: 'Сообщения нет? Вы ещё не подключали бота: откройте ' + BOT_NAME + ' (ссылка ' + BOT_URL + '), нажмите «Старт» и «Поделиться номером», затем запросите код снова. Пока бот не подключён, код получит администратор и передаст его вам лично.' }), h('a', { class: 'btn ghost', href: BOT_URL, target: '_blank', rel: 'noopener noreferrer', 'data-testid': 'tg-bot-link' }, 'Открыть ' + BOT_NAME + ' в Telegram')));
     if (!LIVE) v.appendChild(h('div', { class: 'demohint', 'data-testid': 'demo-code', text: 'Демо: код входа — ' + DEMO_CODE }));
     v.appendChild(h('div', { class: 'gap16' }, h('div', { class: 'gap12' }, otp, err), go, h('div', { class: 'row between' }, resend, h('button', { class: 'link', type: 'button', 'data-testid': 'change', onclick: function () { L.step = 'start'; renderLogin(); } }, 'Назад'))));
+    if (L.mode === 'emp') v.appendChild(h('div', { class: 'tghint tgcard', 'data-testid': 'tg-hint' }, h('b', { text: 'Код не пришёл? Один раз подключите бота' }),
+      h('p', { class: 'tgwhy', text: 'Бот ' + BOT_NAME + ' не может написать первым: пока вы его не подключили, код получит администратор. Чтобы коды приходили вам, сделайте по порядку:' }),
+      h('ol', { class: 'tgsteps', 'data-testid': 'tg-steps' }, h('li', { text: 'Нажмите «Открыть бота» ниже (или откройте ' + BOT_URL + ').' }), h('li', { text: 'В Telegram нажмите «Старт» (Start).' }), h('li', { text: 'Нажмите «Поделиться номером».' }), h('li', { text: 'Вернитесь сюда и нажмите «Я подключил(а), отправить код ещё раз».' })),
+      h('a', { class: 'btn ghost', href: BOT_URL, target: '_blank', rel: 'noopener noreferrer', 'data-testid': 'tg-bot-link' }, ico('send', 'sm'), 'Открыть бота ' + BOT_NAME), boundBtn, leftEl));
     if (L.mode === 'emp') v.appendChild(h('p', { class: 'foot', 'data-testid': 'limits-note', text: 'За 3 часа можно запросить код не более 3 раз и ошибиться не более 2 раз. После двух ошибок вход закрывается на 3 часа.' }));
     setTimeout(function () { boxes[0].focus(); }, 50);
   }
