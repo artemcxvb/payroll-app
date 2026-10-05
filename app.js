@@ -515,6 +515,18 @@
   /* ---------- недельный аванс: все параметры — в CFG (настройки) ---------- */
   function limitWords() { var d = CFG.deductShare; return d === 0.5 ? 'половины' : Math.round(d * 100) + '%'; }
   function perfOf(x) { return x.norm ? x.units / x.norm * 100 : 0; }
+  // Недобор до нормы (как «ЗП за смену по нормативу» в «Нормативах по участкам»): tfull = сумма по тарифу смены при 100% норматива (считает сервер:
+  // Σ тариф ÷ Σ производительность строк даты). Недобор смены = (tfull − факт по тарифу) × доля на ЗП; смены на норме и выше дают 0, без норматива (tfull = 0) не учитываются.
+  function hasGap(x) { return !x.planned && x.tfull > 0; }
+  function gapT(x) { return hasGap(x) ? Math.max(0, x.tfull - x.tsum) : 0; }
+  function gapPay(x) { return Math.round(gapT(x) * M.SHARE); }
+  function normUnits(x) { return hasGap(x) && x.tsum > 0 ? x.units * x.tfull / x.tsum : x.norm; }   // единиц на 100% при том же наборе операций
+  function gapCalc(shifts) {
+    var sh = shifts.filter(function (x) { return !x.planned; }), wn = sh.filter(hasGap);
+    var tariff = sum(sh, function (x) { return x.tsum; }), gt = sum(wn, gapT), earned = Math.round(tariff * M.SHARE), gap = Math.round(gt * M.SHARE);
+    return { shifts: sh, withNorm: wn, noNorm: sh.length - wn.length, under: wn.filter(function (x) { return gapT(x) > 0; }).length, tariff: tariff, units: sum(sh, function (x) { return x.units; }),
+      earned: earned, gap: gap, full: earned + gap, known: sh.some(function (x) { return 'tfull' in x; }) };
+  }
   // «Произв-ть, %» в таблице = СРЕДНЕЕ процентов по сменам (не взвешенное по единицам): так считает «Ведомость» и «Нормативы по участкам»
   function meanPerf(shifts) { var a = shifts.filter(function (x) { return x.norm; }); return a.length ? sum(a, perfOf) / a.length : 0; }
   // подпись процента: целое; если округление перескочило бы порог 50/100/115 (99,7 → «100»), показываем десятые со знаком вниз, как в таблице («99,7%»)
@@ -546,7 +558,7 @@
   }
 
   /* ---------- состояние клиента ---------- */
-  var S = { consent: null, data: null, calc: null, stale: false, periodId: M.periods[0].id, calMonth: M.today.slice(0, 7), calSel: null, dedFilter: 'all', perfAll: false, route: 'home', lastRoute: null };
+  var S = { consent: null, data: null, calc: null, stale: false, periodId: M.periods[0].id, calMonth: M.today.slice(0, 7), calSel: null, dedFilter: 'all', perfAll: false, gapAll: false, route: 'home', lastRoute: null };
   var session = function () { return load(SESSK, null); };
   var root = $('#view-root'), tabbar = $('#tabbar'), overlayRoot = $('#overlay-root'), toasts = $('#toasts');
 
@@ -912,7 +924,35 @@
       if (rows.length > 4) pf.appendChild(h('button', { class: 'link', type: 'button', 'aria-expanded': S.perfAll ? 'true' : 'false', 'data-testid': 'perf-toggle', onclick: function () { S.perfAll = !S.perfAll; render(); } }, S.perfAll ? 'Свернуть' : 'Показать все смены (' + rows.length + ')'));
     } else pf.appendChild(emptyState('cal', 'В этом периоде смен нет', 'Когда появятся смены, здесь будет график.'));
     v.appendChild(pf);
+    var gc = gapCard(c); if (gc) v.appendChild(gc);
     applyWidths(v); return v;
+  }
+  function gapRow(s) {
+    var g = gapPay(s), known = hasGap(s), nu = normUnits(s);
+    return h('button', { class: 'srow tap gaprow', type: 'button', 'data-date': s.date, 'aria-label': dlong(s.date) + ': ' + num(s.units) + ' ед.' + (known ? ', по норме ' + num(nu) + ' ед., ' + (g ? 'недобор ' + money(g) : 'норма выполнена') : ', норматива нет') + '. Детали смены', onclick: function () { openShiftDetail(s); } },
+      h('div', { class: 'sico ' + s.type }, ico(s.type === 'day' ? 'sun' : 'moon', 'sm')),
+      h('div', { class: 'd' }, dlong(s.date) + ', ' + dowOf(s.date).slice(0, 2).toLowerCase(), h('small', { class: 'num', text: num(s.units) + (known ? ' из ' + num(nu) + ' ед. по норме' : ' ед., норматива нет') + ' · заработано ' + money(Math.round(s.tsum * M.SHARE)) })),
+      h('div', { class: 'gapv num ' + (!known ? 'na' : g ? 'low' : 'good'), text: !known ? '–' : g ? minus(g) : 'норма' }));
+  }
+  function gapCard(c) {   // «Сколько вы недобираете»: заработок по факту и при 100% норматива по вашим же тарифам
+    var g = gapCalc(c.shifts); if (!g.known || !g.shifts.length) return null;
+    var share = Math.round(M.SHARE * 100), avg = g.units ? g.tariff / g.units : 0, fill = g.full ? Math.min(100, g.earned / g.full * 100) : 100;
+    var card = h('section', { class: 'card', 'aria-labelledby': 'gap-h', 'data-testid': 'gap' });
+    card.appendChild(h('div', { class: 'card-h' }, h('h2', { id: 'gap-h', text: 'Сколько вы недобираете' }), g.gap ? chip(g.under + ' ' + plural(g.under, ['смена', 'смены', 'смен']) + ' ниже нормы', 'warn') : chip('Норма выполнена', 'ok')));
+    card.appendChild(h('div', { class: 'perf-top' }, h('div', null, h('div', { class: 'perf-num num ' + (g.gap ? 'low' : 'good'), 'data-testid': 'gap-val', text: g.gap ? minus(g.gap) : money(0) }),
+      h('div', { class: 'cap', text: g.gap ? 'не добрано до 100% нормы за период' : 'недобора нет: смены на норме или выше' }))));
+    card.appendChild(h('div', { class: 'stats3 gapstats' },
+      h('div', { class: 'stat' }, h('b', { class: 'num', 'data-testid': 'gap-earned', text: money(g.earned) }), h('span', { text: 'заработано по факту' })),
+      h('div', { class: 'stat' }, h('b', { class: 'num', 'data-testid': 'gap-full', text: money(g.full) }), h('span', { text: 'при 100% нормы' })),
+      h('div', { class: 'stat' }, h('b', { class: 'num ' + pctClass(c.perf), text: pctS(c.perf) + '%' }), h('span', { text: 'выполнение нормы' }))));
+    card.appendChild(h('div', { class: 'gauge', role: 'img', 'aria-label': 'Заработано ' + money(g.earned) + ' из ' + money(g.full) + ' возможных при норме' }, h('i', { class: g.gap ? 'pg-mid' : 'pg-good', 'data-w': fill })));
+    card.appendChild(h('div', { class: 'gl num' }, h('span', { text: 'Факт ' + money(g.earned) }), h('span', { text: 'Норма ' + money(g.full) })));
+    card.appendChild(h('p', { class: 'cap num', 'data-testid': 'gap-rate', text: 'Ваш средний тариф ' + rate(avg) + ' ₽ за ед., вам ' + share + '%: ' + rate(avg * M.SHARE) + ' ₽ за ед.' }));
+    var rows = g.shifts.slice().reverse(), shown = S.gapAll ? rows : rows.slice(0, 4), sl = h('div', { class: 'shifts', 'data-testid': 'gap-list' });
+    shown.forEach(function (s) { sl.appendChild(gapRow(s)); }); card.appendChild(sl);
+    if (rows.length > 4) card.appendChild(h('button', { class: 'link', type: 'button', 'aria-expanded': S.gapAll ? 'true' : 'false', 'data-testid': 'gap-toggle', onclick: function () { S.gapAll = !S.gapAll; render(); } }, S.gapAll ? 'Свернуть' : 'Показать все смены (' + rows.length + ')'));
+    card.appendChild(h('div', { class: 'tipbox', 'data-testid': 'gap-how' }, ico('info', 'sm'), h('span', { text: 'Как считается: за смену берём вашу сумму по тарифу и делим на выполнение нормы, так получается сумма при 100% нормы. Разница × ' + share + '% и есть недобор. Смены выше нормы недобор других смен не закрывают.' + (g.noNorm ? ' Смен без норматива: ' + g.noNorm + ', они в недобор не входят.' : '') })));
+    return card;
   }
 
   /* ---------- календарь ---------- */
@@ -960,6 +1000,7 @@
       dc.appendChild(h('div', { class: 'kv' }, h('div', null, h('b', { class: 'num', text: s.hours + ' ч' }), h('span', { text: 'Отработано' })), h('div', null, h('b', { class: 'num', text: num(s.units) }), h('span', { text: 'Выработка, ед.' })), h('div', null, h('b', { class: 'num ' + pctClass(p), 'data-testid': 'day-pct', text: pctS(p) + '%' }), h('span', { text: 'Производит-ть' }))));
       dc.appendChild(h('p', { class: 'cap mt', 'data-testid': 'day-zone', text: 'Участок ' + ZI[s.zone].name + ' · смена «' + shiftName(s) + '»' + (s.counted ? '' : ' · не засчитана') }));
       dc.appendChild(h('p', { class: 'cap num mt', text: 'Начислено за смену ≈ ' + money(Math.round(s.tsum * M.SHARE)) }));
+      if (hasGap(s)) dc.appendChild(h('p', { class: 'cap num', 'data-testid': 'day-gap', text: gapPay(s) ? 'Недобор до нормы ≈ ' + money(gapPay(s)) : 'Норма смены выполнена, недобора нет' }));
       dc.appendChild(h('button', { class: 'btn secondary mt', type: 'button', 'data-testid': 'shift-detail', onclick: function () { openShiftDetail(s); } }, 'Детали смены')); }
     v.appendChild(dc);
     return v;
@@ -1063,7 +1104,9 @@
       h('div', { class: 'card2box', 'data-testid': 'shift-lines' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Выполнено единиц' }), h('div', { class: 'am num', text: num(s.units) })),
         h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Норматив смены', h('small', { text: 'факт ÷ производительность' })), h('div', { class: 'am num', text: num(s.norm) })),
         h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Выработка по тарифу', h('small', { class: 'num', text: 'средний тариф ' + rate(s.units ? s.tsum / s.units : 0) + ' ₽/ед.' })), h('div', { class: 'am num', text: money(s.tsum) })),
-        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Начислено за смену', h('small', { class: 'num', text: money(s.tsum) + ' × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', text: money(earned) }))),
+        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Начислено за смену', h('small', { class: 'num', text: money(s.tsum) + ' × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', text: money(earned) })),
+        hasGap(s) ? h('div', { class: 'line' }, h('div', { class: 'nm' }, 'При 100% нормы', h('small', { class: 'num', text: 'по тарифу ' + money(Math.max(s.tfull, s.tsum)) + ' × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', 'data-testid': 'shift-full', text: money(earned + gapPay(s)) })) : null,
+        hasGap(s) ? h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Недобор за смену', h('small', { text: 'сколько не хватило до полной оплаты по норме' })), h('div', { class: 'am num', 'data-testid': 'shift-gap', text: gapPay(s) ? minus(gapPay(s)) : money(0) })) : null),
       need > 0 ? h('div', { class: 'tipbox warn' }, ico('info', 'sm'), h('span', { text: 'До нормы смены не хватило ' + num(need) + ' ед. ' + z.tip })) : h('div', { class: 'tipbox ok' }, ico('check', 'sm'), h('span', { text: 'Норматив смены выполнен. ' + z.tip })),
       h('p', { class: 'cap', text: 'Данные смены — из вкладки «Выработка»: одна строка на смену и участок. Разбивка по отдельным операциям в таблице не ведётся.' })),
       footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') });

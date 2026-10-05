@@ -589,3 +589,11 @@ textarea.inp { padding: 12px 14px; min-height: 110px; font-size: 16px; resize: v
 .linkcard .lc-t b { font-size: 15px; line-height: 1.25; }
 .linkcard .lc-t small { font-size: 12.5px; color: var(--muted); line-height: 1.3; }
 .linkcard .lc-go { flex: none; color: var(--muted); }
+/* «Сколько вы недобираете»: заработок по факту и при 100% нормы */
+.gaprow { width: 100%; background: none; border: 0; border-radius: 0; padding: 4px 0; text-align: left; }
+.gaprow + .gaprow { border-top: 1px solid var(--line); }
+.gaprow:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 10px; }
+.gapv { font-weight: 800; font-size: 14px; min-width: 64px; text-align: right; white-space: nowrap; }
+.gapv.good { color: var(--ok); } .gapv.low { color: var(--bad); } .gapv.na { color: var(--faint); }
+.gapstats { margin-top: 12px; } .gapstats .stat b { font-size: 17px; white-space: nowrap; }
+@media (max-width: 360px) { .gapstats .stat b { font-size: 15px; } .gapstats .stat { padding: 10px 6px; } }

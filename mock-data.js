@@ -45,11 +45,12 @@
 
   // Смена в «Выработке»: одна строка на (человек, дата, смена, участок): «Кол-во единиц», «Производительность», «Сумма по тарифу, ₽», «Зачёт смены».
   // Разбивки по операциям в таблице НЕТ. Внутри демо-генератора единицы получаются из часов × норматив операций участка,
-  // но наружу отдаются только итоги смены (units, norm = units ÷ производительность, tsum, zone, counted).
+  // но наружу отдаются только итоги смены (units, norm = units ÷ производительность, tsum, tfull = тариф смены при 100% норматива, zone, counted).
   function mkShift(date, type, hours, ops) {
     var units = 0, norm = 0, tsum = 0, zone = OPI[ops[0][0]].zone;
     ops.forEach(function (o) { var d = OPI[o[0]], u = o[3] != null ? o[3] : Math.round(o[1] * d.normH * o[2] / 100); units += u; norm += o[1] * d.normH; tsum += u * d.tariff; });
-    return { date: date, type: type, label: zone === 'ADAPTO' ? (type === 'day' ? 'День' : 'Ночь 1/Ночь 2') : null, hours: 11, zone: zone, counted: true, units: units, norm: norm, tsum: tsum };
+    var tfull = units ? tsum * norm / units : 0;   // как сервер: сумма по тарифу ÷ производительность (units ÷ norm)
+    return { date: date, type: type, label: zone === 'ADAPTO' ? (type === 'day' ? 'День' : 'Ночь 1/Ночь 2') : null, hours: 11, zone: zone, counted: true, units: units, norm: norm, tsum: tsum, tfull: Math.round(tfull * 100) / 100 };
   }
   // Смены: график 2 через 2 (день, день, ночь, ночь, выходной, выходной)
   var handmade = { // 16–29.09 — «живой» период, задан вручную
@@ -73,7 +74,7 @@
     if (date >= '2026-09-16') {
       var hm = handmade[date];
       if (hm) shifts.push(mkShift(date, hm[0], hm[1], hm[2]));
-      else if (date === '2026-09-30') shifts.push({ date: date, type: type, hours: 11, zone: 'WH', counted: false, units: 0, norm: 0, tsum: 0, planned: true });
+      else if (date === '2026-09-30') shifts.push({ date: date, type: type, hours: 11, zone: 'WH', counted: false, units: 0, norm: 0, tsum: 0, tfull: 0, planned: true });
       continue;
     }
     var hrs = rnd() < 0.15 ? 12 : 11, i1 = Math.floor(rnd() * OPS.length), i2 = i1, h1 = Math.round(hrs * (0.4 + rnd() * 0.3));
