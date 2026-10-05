@@ -580,3 +580,12 @@ textarea.inp { padding: 12px 14px; min-height: 110px; font-size: 16px; resize: v
 .tgcard .tgsteps li { margin: 4px 0; }
 .tgcard .btn { display: flex; width: 100%; margin-top: 10px; min-height: 48px; text-decoration: none; align-items: center; justify-content: center; }
 .tgcard .tgleft { margin: 10px 0 0; }
+
+/* главная: карточка-ссылка «Вожу людей на своём авто» → taxi.html#/car */
+.linkcard { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); color: var(--text); text-decoration: none; }
+.linkcard:active { filter: brightness(.95); }
+.linkcard .tic { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--info-bg); color: var(--primary); }
+.linkcard .lc-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.linkcard .lc-t b { font-size: 15px; line-height: 1.25; }
+.linkcard .lc-t small { font-size: 12.5px; color: var(--muted); line-height: 1.3; }
+.linkcard .lc-go { flex: none; color: var(--muted); }

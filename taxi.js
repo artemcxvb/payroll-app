@@ -1200,7 +1200,9 @@
   window.addEventListener('hashchange', function () { if (session()) route(); });
   window.addEventListener('online', function () { if (S.mounted) offlineBanner(); }); window.addEventListener('offline', function () { if (S.mounted) offlineBanner(); });
   function boot() {
-    if (!session()) { renderLogin(); return; }
+    var WANTK = 'pr.taxi.want';   // вкладка из ссылки (например taxi.html#/car с главной «Мои выплаты»): помним до входа и открываем после
+    if (!session()) { try { if (/^#\/(add|list|car|drv)$/.test(location.hash)) sessionStorage.setItem(WANTK, location.hash); } catch (e) { /* без sessionStorage остаётся сам хэш */ } renderLogin(); return; }
+    try { var want = sessionStorage.getItem(WANTK); sessionStorage.removeItem(WANTK); if (want && !/^#\/(add|list|car|drv)$/.test(location.hash)) history.replaceState(null, '', want); } catch (e) { /* нет sessionStorage */ }
     S.tab = tabOk(location.hash.replace(/^#\//, ''));
     mount(); loadList(); if (isAdmin()) drvLoad(); else carLoad(); if (!/^#\/(add|list|car|drv)$/.test(location.hash) || '#/' + S.tab !== location.hash) history.replaceState(null, '', '#/' + S.tab);
   }

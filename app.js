@@ -94,6 +94,7 @@
     file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
     briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
     gift: '<path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>',
+    car: '<path d="M5 17h14M3 13l2-6a2 2 0 0 1 2-1.4h10a2 2 0 0 1 2 1.4l2 6v4a1 1 0 0 1-1 1h-1.5a1 1 0 0 1-1-1v-1H7.5v1a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><circle cx="7.5" cy="13.5" r="1"/><circle cx="16.5" cy="13.5" r="1"/>',
     paper: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'
   };
   function ico(n, cls) {
@@ -869,6 +870,7 @@
     v.appendChild(reportBtn('report-home'));
     v.appendChild(advHomeCard());
     v.appendChild(moreTiles());
+    v.appendChild(carLink());
     // разбор суммы
     var b = h('section', { class: 'card', 'aria-labelledby': 'br-h', id: 'breakdown', 'data-testid': 'breakdown' });
     b.appendChild(h('div', { class: 'card-h' }, h('h2', { id: 'br-h', text: 'Из чего сложилась сумма' })));
@@ -1177,6 +1179,10 @@
         tile('promo', 'gift', 'Акции и бонусы', act + ' ' + plural(act, ['активна', 'активны', 'активны']), function () { location.hash = '#/promo'; }),
         tile('jobs', 'briefcase', 'Вакансии в компании', jobs + ' ' + plural(jobs, ['открыта', 'открыты', 'открыто']), function () { location.hash = '#/jobs'; }),
         tile('fb', 'paper', 'Анонимная обратная связь', 'без имени и телефона', openFeedback)));
+  }
+  function carLink() {   // переход в учёт такси на вкладку «Мой авто» (та же вкладка браузера; в демо taxi.html тоже в демо-режиме)
+    return h('a', { class: 'linkcard', href: 'taxi.html#/car', 'data-testid': 'car-link' }, h('span', { class: 'tic', 'aria-hidden': 'true' }, ico('car')),
+      h('span', { class: 'lc-t' }, h('b', { text: 'Вожу людей на своём авто' }), h('small', { text: 'Профиль водителя и рейсы в учёте такси' })), h('span', { class: 'lc-go', 'aria-hidden': 'true' }, ico('cr', 'sm')));
   }
   function backTop(title, sub, href) { return h('div', { class: 'top' }, h('div', null, h('a', { class: 'back', href: href || '#/home', 'data-testid': 'back' }, ico('cl', 'sm'), 'Назад'), h('h1', { text: title }), sub ? h('p', { class: 'sub', text: sub }) : null)); }
 
@@ -1953,6 +1959,7 @@
     [['auto', 'Авто'], ['light', 'Светлая'], ['dark', 'Тёмная']].forEach(function (x) { seg.appendChild(h('button', { type: 'button', 'aria-pressed': pref === x[0] ? 'true' : 'false', 'data-theme-set': x[0], onclick: function () { setTheme(x[0]); render(); } }, x[1])); });
     v.appendChild(moreTiles());
     v.appendChild(h('a', { class: 'btn ghost mydata-link', href: '#/mydata', 'data-testid': 'open-mydata' }, ico('lock', 'sm'), 'Мои данные и согласие'));
+    v.appendChild(h('a', { class: 'btn ghost mydata-link', href: 'taxi.html', 'data-testid': 'open-taxi' }, ico('car', 'sm'), 'Учёт такси'));
     v.appendChild(h('section', { class: 'card gap12', 'aria-labelledby': 'th-h' }, h('h2', { id: 'th-h', text: 'Оформление' }), seg));
     v.appendChild(h('section', { class: 'card gap8', 'aria-labelledby': 'ds-h' }, h('h2', { id: 'ds-h', text: 'Данные' }),
       h('p', { class: 'cap', 'data-testid': 'synced', text: (S.stale ? 'Показаны сохранённые данные (нет сети). ' : 'Данные актуальны. ') + 'Обновлено: ' + stamp(S.data.fetchedAt) + '. Просмотр работает без интернета.' }),
