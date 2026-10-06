@@ -1312,7 +1312,7 @@
     send.addEventListener('click', function () {
       if (sending || !requireOnline()) return; sending = true; send.disabled = true; clear(send); send.appendChild(h('span', { class: 'spinner' })); send.appendChild(document.createTextNode(' Отправляем…'));
       delay(LAT + 300).then(function () { return backend.applyJob(j.id, text.value); }).then(function (r) {
-        if (!r.ok) { sending = false; send.disabled = false; clear(send); send.appendChild(ico('send', 'sm')); send.appendChild(document.createTextNode('Отправить отклик')); toast(r.error === 'already' ? 'Вы уже откликались на эту вакансию' : r.error === 'closed' ? 'Вакансия закрыта' : netMsg(r.error) ? 'Не отправлено: ' + netMsg(r.error) : 'Не отправлено (' + r.error + ')', 'bad'); return; }
+        if (!r.ok) { sending = false; send.disabled = false; clear(send); send.appendChild(ico('send', 'sm')); send.appendChild(document.createTextNode('Отправить отклик')); toast(r.error === 'already' ? 'Вы уже откликались на эту вакансию' : r.error === 'closed' ? 'Вакансия закрыта' : r.error === 'rate_limit' ? 'Не отправлено: слишком много откликов за час, подождите' : netMsg(r.error) ? 'Не отправлено: ' + netMsg(r.error) : 'Не отправлено (' + r.error + ')', 'bad'); return; }
         ctl.close(true); toast('Отклик отправлен. Статус — «Отправлен»'); refresh();
       });
     });
@@ -1586,7 +1586,7 @@
     sendBtn.addEventListener('click', function () {
       if (sendBtn.disabled || !requireOnline()) return; sending = true; sendBtn.disabled = true; clear(sendBtn); sendBtn.appendChild(h('span', { class: 'spinner' })); sendBtn.appendChild(document.createTextNode(' Отправляем…'));
       delay(LAT + 300).then(function () { return backend.submitIncident({ rid: rid(), date: date.value, type: type, desc: desc.value, text: text.value, scene: slots.scene.ready(), damage: slots.damage.ready(), acts: slots.acts.ready() }); }).then(function (r) {
-        if (!r.ok) { sending = false; sendLabel(); update(); toast(r.error === 'rate_limit' ? 'Слишком много сообщений за сутки' : netMsg(r.error) ? 'Не отправлено: ' + netMsg(r.error) : r.error === 'bad_file' ? 'Не отправлено: файл не подошёл (нужны фото JPG/PNG или PDF)' : r.error === 'too_big' ? 'Не отправлено: файл слишком большой' : 'Не отправлено: проверьте поля (' + r.error + ')', 'bad'); return; }
+        if (!r.ok) { sending = false; sendLabel(); update(); toast(r.error === 'rate_limit' ? 'Не отправлено: слишком много сообщений за час, подождите' : netMsg(r.error) ? 'Не отправлено: ' + netMsg(r.error) : r.error === 'bad_file' ? 'Не отправлено: файл не подошёл (нужны фото JPG/PNG или PDF)' : r.error === 'too_big' ? 'Не отправлено: файл слишком большой' : 'Не отправлено: проверьте поля (' + r.error + ')', 'bad'); return; }
         localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.card'); Object.keys(slots).forEach(function (k) { slots[k].release(); });
         ctl.close(true); S.dedFilter = 'all'; toast('Сообщение отправлено. Статус — «Отправлено, ждёт проверки»');
         refresh().then(function () { if (location.hash !== '#/ded') location.hash = '#/ded'; });
@@ -1641,7 +1641,7 @@
         if (send.disabled || !requireOnline()) return; sending = true; send.disabled = true; clear(send); send.appendChild(h('span', { class: 'spinner' })); send.appendChild(document.createTextNode(' Отправляем…'));
         delay(LAT + 200).then(function () { return backend.resubmitIncident(i.id, ta.value.trim()); }).then(function (r) {
           if (!r.ok) { sending = false; clear(send); send.appendChild(ico('send', 'sm')); send.appendChild(document.createTextNode('Отправить повторно')); upd();
-            toast('Не отправлено: ' + (({ text_short: 'текст слишком короткий', text_long: 'текст слишком длинный', not_returned: 'сообщение уже не требует доработки', not_found: 'сообщение не найдено' })[r.error] || netMsg(r.error) || 'ошибка'), 'bad');
+            toast('Не отправлено: ' + (({ rate_limit: 'слишком много дополнений за час, подождите', text_short: 'текст слишком короткий', text_long: 'текст слишком длинный', not_returned: 'сообщение уже не требует доработки', not_found: 'сообщение не найдено' })[r.error] || netMsg(r.error) || 'ошибка'), 'bad');
             if (r.error === 'not_returned' || r.error === 'not_found') { ctl.close(true); refresh(); } return; }
           var d = load('pr.iadd', {}); delete d[i.id]; store('pr.iadd', d);
           ctl.close(true); toast('Дополнение отправлено. Статус — «Отправлено, ждёт проверки»'); refresh();
