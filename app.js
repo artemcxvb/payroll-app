@@ -402,14 +402,14 @@
         h('li', { text: 'Компьютер: значок замка слева от адреса → Местоположение → Разрешить.' })),
       h('button', { class: 'btn', type: 'button', 'data-testid': 'geo-retry', onclick: onRetry }, 'Повторить'));
   }
-  /* ---------- автовыход: после LOGIN_HOUR_TO (22:00 МСК) приложение закрыто, утром вход заново по коду (только live; в демо времени нет) ---------- */
+  /* ---------- автовыход: после LOGIN_HOUR_TO (по умолчанию 20:00 МСК) приложение закрыто, утром вход заново по коду (только live; в демо времени нет) ---------- */
   var HRSK = 'pr.hours', autoT = null;
   function okHr(f, t) { return f === Math.floor(f) && t === Math.floor(t) && f >= 0 && f <= 23 && t >= 1 && t <= 24 && f < t; }
-  function loginHrs() {   // часы из ответов сервера (приоритет), иначе из config.js (loginHours), иначе 6 и 22
+  function loginHrs() {   // часы из ответов сервера (приоритет), иначе из config.js (loginHours), иначе 9 и 20
     var st = load(HRSK, null), c = APPC.loginHours || {};
     if (st && okHr(+st.from, +st.to)) return { from: +st.from, to: +st.to, off: !!st.off };
     if (okHr(+c.from, +c.to)) return { from: +c.from, to: +c.to, off: false };
-    return { from: 6, to: 22, off: false };
+    return { from: 9, to: 20, off: false };
   }
   function rememberHours(o) { if (o && okHr(+o.from, +o.to)) store(HRSK, { from: +o.from, to: +o.to, off: !!o.off }); }
   function isLoginClosed(r) { return !!r && r.error === 'closed' && typeof r.from === 'number' && typeof r.to === 'number'; }   // у 'closed' про аванс/вакансию часов нет
@@ -723,7 +723,7 @@
     return d.toISOString().slice(0, 10) === n.toISOString().slice(0, 10) ? hm : ('0' + d.getUTCDate()).slice(-2) + '.' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + ' в ' + hm;
   }
   function reqLimitMsg(until) { return 'Лимит запросов кода исчерпан, обратитесь к администратору. Новый код можно будет запросить после ' + mskWhen(until) + ' (МСК).'; }
-  function closedMsg(r) { return 'Вход возможен только с ' + (r && r.from >= 0 ? r.from : 6) + ':00 до ' + (r && r.to > 0 ? r.to : 22) + ':00 по Москве. Попробуйте позже.'; }   // часы входа задаёт сервер (6–22 МСК по умолчанию)
+  function closedMsg(r) { return 'Вход возможен только с ' + (r && r.from >= 0 ? r.from : 9) + ':00 до ' + (r && r.to > 0 ? r.to : 20) + ':00 по Москве. Попробуйте позже.'; }   // часы входа задаёт сервер (6–22 МСК по умолчанию)
   function loginPhone(v) {
     var inp, btn, err = h('div', { class: 'err', id: 'ph-err', role: 'alert', hidden: true, 'data-testid': 'ph-err' });
     if (L.notice) { err.textContent = L.notice; err.hidden = false; }   // сообщение живёт, пока пользователь не начнёт вводить номер (экран могут перерисовать)
@@ -2092,7 +2092,7 @@
 
   function boot() {
     var se0 = session();
-    if (se0) { var ck = clockState(se0); if (ck) { logout(ck === 'closed' ? closedNotice() : staleNotice()); return; } }   // запуск после 22:00 или со вчерашней сессией: сразу выход, данные не рисуем
+    if (se0) { var ck = clockState(se0); if (ck) { logout(ck === 'closed' ? closedNotice() : staleNotice()); return; } }   // запуск после LOGIN_HOUR_TO или со вчерашней сессией: сразу выход, данные не рисуем
     if (!session()) { renderLogin(); return; }
     S.blocked = false; armAuto();
     if (!/^#\/(home|cal|ops|ded|adv|me|promo|jobs|mydata)$/.test(location.hash)) location.hash = '#/home';

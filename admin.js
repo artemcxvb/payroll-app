@@ -157,7 +157,7 @@
     if (action === 'adminPromoTest') { logit('Акция: тест в админский чат', 'админ', 'длина: ' + Array.from(String(d.text).trim()).length); store(DEMOK, s); return { ok: true }; }
     if (p.hashes[key] && now - p.hashes[key] < PROMO.dupMs) { block = 'duplicate'; until = p.hashes[key] + PROMO.dupMs; }
     else if (p.last && now - p.last < PROMO.minGapMs) { block = 'recent'; until = p.last + PROMO.minGapMs; wait = Math.ceil((until - now) / 60000); }
-    if (action === 'adminPromoPreview') return { ok: true, pending: false, text: promoMessage(d.text, d.link), recipients: 12, skipped: 2, block: block, until: until, waitMin: wait, from: 6, to: 22 };
+    if (action === 'adminPromoPreview') return { ok: true, pending: false, text: promoMessage(d.text, d.link), recipients: 12, skipped: 2, block: block, until: until, waitMin: wait, from: 9, to: 20 };
     if (block) return { ok: false, error: block, until: until, waitMin: wait };
     p.last = now; p.hashes[key] = now; var short = Array.from(String(d.text).trim().replace(/\s+/g, ' ')).slice(0, 80).join('');
     logit('Акция: рассылка', 'сотрудники', 'в пакете: 11, останется: 0, пропущено: 2, длина: ' + Array.from(String(d.text).trim()).length + ', текст: «' + short + '»');
@@ -180,7 +180,7 @@
       var iss = s.adv.filter(function (a) { return a.status === 'issued' && a.payDate === '2026-10-03'; });
       return demoRes({ ok: true, today: nowMsk().slice(0, 10), payDate: '2026-10-03', advances: { pending: pe.length, pendingSum: sm(pe), approved: ap.length, approvedSum: sm(ap), approvedForPay: ap.length, approvedForPaySum: sm(ap), issued: iss.length, issuedSum: iss.reduce(function (t, x) { return t + x.paid; }, 0), issuedChanged: iss.filter(function (x) { return x.paid !== x.amount; }).length, issuedPayDate: '2026-10-03' },
         explanations: { sent: counts(s.expl, 'sent') }, incidents: { review: counts(s.inc, 'review') }, applications: { sent: counts(s.apps, 'sent') }, blocked: counts(s.acc, 'blocked'),
-        notify: { recipients: 12, queue: 0, nextAt: s.notifyAt && s.notifyAt + 1800000 > Date.now() ? s.notifyAt + 1800000 : 0, quiet: false, from: 6, to: 22 },
+        notify: { recipients: 12, queue: 0, nextAt: s.notifyAt && s.notifyAt + 1800000 > Date.now() ? s.notifyAt + 1800000 : 0, quiet: false, from: 9, to: 20 },
         promo: promoDemoInfo(s) });
     }
     if (action === 'adminAdvances') return demoRes({ ok: true, items: needs(s.adv, ['pending', 'approved']) });
@@ -277,7 +277,7 @@
   function mskHm(ms) { return new Date(ms + 3 * 3600000).toISOString().slice(11, 16); }
   function notifyErr(r) {   // человеческие тексты отказов рассылки
     var e = r && r.error;
-    if (e === 'quiet') return 'Сейчас ночь: рассылка доступна с ' + (r.from || 6) + ':00 до ' + (r.to || 22) + ':00 по Москве, чтобы не будить людей. Попробуйте позже.';
+    if (e === 'quiet') return 'Сейчас ночь: рассылка доступна с ' + (r.from || 9) + ':00 до ' + (r.to || 20) + ':00 по Москве, чтобы не будить людей. Попробуйте позже.';
     if (e === 'recent') return 'Оповещение уже отправляли недавно. Снова можно примерно через ' + (r.waitMin || 30) + ' ' + plural(r.waitMin || 30, ['минуту', 'минуты', 'минут']) + (r.until ? ' (после ' + mskHm(r.until) + ' по Москве)' : '') + '.';
     if (e === 'empty') return 'Некому отправлять: ни у кого нет привязанного Telegram.';
     if (e === 'too_many') return 'Слишком много получателей для одного запуска. Обратитесь к разработчику.';
@@ -288,7 +288,7 @@
   function mskDm(ms) { var d = new Date(ms + 3 * 3600000).toISOString(); return d.slice(8, 10) + '.' + d.slice(5, 7) + ' ' + d.slice(11, 16); }
   function promoErr(r) {   // человеческие тексты ошибок рассылки акций
     var e = r && r.error;
-    if (e === 'quiet') return 'Сейчас ночь: рассылка доступна с ' + (r.from || 6) + ':00 до ' + (r.to || 22) + ':00 по Москве, чтобы не будить людей. Попробуйте позже.';
+    if (e === 'quiet') return 'Сейчас ночь: рассылка доступна с ' + (r.from || 9) + ':00 до ' + (r.to || 20) + ':00 по Москве, чтобы не будить людей. Попробуйте позже.';
     if (e === 'recent') return 'Акцию уже рассылали недавно: не чаще одного раза в 10 минут. Снова можно примерно через ' + (r.waitMin || 10) + ' ' + plural(r.waitMin || 10, ['минуту', 'минуты', 'минут']) + (r.until ? ' (после ' + mskHm(r.until) + ' по Москве)' : '') + '.';
     if (e === 'duplicate') return 'Такая акция (тот же текст и ссылка) уже отправлялась за последние 24 часа' + (r.until ? '. Повторить можно после ' + mskDm(r.until) + ' по Москве' : '') + '. Измените текст или ссылку.';
     if (e === 'empty') return 'Некому отправлять: ни у кого нет привязанного Telegram.';
@@ -723,7 +723,7 @@
     sec.appendChild(h('h2', { id: 'ntf-h', text: 'Оповещение сотрудников' }));
     sec.appendChild(h('p', { class: 'cap', text: 'Личное сообщение в Telegram всем, у кого привязан бот: данные обновлены, можно посмотреть начисления. Отправляйте, когда обновили ведомость.' }));
     var hint = n.queue > 0 ? 'Рассылка не закончена. Осталось отправить: ' + n.queue + '. Нажмите кнопку, чтобы продолжить.'
-      : n.quiet ? 'Сейчас ночь: рассылка доступна с ' + (n.from || 6) + ':00 до ' + (n.to || 22) + ':00 по Москве.'
+      : n.quiet ? 'Сейчас ночь: рассылка доступна с ' + (n.from || 9) + ':00 до ' + (n.to || 20) + ':00 по Москве.'
       : n.nextAt ? 'Недавно уже отправляли. Снова можно после ' + mskHm(n.nextAt) + ' по Москве.' : '';
     if (hint) sec.appendChild(h('p', { class: 'help', 'data-testid': 'notify-hint', text: hint }));
     btn = h('button', { class: 'btn', type: 'button', 'data-testid': 'notify-btn', onclick: function () { notifyFlow(btn, n); } }, ico('send', 'sm'), n.queue > 0 ? 'Продолжить рассылку (осталось ' + n.queue + ')' : 'Оповестить сотрудников об обновлении данных');
@@ -774,7 +774,7 @@
     sec.appendChild(h('div', { class: 'field' }, h('label', { class: 'l', for: 'pr-text' }, h('span', { text: 'Текст акции' }), cnt), ta));
     sec.appendChild(h('div', { class: 'field' }, h('label', { class: 'l', for: 'pr-link', text: 'Ссылка (необязательно)' }), link, h('p', { class: 'help', text: 'Только https://, до ' + PROMO.linkMax + ' символов. Ссылка добавится в конец сообщения.' })));
     var hint = q > 0 ? 'Рассылка акции не закончена. Осталось отправить: ' + q + '. Продолжите её или отмените остаток, тогда можно будет отправить новую акцию.'
-      : n.quiet ? 'Сейчас ночь: рассылка доступна с ' + (n.from || 6) + ':00 до ' + (n.to || 22) + ':00 по Москве. Тест себе можно отправить в любое время.'
+      : n.quiet ? 'Сейчас ночь: рассылка доступна с ' + (n.from || 9) + ':00 до ' + (n.to || 20) + ':00 по Москве. Тест себе можно отправить в любое время.'
       : pr.nextAt ? 'Недавно уже рассылали акцию. Следующую можно после ' + mskHm(pr.nextAt) + ' по Москве.' : '';
     if (hint) sec.appendChild(h('p', { class: 'help', 'data-testid': 'promo-hint', text: hint }));
     var test = h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'promo-test', disabled: P.busy, onclick: promoTest }, ico('send', 'sm'), 'Отправить мне тест');
