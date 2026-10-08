@@ -59,7 +59,12 @@
   function pctClass(p) { return p >= CFG.normGood ? 'good' : p >= CFG.normLow ? 'mid' : 'low'; }
   function pctText(p) { return p >= CFG.normGood ? 'Норма выполнена' : p >= CFG.normLow ? 'Ниже нормы' : 'Сильно ниже нормы'; }
   function rate4(n) { return (Math.round(n * 10000) / 10000).toFixed(4).replace('.', ','); }   // «ЗП сотруднику, ₽/ед» в таблице — 4 знака (16,3605)
-  function normTxt(o) { return o.normH > 0 ? o.normH + ' ед./ч' : 'нормы нет'; }
+  function normTxt(o) { return o.perHour ? 'за час' : o.normH > 0 ? o.normH + ' ед./ч' : 'нормы нет'; }
+  // HOURLY_V1: часовые услуги. Смена может нести hz = { hours, tsum, nh, items[] } (табель); tsum смены = сдельная + часовая сумма по тарифу.
+  function hzOf(x) { return x && x.hz && x.hz.hours > 0 ? x.hz : null; }
+  function pieceT(x) { var z = hzOf(x); return z ? Math.max(0, x.tsum - z.tsum) : x.tsum; }   // сдельная часть суммы по тарифу
+  function dec(n, d) { var k = Math.pow(10, d || 1), r = Math.round(n * k) / k; return String(r).replace('.', ','); }
+  function hrsTxt(n) { return dec(n, 2) + ' ч'; }
   function rate(n) { return (Math.round(n * 100) / 100).toFixed(2).replace('.', ','); }
   function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* квота */ } }
   function load(k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
@@ -505,30 +510,36 @@
       var withheld = Math.min(total, limit), carryOut = total - withheld;
       out[p.id] = { p: p, shifts: sh, cases: cs, units: units, norm: norm, tariff: tariff, accrued: accrued, by: by, own: own, carryIn: carry, total: total, limit: limit,
         withheld: withheld, carryOut: carryOut, payout: accrued - withheld, hours: sum(sh, function (s) { return s.hours; }),
-        perf: meanPerf(sh) };
+        perf: meanPerf(sh), hzHours: sum(sh, function (s) { return hzOf(s) ? s.hz.hours : 0; }), hzT: sum(sh, function (s) { return hzOf(s) ? s.hz.tsum : 0; }), hzNh: sum(sh, function (s) { return hzOf(s) ? s.hz.nh : 0; }) };
       var stm = d.statements && d.statements[p.id];   // боевой режим: деньги берём из «Ведомости» как есть, не пересчитываем
-      if (stm) { var o = out[p.id]; o.perf = stm.perf || o.perf; o.accrued = stm.accrued; o.by = stm.by; o.own = sum(KINDS, function (k) { return stm.by[k] || 0; }); o.total = stm.total; o.limit = stm.limit; o.withheld = stm.withheld; o.carryOut = stm.carryOut; o.payout = stm.payout; carryOut = stm.carryOut; }
+      if (stm) { var o = out[p.id], sz = stm.hz || {};
+        if (sz.hours > 0) { o.hzHours = sz.hours; o.hzT = sz.tariff; o.hzNh = sz.nh || o.hzNh; }   // часовые из «Ведомости» (колонки «Часовые, ч/₽/нормо-ч»)
+        o.perf = sz.perf || (o.hzHours ? o.perf : stm.perf) || o.perf;   // есть часовые: «Произв-ть с часовыми, %» из таблицы, иначе считаем по дням с нормо-часами
+        o.accrued = stm.accrued; o.by = stm.by; o.own = sum(KINDS, function (k) { return stm.by[k] || 0; }); o.total = stm.total; o.limit = stm.limit; o.withheld = stm.withheld; o.carryOut = stm.carryOut; o.payout = stm.payout; carryOut = stm.carryOut; }
       carry = carryOut;
     });
     return out;
   }
   /* ---------- недельный аванс: все параметры — в CFG (настройки) ---------- */
   function limitWords() { var d = CFG.deductShare; return d === 0.5 ? 'половины' : Math.round(d * 100) + '%'; }
-  function perfOf(x) { return x.norm ? x.units / x.norm * 100 : 0; }
+  function piecePerf(x) { return x.norm ? x.units / x.norm * 100 : 0; }
+  // производительность дня = (сдельные нормо-часы + нормо-часы часовых услуг) ÷ часов в смене; сдельные нормо-часы = производительность × часов в смене
+  function perfOf(x) { var z = hzOf(x); return z ? piecePerf(x) + z.nh / (NORM_SHIFT_H || 11) * 100 : piecePerf(x); }
   // Недобор до нормы (как «ЗП за смену по нормативу» в «Нормативах по участкам»): tfull = сумма по тарифу смены при 100% норматива (считает сервер:
   // Σ тариф ÷ Σ производительность строк даты). Недобор смены = (tfull − факт по тарифу) × доля на ЗП; смены на норме и выше дают 0, без норматива (tfull = 0) не учитываются.
   function hasGap(x) { return !x.planned && x.tfull > 0; }
-  function gapT(x) { return hasGap(x) ? Math.max(0, x.tfull - x.tsum) : 0; }
+  function gapT(x) { return hasGap(x) ? Math.max(0, x.tfull - pieceT(x)) : 0; }
   function gapPay(x) { return Math.round(gapT(x) * M.SHARE); }
-  function normUnits(x) { return hasGap(x) && x.tsum > 0 ? x.units * x.tfull / x.tsum : x.norm; }   // единиц на 100% при том же наборе операций
+  function normUnits(x) { return hasGap(x) && pieceT(x) > 0 ? x.units * x.tfull / pieceT(x) : x.norm; }   // единиц на 100% при том же наборе операций
   function gapCalc(shifts) {
-    var sh = shifts.filter(function (x) { return !x.planned; }), wn = sh.filter(hasGap);
+    var sh = shifts.filter(function (x) { return !x.planned; }), wn = sh.filter(hasGap), pc = sh.filter(function (x) { return x.zone !== 'HOURLY'; });   // дни только с часовыми услугами — без норматива штук, в недобор не входят
     var tariff = sum(sh, function (x) { return x.tsum; }), gt = sum(wn, gapT), earned = Math.round(tariff * M.SHARE), gap = Math.round(gt * M.SHARE);
-    return { shifts: sh, withNorm: wn, noNorm: sh.length - wn.length, under: wn.filter(function (x) { return gapT(x) > 0; }).length, tariff: tariff, units: sum(sh, function (x) { return x.units; }),
+    return { shifts: pc, withNorm: wn, noNorm: pc.length - wn.length, under: wn.filter(function (x) { return gapT(x) > 0; }).length, tariff: tariff, ptariff: sum(pc, pieceT), units: sum(sh, function (x) { return x.units; }),
       earned: earned, gap: gap, full: earned + gap, known: sh.some(function (x) { return 'tfull' in x; }) };
   }
   // «Произв-ть, %» в таблице = СРЕДНЕЕ процентов по сменам (не взвешенное по единицам): так считает «Ведомость» и «Нормативы по участкам»
-  function meanPerf(shifts) { var a = shifts.filter(function (x) { return x.norm; }); return a.length ? sum(a, perfOf) / a.length : 0; }
+  function meanPerf(shifts) { var a = shifts.filter(function (x) { return x.norm || hzOf(x); }); return a.length ? sum(a, perfOf) / a.length : 0; }
+  function meanPiece(shifts) { var a = shifts.filter(function (x) { return x.norm; }); return a.length ? sum(a, piecePerf) / a.length : 0; }   // только сдельная часть (карточки участков WH/ADAPTO)
   // подпись процента: целое; если округление перескочило бы порог 50/100/115 (99,7 → «100»), показываем десятые со знаком вниз, как в таблице («99,7%»)
   function pctS(p) { var r = Math.round(p); if ([50, 100, 115].some(function (t) { return (r >= t) !== (p >= t); })) return (Math.floor(p * 10) / 10).toFixed(1).replace('.', ','); return String(r); }
   var DOWG = ['воскресенья', 'понедельника', 'вторника', 'среды', 'четверга', 'пятницы', 'субботы'];
@@ -856,7 +867,7 @@
   function shiftRow(s) {
     var p = perfOf(s);
     return h('div', { class: 'srow' }, h('div', { class: 'sico ' + s.type }, ico(s.type === 'day' ? 'sun' : 'moon', 'sm')),
-      h('div', { class: 'd' }, dlong(s.date) + ', ' + dowOf(s.date).slice(0, 2).toLowerCase(), h('small', { text: (s.type === 'day' ? 'Дневная' : 'Ночная') + ' · ' + s.hours + ' ч · ' + num(s.units) + ' ед.' })),
+      h('div', { class: 'd' }, dlong(s.date) + ', ' + dowOf(s.date).slice(0, 2).toLowerCase(), h('small', { text: (s.type === 'day' ? 'Дневная' : 'Ночная') + ' · ' + s.hours + ' ч · ' + (s.zone === 'HOURLY' ? 'часовые услуги' : num(s.units) + ' ед.' + (hzOf(s) ? ' · часовые ' + hrsTxt(s.hz.hours) : '')) })),
       h('div', { class: 'pct ' + pctClass(p), text: pctS(p) + '%' }));
   }
   function applyWidths(v) { // CSP запрещает inline style — размеры задаём через CSSOM
@@ -886,7 +897,8 @@
     // разбор суммы
     var b = h('section', { class: 'card', 'aria-labelledby': 'br-h', id: 'breakdown', 'data-testid': 'breakdown' });
     b.appendChild(h('div', { class: 'card-h' }, h('h2', { id: 'br-h', text: 'Из чего сложилась сумма' })));
-    b.appendChild(h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Выработка по тарифу', h('small', { class: 'num', text: num(c.units) + ' ед. по тарифам операций · смен: ' + c.shifts.length })), h('div', { class: 'am num', text: money(c.tariff) })));
+    b.appendChild(h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Выработка по тарифу', h('small', { class: 'num', text: num(c.units) + ' ед. по тарифам операций · смен: ' + c.shifts.length })), h('div', { class: 'am num', 'data-testid': 'br-piece', text: money(c.hzHours ? c.tariff - c.hzT : c.tariff) })));
+    if (c.hzHours) b.appendChild(h('div', { class: 'line', 'data-testid': 'br-hourly' }, h('div', { class: 'nm' }, 'Часовые услуги', h('small', { class: 'num', text: hrsTxt(c.hzHours) + ' × тариф заказчика за час · ' + dec(c.hzNh, 1) + ' нормо-ч' })), h('div', { class: 'am num', text: money(c.hzT) })));
     b.appendChild(h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Ваша доля ' + Math.round(M.SHARE * 100) + '%', h('small', { text: 'Так считается начисление' })), h('div', { class: 'am num', text: '× ' + Math.round(M.SHARE * 100) + '%' })));
     b.appendChild(h('div', { class: 'line total' }, h('div', { class: 'nm', text: 'Начислено' }), h('div', { class: 'am num', 'data-testid': 'accrued', text: money(c.accrued) })));
     b.appendChild(h('div', { class: 'card-h sp' }, h('h3', { class: 'h3', text: 'Вычеты по видам' }), h('span', { class: 'am num', text: minus(c.own) })));
@@ -915,7 +927,7 @@
     // производительность
     var pc = pctClass(c.perf), pf = h('section', { class: 'card', 'aria-labelledby': 'pf-h', 'data-testid': 'perf' });
     pf.appendChild(h('div', { class: 'card-h' }, h('h2', { id: 'pf-h', text: 'Производительность' }), chip(pctText(c.perf), pc === 'good' ? 'ok' : pc === 'mid' ? 'warn' : 'bad')));
-    pf.appendChild(h('div', { class: 'perf-top' }, h('div', null, h('div', { class: 'perf-num num ' + pc, 'data-testid': 'perf-val', text: pctS(c.perf) + '%' }), h('div', { class: 'cap', text: 'факт к нормативу операций за период' }))));
+    pf.appendChild(h('div', { class: 'perf-top' }, h('div', null, h('div', { class: 'perf-num num ' + pc, 'data-testid': 'perf-val', text: pctS(c.perf) + '%' }), h('div', { class: 'cap', text: 'факт к нормативу операций за период' + (c.hzHours ? ', с часовыми услугами в нормо-часах' : '') }))));
     if (c.shifts.length) {
       pf.appendChild(perfChart(c.shifts));
       pf.appendChild(h('div', { class: 'legend' }, h('span', null, h('i', { class: 'lg-good' }), '100% и выше'), h('span', null, h('i', { class: 'lg-mid' }), '50–99%'), h('span', null, h('i', { class: 'lg-low' }), 'ниже 50%')));
@@ -936,7 +948,7 @@
   }
   function gapCard(c) {   // «Сколько вы недобираете»: заработок по факту и при 100% норматива по вашим же тарифам
     var g = gapCalc(c.shifts); if (!g.known || !g.shifts.length) return null;
-    var share = Math.round(M.SHARE * 100), avg = g.units ? g.tariff / g.units : 0, fill = g.full ? Math.min(100, g.earned / g.full * 100) : 100;
+    var share = Math.round(M.SHARE * 100), avg = g.units ? g.ptariff / g.units : 0, fill = g.full ? Math.min(100, g.earned / g.full * 100) : 100;
     var card = h('section', { class: 'card', 'aria-labelledby': 'gap-h', 'data-testid': 'gap' });
     card.appendChild(h('div', { class: 'card-h' }, h('h2', { id: 'gap-h', text: 'Сколько вы недобираете' }), g.gap ? chip(g.under + ' ' + plural(g.under, ['смена', 'смены', 'смен']) + ' ниже нормы', 'warn') : chip('Норма выполнена', 'ok')));
     card.appendChild(h('div', { class: 'perf-top' }, h('div', null, h('div', { class: 'perf-num num ' + (g.gap ? 'low' : 'good'), 'data-testid': 'gap-val', text: g.gap ? minus(g.gap) : money(0) }),
@@ -978,7 +990,7 @@
     var sel = S.calSel || defaultSel(ym, byDate); S.calSel = sel;
     for (i = 1; i <= dim; i++) (function (day) {
       var ds = ym + '-' + ('0' + day).slice(-2), s = byDate[ds], cls = 'cell', label = dlong(ds) + ', ' + dowOf(ds).toLowerCase();
-      if (s) { cls += s.planned ? ' planned' : ' ' + s.type; label += s.planned ? ': запланирована смена' : ': ' + (s.type === 'day' ? 'дневная' : 'ночная') + ' смена, ' + s.hours + ' ч, ' + s.units + ' ед.'; } else { cls += ' off'; label += ': выходной'; }
+      if (s) { cls += s.planned ? ' planned' : ' ' + s.type; label += s.planned ? ': запланирована смена' : ': ' + (s.type === 'day' ? 'дневная' : 'ночная') + ' смена, ' + s.hours + ' ч, ' + (s.zone === 'HOURLY' ? 'часовые услуги' : s.units + ' ед.' + (hzOf(s) ? ', часовые услуги ' + hrsTxt(s.hz.hours) : '')); } else { cls += ' off'; label += ': выходной'; }
       if (ds === S.data.today) { cls += ' today'; label += ', сегодня'; }
       if (ds === sel) cls += ' sel';
       g.appendChild(h('button', { class: cls, type: 'button', 'data-date': ds, 'aria-pressed': ds === sel ? 'true' : 'false', 'aria-label': label, onclick: function () { S.calSel = ds; render(); } },
@@ -999,6 +1011,7 @@
     else { var p = Math.round(perfOf(s));
       dc.appendChild(h('div', { class: 'kv' }, h('div', null, h('b', { class: 'num', text: s.hours + ' ч' }), h('span', { text: 'Отработано' })), h('div', null, h('b', { class: 'num', text: num(s.units) }), h('span', { text: 'Выработка, ед.' })), h('div', null, h('b', { class: 'num ' + pctClass(p), 'data-testid': 'day-pct', text: pctS(p) + '%' }), h('span', { text: 'Производит-ть' }))));
       dc.appendChild(h('p', { class: 'cap mt', 'data-testid': 'day-zone', text: 'Участок ' + ZI[s.zone].name + ' · смена «' + shiftName(s) + '»' + (s.counted ? '' : ' · не засчитана') }));
+      if (hzOf(s)) dc.appendChild(hzBox(s.hz, 'day-hourly'));
       dc.appendChild(h('p', { class: 'cap num mt', text: 'Начислено за смену ≈ ' + money(Math.round(s.tsum * M.SHARE)) }));
       if (hasGap(s)) dc.appendChild(h('p', { class: 'cap num', 'data-testid': 'day-gap', text: gapPay(s) ? 'Недобор до нормы ≈ ' + money(gapPay(s)) : 'Норма смены выполнена, недобора нет' }));
       dc.appendChild(h('button', { class: 'btn secondary mt', type: 'button', 'data-testid': 'shift-detail', onclick: function () { openShiftDetail(s); } }, 'Детали смены')); }
@@ -1017,10 +1030,12 @@
   function zoneAgg(shifts) {
     var by = {};
     shifts.forEach(function (sh) { if (sh.planned || !sh.counted) return;
-      var a = by[sh.zone] || (by[sh.zone] = { id: sh.zone, z: ZI[sh.zone], units: 0, norm: 0, tsum: 0, shifts: [] });
-      a.units += sh.units; a.norm += sh.norm; a.tsum += sh.tsum; a.shifts.push(sh);
+      if (sh.zone !== 'HOURLY') { var a = by[sh.zone] || (by[sh.zone] = { id: sh.zone, z: ZI[sh.zone], units: 0, norm: 0, tsum: 0, shifts: [] });
+        a.units += sh.units; a.norm += sh.norm; a.tsum += pieceT(sh); a.shifts.push(sh); }
+      var hz = hzOf(sh); if (hz) { var q = by.HOURLY || (by.HOURLY = { id: 'HOURLY', z: ZI.HOURLY, hourly: true, units: 0, norm: 0, tsum: 0, hours: 0, nh: 0, shifts: [] });   // часовые услуги — отдельная карточка
+        q.hours += hz.hours; q.nh += hz.nh; q.tsum += hz.tsum; q.shifts.push(sh); }
     });
-    return M.ZONES.filter(function (z) { return by[z.id]; }).map(function (z) { var a = by[z.id]; a.perf = meanPerf(a.shifts); a.earned = Math.round(a.tsum * M.SHARE); a.avgTariff = a.units ? a.tsum / a.units : 0; return a; });
+    return M.ZONES.filter(function (z) { return by[z.id]; }).map(function (z) { var a = by[z.id]; a.perf = a.hourly ? (a.hours ? a.nh / a.hours * 100 : 0) : meanPiece(a.shifts); a.earned = Math.round(a.tsum * M.SHARE); a.avgTariff = a.hourly ? (a.hours ? a.tsum / a.hours : 0) : a.units ? a.tsum / a.units : 0; return a; });
   }
   function viewOps() {
     var c = S.calc[S.periodId], v = h('main', { class: 'view stack', id: 'main' });
@@ -1032,6 +1047,7 @@
     v.appendChild(h('h2', { class: 'h3', text: 'Мой факт по участкам' }));
     if (!zs.length) v.appendChild(emptyState('box', 'Выработки в периоде нет', 'Когда смены будут закрыты, здесь появится факт по участкам.'));
     else { var zl = h('div', { class: 'stack', 'data-testid': 'zone-list' }); zs.forEach(function (a) {
+      if (a.hourly) { zl.appendChild(hourlyCard(a)); return; }
       var t = opTone(a.perf);
       zl.appendChild(h('button', { class: 'card opcard', type: 'button', 'data-zone-card': a.id, 'aria-label': 'Участок ' + a.z.name + ': ' + num(a.units) + ' ед., ' + pctS(a.perf) + '% к нормативу, заработано ' + money(a.earned), onclick: function () { openZoneDetail(a); } },
         h('div', { class: 'row between' }, h('b', { class: 'opn', text: a.z.name }), chip(t[0], t[1])),
@@ -1045,9 +1061,10 @@
     var lst = h('div', { class: 'stack', 'data-testid': 'ops-list' });
     M.ZONES.forEach(function (z) {
       var ops = M.OPS.filter(function (o) { return o.zone === z.id; });
-      var box = h('div', { class: 'card2box refbox', 'data-zone': z.id }, h('div', { class: 'zone-h' }, h('h3', { class: 'h3', text: 'Участок ' + z.name })));
+      if (z.id === 'HOURLY' && !ops.length) return;   // справочника часовых тарифов нет — блок не показываем
+      var box = h('div', { class: 'card2box refbox', 'data-zone': z.id }, h('div', { class: 'zone-h' }, h('h3', { class: 'h3', text: z.id === 'HOURLY' ? z.name + ' (тариф за час)' : 'Участок ' + z.name })));
       ops.forEach(function (o) {
-        box.appendChild(h('button', { class: 'refrow', type: 'button', 'data-op': o.id, 'aria-label': o.name + ': тариф ' + rate(o.tariff) + ' ₽ за единицу, ' + (o.normH > 0 ? 'норматив ' + o.normH + ' ед. в час' : 'норматива нет'), onclick: function () { openOpDetail(o); } },
+        box.appendChild(h('button', { class: 'refrow', type: 'button', 'data-op': o.id, 'aria-label': o.name + ': тариф ' + rate(o.tariff) + (o.perHour ? ' ₽ за час' : ' ₽ за единицу, ' + (o.normH > 0 ? 'норматив ' + o.normH + ' ед. в час' : 'норматива нет')), onclick: function () { openOpDetail(o); } },
           h('span', { class: 'opn', text: o.name }), h('span', { class: 'num rv' }, h('b', { text: rate(o.tariff) + ' ₽' }), h('small', { text: normTxt(o) }))));
       });
       lst.appendChild(box);
@@ -1059,6 +1076,7 @@
         h('p', { class: 'cap', text: 'Начисление = выработка по тарифу × ' + Math.round(M.SHARE * 100) + '% (доля на ЗП). Вам за единицу — тариф × ' + Math.round(M.SHARE * 100) + '%.' }),
         h('p', { class: 'cap', text: 'Норматив на смену = норматив (ед. в час) × ' + NORM_SHIFT_H + ' ч. Выполнение норматива = факт ÷ норматив смены («Производительность» в таблице).' }),
         h('p', { class: 'cap', text: 'В зачёт идут смены с отметкой «Зачёт смены». Тарифы и нормативы берутся из справочника «Нормативы по участкам».' }),
+        h('p', { class: 'cap', 'data-testid': 'how-hourly', text: 'Часовые услуги (по табелю) = часы × тариф заказчика за час × ' + Math.round(M.SHARE * 100) + '%. В производительность они идут нормо-часами: сумма по тарифу ÷ 830 ₽ (столько стоит час работы на 100% нормы). Производительность дня = (нормо-часы сдельной работы + нормо-часы часовых услуг) ÷ ' + NORM_SHIFT_H + ' ч.' }),
         h('div', { class: 'legend' }, h('span', null, h('i', { class: 'lg-good' }), '100% и выше — норма'), h('span', null, h('i', { class: 'lg-mid' }), '50–99% — ниже нормы'), h('span', null, h('i', { class: 'lg-low' }), 'ниже 50% — сильно ниже'), h('span', null, h('i', { class: 'lg-good' }), '115% и выше — выше нормы')),
         h('div', { class: 'tipbox' }, ico('info', 'sm'), h('span', { text: 'Как выйти на норму: откройте участок и посмотрите смены — видно, когда темп просел и сколько единиц не хватило до нормы. Ошибки и пересорт не только снижают вычеты, но и отнимают время на перепроверку.' })))));
     applyWidths(v); return v;
@@ -1066,7 +1084,7 @@
   function shiftRowLine(s, onTap) {
     var p = perfOf(s), cls = 'srow' + (onTap ? ' tap' : '');
     return h(onTap ? 'button' : 'div', { class: cls, type: onTap ? 'button' : null, 'data-date': s.date, onclick: onTap || null }, h('div', { class: 'sico ' + s.type }, ico(s.type === 'day' ? 'sun' : 'moon', 'sm')),
-      h('div', { class: 'd' }, dlong(s.date) + ', ' + dowOf(s.date).slice(0, 2).toLowerCase(), h('small', { class: 'num', text: shiftName(s) + ' · ' + num(s.units) + ' ед. · ' + money(Math.round(s.tsum * M.SHARE)) })), h('div', { class: 'pct ' + pctClass(p), text: pctS(p) + '%' }));
+      h('div', { class: 'd' }, dlong(s.date) + ', ' + dowOf(s.date).slice(0, 2).toLowerCase(), h('small', { class: 'num', text: shiftName(s) + ' · ' + num(s.units) + ' ед. · ' + money(Math.round(pieceT(s) * M.SHARE)) + (hzOf(s) ? ' + часовые ' + hrsTxt(s.hz.hours) : '') })), h('div', { class: 'pct ' + pctClass(p), text: pctS(p) + '%' }));
   }
   function openZoneDetail(a) {
     var t = opTone(a.perf), ctl, need = Math.max(0, Math.ceil(a.norm - a.units)), z = a.z;
@@ -1085,8 +1103,42 @@
     Array.prototype.forEach.call(list.children, function (row) { var sh = a.shifts.filter(function (x) { return x.date === row.getAttribute('data-date'); })[0]; row.classList.add('tap'); row.setAttribute('role', 'button'); row.tabIndex = 0;
       var go = function () { ctl.close(); setTimeout(function () { openShiftDetail(sh); }, 260); }; row.addEventListener('click', go); row.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } }); });
   }
+  function hzBox(hz, tid) {   // строки часовых услуг дня: услуга, часы × тариф = сумма; итог и нормо-часы
+    var box = h('div', { class: 'card2box mt', 'data-testid': tid }, h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Часовые услуги', h('small', { class: 'num', text: hrsTxt(hz.hours) + ' · ' + dec(hz.nh, 2) + ' нормо-ч' })), h('div', { class: 'am num', text: money(hz.tsum) })));
+    (hz.items || []).forEach(function (it) { box.appendChild(h('div', { class: 'line', 'data-hz-item': '1' }, h('div', { class: 'nm' }, it.service, h('small', { class: 'num', text: hrsTxt(it.hours) + ' × ' + rate(it.rate) + ' ₽/ч · вам ' + money(Math.round(it.tsum * M.SHARE)) })), h('div', { class: 'am num', text: money(it.tsum) }))); });
+    return box;
+  }
+  function hourlyCard(a) {
+    return h('button', { class: 'card opcard', type: 'button', 'data-zone-card': 'HOURLY', 'aria-label': a.z.name + ': ' + hrsTxt(a.hours) + ', ' + dec(a.nh, 1) + ' нормо-часов, заработано ' + money(a.earned), onclick: function () { openHourlyDetail(a); } },
+      h('div', { class: 'row between' }, h('b', { class: 'opn', text: a.z.name }), chip(dec(a.nh, 1) + ' нормо-ч', 'ok')),
+      h('div', { class: 'opgrid' }, h('div', null, h('span', { text: 'Дней' }), h('b', { class: 'num', text: String(a.shifts.length) })), h('div', null, h('span', { text: 'Часов' }), h('b', { class: 'num', 'data-testid': 'hz-hours', text: hrsTxt(a.hours) })),
+        h('div', null, h('span', { text: 'Средний тариф' }), h('b', { class: 'num', text: rate(a.avgTariff) + ' ₽/ч' })), h('div', null, h('span', { text: 'Заработано' }), h('b', { class: 'num', 'data-testid': 'hz-earned', text: money(a.earned) }))),
+      h('div', { class: 'gl num' }, h('span', { text: 'Вам за час в среднем ' + rate(a.avgTariff * M.SHARE) + ' ₽' }), h('span', { text: 'По дням ›' })));
+  }
+  function openHourlyDetail(a) {
+    var ctl, list = h('div', { 'data-testid': 'hz-days' });
+    a.shifts.slice().sort(function (x, y) { return x.date < y.date ? 1 : -1; }).forEach(function (s) {
+      list.appendChild(h('div', { class: 'srow', 'data-date': s.date }, h('div', { class: 'sico ' + s.type }, ico(s.type === 'day' ? 'sun' : 'moon', 'sm')),
+        h('div', { class: 'd' }, dlong(s.date) + ', ' + dowOf(s.date).slice(0, 2).toLowerCase(), h('small', { class: 'num', text: hrsTxt(s.hz.hours) + ' · ' + dec(s.hz.nh, 2) + ' нормо-ч · ' + money(Math.round(s.hz.tsum * M.SHARE)) })), h('div', { class: 'pct', text: money(s.hz.tsum) })));
+    });
+    ctl = openSheet({ title: a.z.name, body: h('div', { class: 'gap16', 'data-testid': 'hz-detail' },
+      h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Часов по табелю' }), h('div', { class: 'am num', text: hrsTxt(a.hours) })),
+        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Нормо-часы', h('small', { text: 'сумма по тарифу ÷ 830 ₽' })), h('div', { class: 'am num', text: dec(a.nh, 1) })),
+        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Сумма по тарифу', h('small', { class: 'num', text: 'средний тариф ' + rate(a.avgTariff) + ' ₽/ч' })), h('div', { class: 'am num', text: money(a.tsum) })),
+        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Заработано', h('small', { class: 'num', text: money(a.tsum) + ' × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', 'data-testid': 'hz-detail-earned', text: money(a.earned) }))),
+      h('div', { class: 'tipbox' }, ico('info', 'sm'), h('span', { text: a.z.tip })),
+      h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'По дням' }), list)),
+      footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') });
+  }
   function openOpDetail(d) {
     var ctl, z = ZI[d.zone];
+    if (d.perHour) { ctl = openSheet({ title: d.name, body: h('div', { class: 'gap16', 'data-testid': 'op-detail' },
+      h('div', { class: 'cap', text: z.name + ' · вам за час ' + rate(d.tariff * M.SHARE) + ' ₽' }),
+      h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Тариф заказчика за час' }), h('div', { class: 'am num', text: rate(d.tariff) + ' ₽' })),
+        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'За ' + NORM_SHIFT_H + ' ч', h('small', { class: 'num', text: NORM_SHIFT_H + ' × ' + rate(d.tariff) + ' ₽ × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', 'data-testid': 'op-norm-pay', text: money(NORM_SHIFT_H * d.tariff * M.SHARE) })),
+        h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Нормо-часов за 1 час' }), h('div', { class: 'am num', text: dec(d.tariff / 830, 2) }))),
+      h('div', { class: 'tipbox' }, ico('info', 'sm'), h('span', { text: z.tip }))),
+      footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') }); return; }
     ctl = openSheet({ title: d.name, body: h('div', { class: 'gap16', 'data-testid': 'op-detail' },
       h('div', { class: 'cap', text: 'Участок ' + z.name + ' · вам за единицу ' + rate4(d.tariff * M.SHARE) + ' ₽' }),
       h('div', { class: 'kv4' }, h('div', null, h('b', { class: 'num', text: rate(d.tariff) + ' ₽' }), h('span', { text: 'тариф за ед.' })), h('div', null, h('b', { class: 'num', text: d.normH > 0 ? String(d.normH) : '—' }), h('span', { text: 'ед. в час' })), h('div', null, h('b', { class: 'num', text: d.normH > 0 ? num(NORM_SHIFT_H * d.normH) : '—' }), h('span', { text: 'ед. за смену ' + NORM_SHIFT_H + ' ч' }))),
@@ -1097,16 +1149,25 @@
   }
   function openShiftDetail(s) {
     var ctl, p = perfOf(s), t = opTone(p), z = ZI[s.zone], need = Math.max(0, Math.ceil(s.norm - s.units)), earned = Math.round(s.tsum * M.SHARE);
+    if (s.zone === 'HOURLY') { ctl = openSheet({ title: dowOf(s.date) + ', ' + dlong(s.date), body: h('div', { class: 'gap16', 'data-testid': 'shift-detail-sheet' },   // день только с часовыми услугами
+      h('div', { class: 'row between' }, chip(s.type === 'day' ? 'День' : 'Ночь', s.type === 'day' ? 'day' : 'night', s.type === 'day' ? 'sun' : 'moon'), chip(t[0] + ' · ' + pctS(p) + '%', t[1])),
+      h('div', { class: 'cap', text: z.name + ' · по табелю' }),
+      h('div', { class: 'stats3' }, h('div', { class: 'stat' }, h('b', { class: 'num', text: hrsTxt(s.hz.hours) }), h('span', { text: 'часов' })), h('div', { class: 'stat' }, h('b', { class: 'num', text: dec(s.hz.nh, 2) }), h('span', { text: 'нормо-ч' })), h('div', { class: 'stat' }, h('b', { class: 'num', text: money(earned) }), h('span', { text: 'начислено' }))),
+      hzBox(s.hz, 'shift-hourly'),
+      h('p', { class: 'cap num', text: 'Начислено = ' + money(s.tsum) + ' × ' + Math.round(M.SHARE * 100) + '% = ' + money(earned) + '. Производительность дня = ' + dec(s.hz.nh, 2) + ' нормо-ч ÷ ' + NORM_SHIFT_H + ' ч.' })),
+      footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') }); return; }
     ctl = openSheet({ title: dowOf(s.date) + ', ' + dlong(s.date), body: h('div', { class: 'gap16', 'data-testid': 'shift-detail-sheet' },
       h('div', { class: 'row between' }, chip(shiftName(s), s.type === 'day' ? 'day' : 'night', s.type === 'day' ? 'sun' : 'moon'), chip(t[0] + ' · ' + pctS(p) + '%', t[1])),
       h('div', { class: 'cap', text: 'Участок ' + z.name + (s.counted ? ' · смена засчитана' : ' · смена не засчитана') }),
       h('div', { class: 'stats3' }, h('div', { class: 'stat' }, h('b', { class: 'num', text: num(s.units) }), h('span', { text: 'единиц' })), h('div', { class: 'stat' }, h('b', { class: 'num ' + pctClass(p), text: pctS(p) + '%' }), h('span', { text: 'к нормативу' })), h('div', { class: 'stat' }, h('b', { class: 'num', text: money(earned) }), h('span', { text: 'начислено' }))),
       h('div', { class: 'card2box', 'data-testid': 'shift-lines' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Выполнено единиц' }), h('div', { class: 'am num', text: num(s.units) })),
         h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Норматив смены', h('small', { text: 'факт ÷ производительность' })), h('div', { class: 'am num', text: num(s.norm) })),
-        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Выработка по тарифу', h('small', { class: 'num', text: 'средний тариф ' + rate(s.units ? s.tsum / s.units : 0) + ' ₽/ед.' })), h('div', { class: 'am num', text: money(s.tsum) })),
+        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Выработка по тарифу', h('small', { class: 'num', text: 'средний тариф ' + rate(s.units ? pieceT(s) / s.units : 0) + ' ₽/ед.' })), h('div', { class: 'am num', text: money(pieceT(s)) })),
+        hzOf(s) ? h('div', { class: 'line', 'data-testid': 'shift-hz-line' }, h('div', { class: 'nm' }, 'Часовые услуги', h('small', { class: 'num', text: hrsTxt(s.hz.hours) + ' · ' + dec(s.hz.nh, 2) + ' нормо-ч' })), h('div', { class: 'am num', text: money(s.hz.tsum) })) : null,
         h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Начислено за смену', h('small', { class: 'num', text: money(s.tsum) + ' × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', text: money(earned) })),
         hasGap(s) ? h('div', { class: 'line' }, h('div', { class: 'nm' }, 'При 100% нормы', h('small', { class: 'num', text: 'по тарифу ' + money(Math.max(s.tfull, s.tsum)) + ' × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', 'data-testid': 'shift-full', text: money(earned + gapPay(s)) })) : null,
         hasGap(s) ? h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Недобор за смену', h('small', { text: 'сколько не хватило до полной оплаты по норме' })), h('div', { class: 'am num', 'data-testid': 'shift-gap', text: gapPay(s) ? minus(gapPay(s)) : money(0) })) : null),
+      hzOf(s) ? hzBox(s.hz, 'shift-hourly') : null,
       need > 0 ? h('div', { class: 'tipbox warn' }, ico('info', 'sm'), h('span', { text: 'До нормы смены не хватило ' + num(need) + ' ед. ' + z.tip })) : h('div', { class: 'tipbox ok' }, ico('check', 'sm'), h('span', { text: 'Норматив смены выполнен. ' + z.tip })),
       h('p', { class: 'cap', text: 'Данные смены — из вкладки «Выработка»: одна строка на смену и участок. Разбивка по отдельным операциям в таблице не ведётся.' })),
       footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') });

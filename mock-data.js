@@ -8,7 +8,8 @@
   var HOURS_SHIFT = 11;   // «Часов в смене» (ячейка B3 вкладки)
   var ZONES = [
     { id: 'WH', name: 'WH (склад)', tip: 'Держите маршрут без порожних ходок: берите следующую паллету по пути, готовьте плёнку и ярлыки заранее, проверяйте маркировку до погрузки.' },
-    { id: 'ADAPTO', name: 'ADAPTO', tip: 'Держите темп линии: заранее берите следующую паллету/ящик и не останавливайте поток на ручной сверке.' }
+    { id: 'ADAPTO', name: 'ADAPTO', tip: 'Держите темп линии: заранее берите следующую паллету/ящик и не останавливайте поток на ручной сверке.' },
+    { id: 'HOURLY', name: 'Часовые услуги', tip: 'Часы по табелю бригадира: часы × тариф заказчика за час. В производительность идут нормо-часы (сумма по тарифу ÷ 830 ₽).' }
   ];
   var TIP_PAL = 'Собирайте паллеты пачкой по маршруту, не возвращайтесь порожняком к зоне; подготовьте плёнку и ярлыки заранее.';
   var TIP_BOX = 'Сканируйте короба подряд без пауз, сверяйте ШК до закрытия; пересорт дороже потерянных секунд.';
@@ -80,6 +81,21 @@
     var hrs = rnd() < 0.15 ? 12 : 11, i1 = Math.floor(rnd() * OPS.length), i2 = i1, h1 = Math.round(hrs * (0.4 + rnd() * 0.3));
     var zn = OPS[i1].zone, pool = OPS.filter(function (o) { return o.zone === zn; }), o2 = pool[Math.floor(rnd() * pool.length)];
     shifts.push(mkShift(date, type, hrs, [[OPS[i1].id, h1, Math.round(48 + rnd() * 62)], [o2.id, hrs - h1, Math.round(48 + rnd() * 62)]]));
+  }
+
+  // HOURLY_V1: демо часовых услуг (табель) — только с ?hz=1, чтобы прежние демо-сценарии и тесты не менялись.
+  // Сервер отдаёт так же: день со сдельщиной получает hz и tsum += hz.tsum; день только с часовыми — смена зоны HOURLY (units 0, norm 0).
+  var HZ_DEMO = /[?&]hz=1\b/.test((typeof location !== 'undefined' && location.search) || '');
+  if (HZ_DEMO) {
+    var hzItem = function (service, hours, rate) { var ts = Math.round(hours * rate * 100) / 100; return { service: service, hours: hours, rate: rate, tsum: ts, nh: Math.round(ts / 830 * 1000) / 1000 }; };
+    var hzOf = function (items) { var o = { hours: 0, tsum: 0, nh: 0, items: items }; items.forEach(function (x) { o.hours += x.hours; o.tsum += x.tsum; o.nh += x.nh; }); o.tsum = Math.round(o.tsum * 100) / 100; o.nh = Math.round(o.nh * 1000) / 1000; return o; };
+    shifts.forEach(function (x) { if (x.date === '2026-09-23') { x.hz = hzOf([hzItem('BBXD, приёмка', 2, 980)]); x.tsum += x.hz.tsum; } });
+    var hz26 = hzOf([hzItem('Обеспечение рабочего состояния зон хранения, сборки и погрузки склада', 8, 660), hzItem('BBXD, сервисный тариф, закрытие паллет', 3, 830)]);
+    shifts.push({ date: '2026-09-26', type: 'day', label: null, hours: hz26.hours, zone: 'HOURLY', counted: true, units: 0, norm: 0, tsum: hz26.tsum, tfull: 0, hz: hz26 });
+    shifts.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+    OPS.push({ id: 'oh1', zone: 'HOURLY', name: 'BBXD, сервисный тариф, закрытие паллет', tariff: 830, normH: 0, perHour: true, tip: '' },
+      { id: 'oh2', zone: 'HOURLY', name: 'BBXD, приёмка', tariff: 980, normH: 0, perHour: true, tip: '' },
+      { id: 'oh3', zone: 'HOURLY', name: 'Обеспечение рабочего состояния зон хранения, сборки и погрузки склада', tariff: 660, normH: 0, perHour: true, tip: '' });
   }
 
   function photo(label, hue) {
