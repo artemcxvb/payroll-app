@@ -311,7 +311,10 @@
       var out = JSON.parse(JSON.stringify(items)), bp = null;
       out.forEach(function (x) { x.comp = s.comps[x.id] ? JSON.parse(JSON.stringify(s.comps[x.id])) : null; });
       var bspent = 0; s.trips.forEach(function (x) { if (x.status === 'active' && x.date >= s.budget.since) bspent += x.amount; });
-      var bbal = r2(s.budget.allocated - bspent), budget = isEmp ? null : { set: true, allocated: s.budget.allocated, spent: r2(bspent), balance: bbal, since: s.budget.since, threshold: 1000, low: bbal < 1000 };
+      var bdd = {}; s.trips.forEach(function (x) { if (x.status === 'active' && x.date >= s.budget.since) bdd[x.date] = (bdd[x.date] || 0) + x.amount; });
+      var brun = s.budget.allocated, bdays = Math.max(1, Math.round((Date.parse(today() + 'T00:00:00Z') - Date.parse(s.budget.since + 'T00:00:00Z')) / 86400000) + 1);
+      var bbal = r2(s.budget.allocated - bspent), budget = { set: true, allocated: s.budget.allocated, spent: r2(bspent), balance: bbal, since: s.budget.since, threshold: 1000, low: bbal < 1000, perDay: r2(bspent / bdays),
+        byDay: Object.keys(bdd).sort().map(function (k) { brun -= bdd[k]; return { date: k, spent: r2(bdd[k]), left: r2(brun) }; }) };   // демо: те же поля, что у сервера; сотруднику тоже
       if (isEmp) out.forEach(function (x) { delete x.byPhone; delete x.by; });
       else { var pm = {}; out.forEach(function (x) { x.by = x.by || 'админ'; if (x.status !== 'active') return; var k = x.byPhone || 'admin', b = pm[k] || (pm[k] = { name: x.by, phone: x.byPhone || '', count: 0, sum: 0, people: 0 }); b.count++; b.sum += x.amount; b.people += x.people; });
         bp = Object.keys(pm).map(function (k) { var b = pm[k]; return { name: b.name, phone: b.phone, count: b.count, sum: r2(b.sum), people: b.people, perPerson: b.people ? r2(b.sum / b.people) : 0 }; }).sort(function (a, b) { return b.sum - a.sum; }); }
@@ -777,7 +780,7 @@
     if (S.err) { listBody.appendChild(h('div', { class: 'errbox', role: 'alert', 'data-testid': 'list-err' }, ico('alert'), h('div', null, h('b', { text: 'Не удалось загрузить журнал' }), h('span', { text: S.err }), h('div', null, h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'list-retry', onclick: function () { loadList(); } }, 'Повторить'))))); return; }
     if (!d) { listBody.appendChild(h('div', { class: 'stack', 'aria-busy': 'true', 'data-testid': 'list-skel' }, h('div', { class: 'sk c' }), h('div', { class: 'sk c' }))); return; }
     var tt = d.totals, items = d.items || [];
-    if (isAdmin() && d.budget) listBody.appendChild(budgetCard(d.budget));   // остаток бюджета: только админу (сервер сотруднику его не отдаёт)
+    if (d.budget && (d.budget.set || isAdmin())) listBody.insertBefore(budgetCard(d.budget), listBody.firstChild);   // остаток бюджета: только админу (сервер сотруднику его не отдаёт)
     listBody.appendChild(h('div', { class: 'sumgrid tx-sum', 'data-testid': 'totals' },
       sumCard('Поездок', String(tt.count), '', 't-count'), sumCard('Общая сумма', money(tt.sum), '', 't-sum'),
       sumCard('Пассажиров', String(tt.people), 'человек всего', 't-people'), sumCard('На человека', tt.people ? money(tt.perPerson) : '—', 'в среднем', 't-per')));
@@ -790,7 +793,7 @@
     listBody.appendChild(h('div', { class: 'tx-actions' }, csvBtn, tt.deleted ? h('label', { class: 'tx-chk' }, h('input', { type: 'checkbox', checked: S.showDeleted, 'data-testid': 'show-del', onchange: function (e) { S.showDeleted = e.target.checked; renderList(); } }), h('span', { text: 'Показывать удалённые (' + tt.deleted + ')' })) : null));
     if (tt.byDay.length) {
       var days = h('div', { class: 'tx-days', 'data-testid': 'by-day' });
-      tt.byDay.forEach(function (b) { days.appendChild(h('div', { class: 'tx-day', 'data-testid': 'day-row' }, h('span', { class: 'dd', text: dmy(b.date).slice(0, 5) + ' ' + dowOf(b.date) }), h('span', { class: 'dn', text: b.count + ' ' + plural(b.count, ['поездка', 'поездки', 'поездок']) + ' · ' + b.people + ' чел.' }), h('b', { class: 'num', text: money(b.sum) }))); });
+      tt.byDay.forEach(function (b) { days.appendChild(h('div', { class: 'tx-day', 'data-testid': 'day-row' }, h('span', { class: 'dd', text: dmy(b.date).slice(0, 5) + ' ' + dowOf(b.date) }), h('span', { class: 'dn', text: b.count + ' ' + plural(b.count, ['поездка', 'поездки', 'поездок']) + ' · ' + b.people + ' чел.' }), h('span', { class: 'tx-dsum' }, h('b', { class: 'num', text: money(b.sum) }), leftAfter(d.budget, b.date) !== null ? h('span', { class: 'tx-dleft num' + (leftAfter(d.budget, b.date) < (d.budget.threshold || 0) ? ' low' : ''), 'data-testid': 'day-left', text: 'остаток ' + (leftAfter(d.budget, b.date) < 0 ? '−' + money(-leftAfter(d.budget, b.date)) : money(leftAfter(d.budget, b.date))) }) : null))); });
       listBody.appendChild(h('div', { class: 'card' }, h('h2', { text: 'По дням' }), days));
     }
     var shown = items.filter(function (x) { return x.status === 'active' || S.showDeleted; });
@@ -798,12 +801,21 @@
     else { var lst = h('div', { class: 'alist tx-trips', 'data-testid': 'trip-list' }); shown.forEach(function (x) { lst.appendChild(tripCard(x)); }); listBody.appendChild(lst); }
     if (d.truncated) listBody.appendChild(h('p', { class: 'help', text: 'Показаны не все поездки периода. Сузьте период.' }));
   }
-  function budgetCard(b) {   // TAXI_BUDGET: «Баланс», «Выделено X ₽ · потрачено Y ₽»; красная, если остаток меньше порога (по умолчанию 1000 ₽)
-    if (!b.set) return h('div', { class: 'card tx-budget none', 'data-testid': 'budget' }, h('div', { class: 'l', text: 'Баланс' }), h('div', { class: 's', 'data-testid': 'budget-sub', text: 'Бюджет не задан. Отправьте боту @tableworks_bot команду /budget 10000.' }));
-    return h('div', { class: 'card tx-budget' + (b.low ? ' low' : ''), 'data-testid': 'budget', 'data-low': b.low ? '1' : '0' },
-      h('div', { class: 'l', text: 'Баланс' }), h('div', { class: 'n num', 'data-testid': 'budget-bal', text: (b.balance < 0 ? '−' + money(-b.balance) : money(b.balance)) }),
-      h('div', { class: 's', 'data-testid': 'budget-sub', text: 'Выделено ' + money(b.allocated) + ' · потрачено ' + money(b.spent) }),
-      h('div', { class: 's', text: 'с ' + dmy(b.since) + (b.low ? ' · меньше ' + money(b.threshold) : '') + ' · пополнить: /budget +5000 боту' }));
+  function budgetCard(b) {   // TAXI_BUDGET_TILES_V1: плитки как «Поездок / Общая сумма»: Выделено, Потрачено, Остаток (красный ниже порога), В среднем в день; всегда с даты бюджета, период не влияет
+    if (!b.set) return h('div', { class: 'card tx-budget none', 'data-testid': 'budget' }, h('div', { class: 'l', text: 'Бюджет такси' }), h('div', { class: 's', 'data-testid': 'budget-sub', text: 'Бюджет не задан. Отправьте боту @tableworks_bot команду /budget 10000.' }));
+    var neg = function (n) { return n < 0 ? '−' + money(-n) : money(n); };
+    var left = h('div', { class: 'card sumcard tx-bleft' + (b.low ? ' low' : ''), 'data-testid': 'b-left' }, h('div', { class: 'n num', 'data-testid': 'budget-bal', text: neg(b.balance) }), h('div', { class: 'l', text: 'Остаток' }),
+      h('div', { class: 's', 'data-testid': 'budget-sub', text: 'Выделено ' + money(b.allocated) + ' · потрачено ' + money(b.spent) + (b.low ? ' · меньше ' + money(b.threshold) : '') }));
+    return h('section', { class: 'tx-budget-tiles', 'data-testid': 'budget', 'data-low': b.low ? '1' : '0', 'aria-label': 'Бюджет такси' },
+      h('div', { class: 'row between tx-bhead' }, h('h2', { text: 'Бюджет такси' }), h('span', { class: 'cap', text: 'с ' + dmy(b.since) })),
+      left,
+      h('div', { class: 'sumgrid tx-sum' }, sumCard('Выделено', money(b.allocated), 'с ' + dmy(b.since).slice(0, 5), 'b-alloc'), sumCard('Потрачено', money(b.spent), 'с даты бюджета', 'b-spent'),
+        b.perDay !== undefined ? sumCard('В среднем в день', money(b.perDay), 'с ' + dmy(b.since).slice(0, 5) + ' по сегодня', 'b-perday') : null),
+      isAdmin() ? h('p', { class: 'help tx-bhint', text: 'Пополнить: боту @tableworks_bot /budget +5000, задать заново: /budget 10000.' }) : null);
+  }
+  function leftAfter(b, date) {   // остаток после дня (по данным сервера); null для дней до даты бюджета
+    if (!b || !b.set || !b.byDay || date < b.since) return null;
+    var hit = b.byDay.filter(function (x) { return x.date === date; })[0]; return hit ? hit.left : null;
   }
   var COMP_TXT = { pending: ['Ждёт оплаты', 'warn'], paid: ['Оплачено', 'ok'], rejected: ['Отклонено', 'bad'] };
   function compAsk(x, btn) {
@@ -1259,6 +1271,8 @@
   }
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     var hadCtl = !!navigator.serviceWorker.controller;
+    // учёт такси сам регистрирует оболочку (раньше только index.html): открывший сразу taxi.html получает обновления; sw.js мимо HTTP-кэша
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (reg) { try { reg.update(); } catch (e) { /* необязательно */ } }).catch(function () { /* офлайн-оболочка необязательна */ });
     navigator.serviceWorker.addEventListener('controllerchange', function () {
       if (hadCtl && !$('[data-testid="update-bar"]')) {
         var bar = h('div', { class: 'updbar', role: 'status', 'data-testid': 'update-bar' }, h('span', { text: 'Вышла новая версия.' }),

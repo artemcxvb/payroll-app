@@ -124,11 +124,18 @@ body.taxipage .app { max-width: 520px; }
 .tgcard .tgsteps li { margin: 4px 0; }
 .tgcard .btn { display: flex; width: 100%; margin-top: 10px; min-height: 48px; }
 .tgcard .tgleft { margin: 10px 0 0; }
-/* TAXI_BUDGET: карточка «Баланс» в журнале (только админ) */
-.tx-budget { border: 2px solid var(--ok); background: var(--ok-bg); margin-bottom: 12px; }
-.tx-budget .l { font-weight: 700; color: var(--ok); }
-.tx-budget .n { font-size: 28px; font-weight: 800; color: var(--ok); }
-.tx-budget .s { color: var(--text); font-size: 14px; margin-top: 2px; }
-.tx-budget.low { border-color: var(--bad); background: var(--bad-bg); }
-.tx-budget.low .l, .tx-budget.low .n { color: var(--bad); }
-.tx-budget.none { border-style: dashed; background: transparent; border-color: var(--line, #ccd); }
+/* TAXI_BUDGET_TILES_V1: плитки бюджета вверху журнала (админ и сотрудники) */
+.tx-budget-tiles { display: grid; gap: 12px; margin-bottom: 12px; }
+.tx-bhead h2 { margin: 0; }
+.tx-bleft { border: 2px solid var(--ok); background: var(--ok-bg); min-height: 0; cursor: default; }
+.tx-bleft .n { font-size: 34px; color: var(--ok); }
+.tx-bleft .l { color: var(--ok); }
+.tx-bleft.low { border-color: var(--bad); background: var(--bad-bg); }
+.tx-bleft.low .n, .tx-bleft.low .l { color: var(--bad); }
+.tx-budget.none { border: 2px dashed var(--line, #ccd); margin-bottom: 12px; }
+.tx-budget.none .l { font-weight: 700; }
+.tx-dsum { display: flex; flex-direction: column; align-items: flex-end; }
+.tx-dleft { font-size: 12.5px; color: var(--muted); }
+.tx-dleft.low { color: var(--bad); font-weight: 700; }
+.tx-budget-tiles .tx-sum .sumcard:nth-child(3):last-child { grid-column: 1 / -1; }
+.tx-bhint { margin: 0; }

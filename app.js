@@ -2213,7 +2213,7 @@
   }
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     var hadCtl = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.register('sw.js').catch(function () { /* офлайн-оболочка необязательна */ });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(function () { /* офлайн-оболочка необязательна */ });
     navigator.serviceWorker.addEventListener('controllerchange', function () { if (hadCtl) updateBar(); hadCtl = true; });   // первая установка (контроллера не было) не считается обновлением
   }
   if (!location.hash) location.hash = session() ? '#/home' : '#/login';
