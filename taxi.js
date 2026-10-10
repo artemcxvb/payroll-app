@@ -185,7 +185,8 @@
       var d = addDays(t, -off); if (d < m0) d = m0;
       return { id: 'TD' + n, date: d, route: route, amount: amount, people: people, perPerson: r2(amount / people), names: names || '', note: note || '', hasFile: true, fileKind: n % 3 === 0 ? 'pdf' : 'image', created: d + ' 08:10:00', status: 'active', reason: '', changed: '', by: demoWho(n)[0], byPhone: demoWho(n)[1] };
     };
-    return { trips: [mk(1, 1, ROUTES[0], 850, 3, 'Иванов И. И.; Петров П. П.; Сидоров С. С.', ''), mk(2, 1, ROUTES[1], 920, 3, '', 'вечер, пробки'), mk(3, 2, ROUTES[0], 780, 2, '', ''), mk(4, 3, ROUTES[2], 640, 4, 'Демов О. В.', ''), mk(5, 4, ROUTES[0], 1200.5, 5, '', 'ночная смена')], seq: 5 };
+    return { trips: [mk(1, 1, ROUTES[0], 850, 3, 'Иванов И. И.; Петров П. П.; Сидоров С. С.', ''), mk(2, 1, ROUTES[1], 920, 3, '', 'вечер, пробки'), mk(3, 2, ROUTES[0], 780, 2, '', ''), mk(4, 3, ROUTES[2], 640, 4, 'Демов О. В.', ''), mk(5, 4, ROUTES[0], 1200.5, 5, '', 'ночная смена')], seq: 5,
+      comps: { TD2: { id: 'KD2', status: 'pending', at: t + ' 09:00' }, TD5: { id: 'KD5', status: 'paid', at: t + ' 09:30' } }, budget: { allocated: 10000, since: m0 } };   // демо: бюджет и компенсации (вымышленные)
   }
   function demoWho(t) { return t === 3 ? ['Сидоров Сергей Петрович', '79000000003'] : t === 2 || t === 5 ? ['Петрова Анна Ивановна', '79000000002'] : ['админ', '']; }   // вымышленные авторы сидов: часть внёс админ, часть сотрудники
   function demoState() { var s = load(DEMOK, null); if (!s || !s.trips) { s = demoSeed(); store(DEMOK, s); } return s; }
@@ -290,15 +291,31 @@
       var route = ROUTES.indexOf(d2.route) >= 0 ? d2.route : OTHER + ': ' + String(d2.routeText).replace(/\s+/g, ' ').trim(), a = r2(parseAmount(d2.amount)), p = +d2.people;
       return { v: { date: d2.date, route: route, amount: a, people: p, perPerson: r2(a / p), names: String(d2.names || '').replace(/\s*[\r\n]+\s*/g, '; ').trim(), note: String(d2.note || '').replace(/\s+/g, ' ').trim() } };
     }
+    if (!s.comps) s.comps = {}; if (!s.budget) s.budget = { allocated: 10000, since: today().slice(0, 8) + '01' };
+    if (action === 'taxiCompRequest') {
+      if (!isEmp) return demoRes({ ok: false, error: 'forbidden' });
+      var ct = find(d.id); if (!ct) return demoRes({ ok: false, error: 'not_found' }); if (ct.status !== 'active') return demoRes({ ok: false, error: 'state' });
+      var ce = s.comps[ct.id]; if (ce && ce.status !== 'rejected') return demoRes({ ok: false, error: 'comp_exists', status: ce.status });
+      s.seq++; s.comps[ct.id] = { id: 'KD' + s.seq, status: 'pending', at: nowMskStr().slice(0, 16) }; store(DEMOK, s); return demoRes({ ok: true, id: 'KD' + s.seq, status: 'pending', notified: true });
+    }
+    if (action === 'taxiCompDecide') {
+      if (isEmp) return demoRes({ ok: false, error: 'forbidden' });
+      var ck = Object.keys(s.comps).filter(function (k) { return s.comps[k].id === d.id; })[0]; if (!ck) return demoRes({ ok: false, error: 'not_found' });
+      if (s.comps[ck].status !== 'pending') return demoRes({ ok: false, error: 'state' }); if (d.to !== 'paid' && d.to !== 'rejected') return demoRes({ ok: false, error: 'bad_action' });
+      s.comps[ck].status = d.to; s.comps[ck].at = nowMskStr().slice(0, 16); store(DEMOK, s); return demoRes({ ok: true, id: d.id, status: d.to, notified: true });
+    }
     if (action === 'taxiList') {
       var t = today(), from = d.from || t.slice(0, 8) + '01', to = d.to || t;
       if (!validIso(from) || !validIso(to) || from > to || addDays(from, LIM.periodDays) < to) return demoRes({ ok: false, error: 'bad_period' });
       var items = s.trips.filter(function (x) { return own(x) && x.date >= from && x.date <= to; }).sort(function (a, b) { return a.date !== b.date ? (a.date < b.date ? 1 : -1) : (a.created < b.created ? 1 : -1); });
       var out = JSON.parse(JSON.stringify(items)), bp = null;
+      out.forEach(function (x) { x.comp = s.comps[x.id] ? JSON.parse(JSON.stringify(s.comps[x.id])) : null; });
+      var bspent = 0; s.trips.forEach(function (x) { if (x.status === 'active' && x.date >= s.budget.since) bspent += x.amount; });
+      var bbal = r2(s.budget.allocated - bspent), budget = isEmp ? null : { set: true, allocated: s.budget.allocated, spent: r2(bspent), balance: bbal, since: s.budget.since, threshold: 1000, low: bbal < 1000 };
       if (isEmp) out.forEach(function (x) { delete x.byPhone; delete x.by; });
       else { var pm = {}; out.forEach(function (x) { x.by = x.by || 'админ'; if (x.status !== 'active') return; var k = x.byPhone || 'admin', b = pm[k] || (pm[k] = { name: x.by, phone: x.byPhone || '', count: 0, sum: 0, people: 0 }); b.count++; b.sum += x.amount; b.people += x.people; });
         bp = Object.keys(pm).map(function (k) { var b = pm[k]; return { name: b.name, phone: b.phone, count: b.count, sum: r2(b.sum), people: b.people, perPerson: b.people ? r2(b.sum / b.people) : 0 }; }).sort(function (a, b) { return b.sum - a.sum; }); }
-      return demoRes({ ok: true, role: isEmp ? 'employee' : 'admin', who: isEmp ? me[0] : 'админ', from: from, to: to, routes: ROUTES.slice(), truncated: false, items: out, byPerson: bp, totals: totalsOf(items) });
+      return demoRes({ ok: true, role: isEmp ? 'employee' : 'admin', who: isEmp ? me[0] : 'админ', from: from, to: to, routes: ROUTES.slice(), truncated: false, items: out, byPerson: bp, budget: budget, totals: totalsOf(items) });
     }
     if (action === 'taxiAdd') {
       var n = norm(d); if (n.error) return demoRes({ ok: false, error: n.error });
@@ -760,6 +777,7 @@
     if (S.err) { listBody.appendChild(h('div', { class: 'errbox', role: 'alert', 'data-testid': 'list-err' }, ico('alert'), h('div', null, h('b', { text: 'Не удалось загрузить журнал' }), h('span', { text: S.err }), h('div', null, h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'list-retry', onclick: function () { loadList(); } }, 'Повторить'))))); return; }
     if (!d) { listBody.appendChild(h('div', { class: 'stack', 'aria-busy': 'true', 'data-testid': 'list-skel' }, h('div', { class: 'sk c' }), h('div', { class: 'sk c' }))); return; }
     var tt = d.totals, items = d.items || [];
+    if (isAdmin() && d.budget) listBody.appendChild(budgetCard(d.budget));   // остаток бюджета: только админу (сервер сотруднику его не отдаёт)
     listBody.appendChild(h('div', { class: 'sumgrid tx-sum', 'data-testid': 'totals' },
       sumCard('Поездок', String(tt.count), '', 't-count'), sumCard('Общая сумма', money(tt.sum), '', 't-sum'),
       sumCard('Пассажиров', String(tt.people), 'человек всего', 't-people'), sumCard('На человека', tt.people ? money(tt.perPerson) : '—', 'в среднем', 't-per')));
@@ -780,17 +798,49 @@
     else { var lst = h('div', { class: 'alist tx-trips', 'data-testid': 'trip-list' }); shown.forEach(function (x) { lst.appendChild(tripCard(x)); }); listBody.appendChild(lst); }
     if (d.truncated) listBody.appendChild(h('p', { class: 'help', text: 'Показаны не все поездки периода. Сузьте период.' }));
   }
+  function budgetCard(b) {   // TAXI_BUDGET: «Баланс», «Выделено X ₽ · потрачено Y ₽»; красная, если остаток меньше порога (по умолчанию 1000 ₽)
+    if (!b.set) return h('div', { class: 'card tx-budget none', 'data-testid': 'budget' }, h('div', { class: 'l', text: 'Баланс' }), h('div', { class: 's', 'data-testid': 'budget-sub', text: 'Бюджет не задан. Отправьте боту @tableworks_bot команду /budget 10000.' }));
+    return h('div', { class: 'card tx-budget' + (b.low ? ' low' : ''), 'data-testid': 'budget', 'data-low': b.low ? '1' : '0' },
+      h('div', { class: 'l', text: 'Баланс' }), h('div', { class: 'n num', 'data-testid': 'budget-bal', text: (b.balance < 0 ? '−' + money(-b.balance) : money(b.balance)) }),
+      h('div', { class: 's', 'data-testid': 'budget-sub', text: 'Выделено ' + money(b.allocated) + ' · потрачено ' + money(b.spent) }),
+      h('div', { class: 's', text: 'с ' + dmy(b.since) + (b.low ? ' · меньше ' + money(b.threshold) : '') + ' · пополнить: /budget +5000 боту' }));
+  }
+  var COMP_TXT = { pending: ['Ждёт оплаты', 'warn'], paid: ['Оплачено', 'ok'], rejected: ['Отклонено', 'bad'] };
+  function compAsk(x, btn) {
+    if (!requireOnline()) return;
+    confirmAct({ title: 'Компенсировать проезд?', text: 'Администратору уйдёт заявка: дата ' + dmy(x.date) + ', ' + x.route + ', ' + money(x.amount) + '. Деньги переводят по СБП на ваш номер телефона или на карту из заявки на аванс.', yes: 'Отправить заявку' }).then(function (c) {
+      if (!c) return; btn.disabled = true;
+      call('taxiCompRequest', { id: x.id }).then(function (r) {
+        btn.disabled = false;
+        if (r.ok) { toast('Заявка на компенсацию отправлена администратору'); loadList(true); return; }
+        toast(ERR[r.error] || errText(r), 'bad'); if (r.error === 'comp_exists') loadList(true);
+      });
+    });
+  }
+  function compDecide(x, to, btn) {
+    if (!requireOnline()) return;
+    confirmAct({ title: to === 'paid' ? 'Отметить «Оплачено»?' : 'Отклонить компенсацию?', text: (x.by || 'Сотрудник') + ': ' + dmy(x.date) + ', ' + money(x.amount) + '. Сотрудник получит сообщение в Telegram.', danger: to !== 'paid', yes: to === 'paid' ? 'Оплачено' : 'Отклонить' }).then(function (c) {
+      if (!c) return; btn.disabled = true;
+      call('taxiCompDecide', { id: x.comp.id, to: to }).then(function (r) { btn.disabled = false; if (r.ok) { toast(to === 'paid' ? 'Отмечено: оплачено' : 'Компенсация отклонена'); loadList(true); } else toast(ERR[r.error] || errText(r), 'bad'); });
+    });
+  }
   function sumCard(l, n, s, tid) { return h('div', { class: 'card sumcard' }, h('div', { class: 'n num', 'data-testid': tid, text: n }), h('div', { class: 'l', text: l }), s ? h('div', { class: 's', text: s }) : null); }
   function tripCard(x) {
     var del = x.status === 'deleted', acts = h('div', { class: 'acts tx-acts' });
     if (x.hasFile) acts.appendChild(h('button', { class: 'btn ghost fbtn', type: 'button', 'data-testid': 'open-receipt', onclick: function () { openReceipt(x); } }, ico(x.fileKind === 'pdf' ? 'file' : 'receipt', 'sm'), 'Чек'));
+    var cst = x.comp && COMP_TXT[x.comp.status];
+    if (!del && !isAdmin() && (!x.comp || x.comp.status === 'rejected')) { var cb = h('button', { class: 'btn', type: 'button', 'data-testid': 'comp-ask', onclick: function () { compAsk(x, cb); } }, ico('send', 'sm'), 'Компенсировать проезд'); acts.appendChild(cb); }
+    if (isAdmin() && x.comp && x.comp.status === 'pending') {
+      var pb = h('button', { class: 'btn', type: 'button', 'data-testid': 'comp-paid', onclick: function () { compDecide(x, 'paid', pb); } }, ico('check', 'sm'), 'Оплачено');
+      var rb = h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'comp-reject', onclick: function () { compDecide(x, 'rejected', rb); } }, 'Отклонить'); acts.appendChild(pb); acts.appendChild(rb);
+    }
     if (!del) {
       acts.appendChild(h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'edit', onclick: function () { editTrip(x); } }, ico('edit', 'sm'), 'Исправить'));
       acts.appendChild(h('button', { class: 'btn danger', type: 'button', 'data-testid': 'del', onclick: function () { deleteTrip(x); } }, ico('trash', 'sm'), 'Удалить'));
     }
     return h('article', { class: 'card acard tx-trip' + (del ? ' deleted' : ''), 'data-testid': 'trip', 'data-id': x.id, 'data-status': x.status },
       h('div', { class: 'hd' }, h('div', { class: 'grow' }, h('div', { class: 'nm', text: dmy(x.date) + ' · ' + dowOf(x.date) }), h('div', { class: 'meta', text: x.route })), h('div', { class: 'amt num', text: money(x.amount) })),
-      h('div', { class: 'tx-meta' }, chip(x.people + ' ' + plural(x.people, ['человек', 'человека', 'человек']), 'info', 'car'), chip('на человека ' + money(x.perPerson), 'gray'), del ? chip('Удалено', 'bad', 'trash') : null, x.changed && !del ? chip('Исправлено', 'warn') : null, isAdmin() && x.by ? h('span', { class: 'chip gray', 'data-testid': 'trip-by', text: 'внёс: ' + x.by }) : null),
+      h('div', { class: 'tx-meta' }, chip(x.people + ' ' + plural(x.people, ['человек', 'человека', 'человек']), 'info', 'car'), chip('на человека ' + money(x.perPerson), 'gray'), del ? chip('Удалено', 'bad', 'trash') : null, x.changed && !del ? chip('Исправлено', 'warn') : null, cst ? h('span', { class: 'chip ' + cst[1], 'data-testid': 'comp-status', 'data-comp': x.comp.status, text: 'Компенсация: ' + cst[0] }) : null, isAdmin() && x.by ? h('span', { class: 'chip gray', 'data-testid': 'trip-by', text: 'внёс: ' + x.by }) : null),
       x.names ? h('div', { class: 'txt' }, h('b', { text: 'Пассажиры' }), x.names) : null, x.note ? h('div', { class: 'txt' }, h('b', { text: 'Примечание' }), x.note) : null,
       del ? h('div', { class: 'txt add', 'data-testid': 'del-reason' }, h('b', { text: 'Причина удаления' }), x.reason) : null, acts);
   }
@@ -872,7 +922,8 @@
       bad_plate: 'Госномер не распознан. Пример: А123ВС77 (буквы А В Е К М Н О Р С Т У Х, три цифры, две буквы, регион).', bad_color: 'Цвет: только буквы, до ' + DLIM.color + ' знаков.',
       plate_taken: 'Этот госномер уже закреплён за другим водителем. Обратитесь к администратору.', no_driver: 'Сначала заполните профиль водителя.', driver_off: 'Профиль водителя отключён администратором.',
       day_limit: 'Не больше ' + DLIM.perDay + ' рейсов в сутки на водителя.', bad_km: 'Километраж: число больше 0, не больше ' + DLIM.maxKm + '.', forbidden: 'Это действие недоступно для вашей роли.', rate: 'Слишком часто. Подождите немного и повторите.',
-      bad_status: 'Неверный статус.'
+      bad_status: 'Неверный статус.',
+      comp_exists: 'Заявка на компенсацию по этой поездке уже есть.', rate: 'Слишком много действий подряд. Попробуйте через час.', forbidden: 'Это действие недоступно.', bad_action: 'Неверное действие.'
     };
     Object.keys(add).forEach(function (k) { if (!ERR[k]) ERR[k] = add[k]; });
   })();
