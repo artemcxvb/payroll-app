@@ -13,6 +13,10 @@
   /* ---------- настройки (правятся здесь; на сервере список маршрутов задаётся в Code.gs: TAXI_ROUTES_ или Script Property TAXI_ROUTES) ---------- */
   var OTHER = 'Другое';
   var ROUTES = ['Общежитие Останкино → склад Северная Звезда', 'Склад Северная Звезда → общежитие Останкино', 'Общежитие Усковский проезд → склад д. Елино, К21', 'Склад д. Елино, К21 → общежитие Усковский проезд'];   // запасной список для демо; в live приходит с сервера (taxiList.routes)
+  // TAXI_SITES_V1: площадки (в live список приходит с сервера: taxiList.sites); площадка по маршруту — как на сервере
+  var SITES = ['Елино', 'Северная Звезда'], NO_SITE = 'Без площадки', SITEK = 'pr.taxi.site', SITE_HINTS = { 'Елино': ['елино', 'усковск'], 'Северная Звезда': ['северная звезда', 'останкин'] };
+  function lowE(x) { return String(x || '').toLowerCase().replace(/ё/g, 'е'); }
+  function siteOfRoute(route, sites) { var r = lowE(route), hit = ''; (sites || S.sites).forEach(function (st) { if (!hit && [lowE(st)].concat(SITE_HINTS[st] || []).some(function (k) { return r.indexOf(k) >= 0; })) hit = st; }); return hit; }
   var LIM = { maxAmount: 100000, maxPeople: 8, note: 200, names: 400, other: 80, reason: 200, reasonMin: 3, periodDays: 400, daysBack: 400,
     imgSrcMB: 25, pdfMB: 5, imgOutBytes: 1572864, dupMs: 120000 };   // как у остальных загрузок: фото до 25 МБ на входе, на сервер уходит JPEG ≤ 1,5 МБ; PDF до 5 МБ
   var MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'], DOW = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
@@ -65,6 +69,12 @@
     return { id: deviceId(), ua: uaShort(navigator.userAgent), lang: String(navigator.language || '').slice(0, 12), tz: String(tz).slice(0, 40), scr: Math.round(screen.width || 0) + 'x' + Math.round(screen.height || 0) };
   }
   function mskNow() { return new Date(Date.now() + 3 * 3600000); }
+  // часы учёта такси для сотрудников (TAXI_HOUR_* на сервере, по умолчанию 7–24): берём из ответов сервера (codeVerify.loginHours, closed.from/to), помним в localStorage
+  var HOURSK = 'pr.taxi.hours';
+  function taxiHrs() { var o = load(HOURSK, null), f = o ? +o.from : NaN, t = o ? +o.to : NaN; return f >= 0 && f <= 23 && t >= 1 && t <= 24 && f < t ? { from: f, to: t, off: !!o.off } : { from: 7, to: 24, off: false }; }
+  function saveHrs(f, t, off) { f = +f; t = +t; if (f >= 0 && f <= 23 && t >= 1 && t <= 24 && f < t) store(HOURSK, { from: f, to: t, off: !!off }); }
+  function hhT(n) { n = +n; return n === 24 || n === 0 ? '00:00' : n + ':00'; }   // 24 = полночь → «00:00»
+  function hrsText(f, t) { var x = f == null ? taxiHrs() : { from: f, to: t }; return 'с ' + hhT(x.from) + ' до ' + hhT(x.to); }
   function today() { return mskNow().toISOString().slice(0, 10); }
   function isoOf(y, m, d) { return new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10); }
   function validIso(s) { return /^\d{4}-\d{2}-\d{2}$/.test(s) && isoOf(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) === s; }
@@ -115,6 +125,7 @@
     if (routes.indexOf(v.route) < 0) { if (v.route !== OTHER) e.route = 'bad_route'; else { var o = String(v.routeText || '').replace(/\s+/g, ' ').trim(); if (o.length < 2) e.route = 'bad_route'; else if (o.length > LIM.other) e.route = 'route_long'; } }
     if (String(v.note || '').length > LIM.note) e.note = 'note_long';
     if (String(v.names || '').length > LIM.names) e.names = 'names_long';
+    if (v.site !== undefined || v.checkSite) { var sl = v.sites || S.sites; if (v.site ? sl.indexOf(v.site) < 0 : !siteOfRoute(v.route, sl)) e.site = 'bad_site'; }   // площадка обязательна (без поля — по маршруту, как на сервере)
     return e;
   }
   /* геопозиция для запроса кода админа: короткий запрос (до ~8 с), отказ или недоступность не мешают входу; координаты уходят только вместе с запросом кода */
@@ -165,19 +176,19 @@
     disabled: 'Вход по админ-коду выключен на сервере (ADMIN_ENABLED=0).', unknown_action: 'Сервер не знает этого действия: вставьте свежий Code.gs (см. DEPLOY.md, раздел «Учёт такси»).',
     bad_date: 'Проверьте дату поездки.', future_date: 'Дата не может быть в будущем.', old_date: 'Дата слишком старая (больше ' + LIM.daysBack + ' дней назад).',
     bad_amount: 'Сумма: число больше 0, до двух знаков после запятой.', amount_big: 'Сумма не больше ' + LIM.maxAmount + ' ₽.', bad_people: 'Людей в машине: от 1 до ' + LIM.maxPeople + '.',
-    bad_route: 'Выберите маршрут. Для «Другое» напишите, куда ехали.', route_long: 'Маршрут слишком длинный (до ' + LIM.other + ' символов).', note_long: 'Примечание слишком длинное (до ' + LIM.note + ' символов).',
+    bad_site: 'Выберите площадку.', bad_route: 'Выберите маршрут. Для «Другое» напишите, куда ехали.', route_long: 'Маршрут слишком длинный (до ' + LIM.other + ' символов).', note_long: 'Примечание слишком длинное (до ' + LIM.note + ' символов).',
     names_long: 'Список ФИО слишком длинный (до ' + LIM.names + ' символов).', receipt_required: 'Приложите фото или PDF чека. Без чека поездку сохранить нельзя.',
     bad_file: 'Файл не подходит: нужны фото (JPG, PNG) или PDF.', too_big: 'Файл слишком большой (фото до 1,5 МБ после сжатия, PDF до ' + LIM.pdfMB + ' МБ).',
     upload_failed: 'Чек не загрузился на Яндекс Диск, поездка не сохранена. Повторите.', not_found: 'Поездка не найдена. Обновите список.', state: 'Поездка уже удалена. Обновите список.',
     bad_reason: 'Причина: от ' + LIM.reasonMin + ' до ' + LIM.reason + ' символов.', bad_period: 'Период указан неверно (не больше ' + LIM.periodDays + ' дней).',
-    unavailable: 'Чек сейчас недоступен на Яндекс Диске.', demo: 'В демо чеки не открываются.', closed: 'Вход для сотрудников закрыт: учёт такси работает с 9:00 до 20:00 по Москве.', blocked: 'Доступ закрыт. Обратитесь к бригадиру.', consent: 'Сначала примите согласие в приложении «Мои выплаты», затем вернитесь сюда.', rate: 'Слишком много записей за час. Подождите немного.',
+    unavailable: 'Чек сейчас недоступен на Яндекс Диске.', demo: 'В демо чеки не открываются.', closed: 'Вход для сотрудников закрыт: учёт такси работает с 7:00 до 00:00 по Москве.', blocked: 'Доступ закрыт. Обратитесь к бригадиру.', consent: 'Сначала примите согласие в приложении «Мои выплаты», затем вернитесь сюда.', rate: 'Слишком много записей за час. Подождите немного.',
     bad_geo: 'Нужно разрешить определение местоположения: без него код не запрашивается.', bad_phone: 'Введите номер телефона полностью, например +7 900 000-00-01.', auth: 'Сессия закончилась — войдите снова.'
   };
   function mskWhen(ms) {   // время по Москве: «17:10» или «05.10 в 02:40», если это не сегодня
     var d = new Date(ms + 10800000), n = new Date(Date.now() + 10800000), hm = ('0' + d.getUTCHours()).slice(-2) + ':' + ('0' + d.getUTCMinutes()).slice(-2);
     return d.toISOString().slice(0, 10) === n.toISOString().slice(0, 10) ? hm : ('0' + d.getUTCDate()).slice(-2) + '.' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + ' в ' + hm;
   }
-  function errText(r) { if (r && r.error === 'req_limit') return 'Лимит запросов кода исчерпан, обратитесь к администратору.' + (r.until ? ' Новый код можно будет запросить после ' + mskWhen(r.until) + ' (МСК).' : ''); if (r && r.error === 'closed' && r.from != null && r.to != null) return 'Вход для сотрудников закрыт: учёт такси работает с ' + (+r.from) + ':00 до ' + (+r.to) + ':00 по Москве.'; return ERR[r && r.error] || 'Не получилось выполнить действие. Повторите.'; }
+  function errText(r) { if (r && r.error === 'req_limit') return 'Лимит запросов кода исчерпан, обратитесь к администратору.' + (r.until ? ' Новый код можно будет запросить после ' + mskWhen(r.until) + ' (МСК).' : ''); if (r && r.error === 'closed' && r.from != null && r.to != null) { saveHrs(r.from, r.to); return 'Вход для сотрудников закрыт: учёт такси работает ' + hrsText(r.from, r.to) + ' по Москве.'; } if (r && r.error === 'closed') return 'Вход для сотрудников закрыт: учёт такси работает ' + hrsText() + ' по Москве.'; return ERR[r && r.error] || 'Не получилось выполнить действие. Повторите.'; }
 
   /* ---------- демо-«сервер» (вымышленные поездки) ---------- */
   function demoSeed() {
@@ -185,8 +196,11 @@
       var d = addDays(t, -off); if (d < m0) d = m0;
       return { id: 'TD' + n, date: d, route: route, amount: amount, people: people, perPerson: r2(amount / people), names: names || '', note: note || '', hasFile: true, fileKind: n % 3 === 0 ? 'pdf' : 'image', created: d + ' 08:10:00', status: 'active', reason: '', changed: '', by: demoWho(n)[0], byPhone: demoWho(n)[1] };
     };
-    return { trips: [mk(1, 1, ROUTES[0], 850, 3, 'Иванов И. И.; Петров П. П.; Сидоров С. С.', ''), mk(2, 1, ROUTES[1], 920, 3, '', 'вечер, пробки'), mk(3, 2, ROUTES[0], 780, 2, '', ''), mk(4, 3, ROUTES[2], 640, 4, 'Демов О. В.', ''), mk(5, 4, ROUTES[0], 1200.5, 5, '', 'ночная смена')], seq: 5,
-      comps: { TD2: { id: 'KD2', status: 'pending', at: t + ' 09:00' }, TD5: { id: 'KD5', status: 'paid', at: t + ' 09:30' } }, budget: { allocated: 10000, since: m0 } };   // демо: бюджет и компенсации (вымышленные)
+    var trips = [mk(1, 1, ROUTES[0], 850, 3, 'Иванов И. И.; Петров П. П.; Сидоров С. С.', ''), mk(2, 1, ROUTES[1], 920, 3, '', 'вечер, пробки'), mk(3, 2, ROUTES[0], 780, 2, '', ''), mk(4, 3, ROUTES[2], 640, 4, 'Демов О. В.', ''), mk(5, 4, ROUTES[0], 1200.5, 5, '', 'ночная смена')];
+    trips.forEach(function (x) { x.site = siteOfRoute(x.route, SITES); });
+    return { trips: trips, seq: 5,
+      comps: { TD2: { id: 'KD2', status: 'pending', at: t + ' 09:00' }, TD5: { id: 'KD5', status: 'paid', at: t + ' 09:30' } }, budget: { allocated: 10000, since: m0 },
+      budgets: { 'Елино': { allocated: 6000, since: m0 }, 'Северная Звезда': { allocated: 10000, since: m0 } } };   // демо: бюджеты по площадкам и компенсации (вымышленные)   // демо: бюджет и компенсации (вымышленные)
   }
   function demoWho(t) { return t === 3 ? ['Сидоров Сергей Петрович', '79000000003'] : t === 2 || t === 5 ? ['Петрова Анна Ивановна', '79000000002'] : ['админ', '']; }   // вымышленные авторы сидов: часть внёс админ, часть сотрудники
   function demoState() { var s = load(DEMOK, null); if (!s || !s.trips) { s = demoSeed(); store(DEMOK, s); } return s; }
@@ -289,9 +303,18 @@
     function norm(d2) {
       var e = checkTrip(d2, ROUTES), k = Object.keys(e)[0]; if (k) return { error: e[k] };
       var route = ROUTES.indexOf(d2.route) >= 0 ? d2.route : OTHER + ': ' + String(d2.routeText).replace(/\s+/g, ' ').trim(), a = r2(parseAmount(d2.amount)), p = +d2.people;
-      return { v: { date: d2.date, route: route, amount: a, people: p, perPerson: r2(a / p), names: String(d2.names || '').replace(/\s*[\r\n]+\s*/g, '; ').trim(), note: String(d2.note || '').replace(/\s+/g, ' ').trim() } };
+      var site = d2.site || siteOfRoute(route, SITES); if (SITES.indexOf(site) < 0) return { error: 'bad_site' };
+      return { v: { date: d2.date, route: route, amount: a, people: p, perPerson: r2(a / p), names: String(d2.names || '').replace(/\s*[\r\n]+\s*/g, '; ').trim(), note: String(d2.note || '').replace(/\s+/g, ' ').trim(), site: site } };
     }
     if (!s.comps) s.comps = {}; if (!s.budget) s.budget = { allocated: 10000, since: today().slice(0, 8) + '01' };
+    if (!s.budgets) s.budgets = { 'Елино': { allocated: 6000, since: s.budget.since }, 'Северная Звезда': { allocated: s.budget.allocated, since: s.budget.since } };   // старое демо-состояние: бюджет по площадкам
+    s.trips.forEach(function (x) { if (!x.site) x.site = siteOfRoute(x.route, SITES) || NO_SITE; });
+    function demoBudget(st) {   // те же поля, что у сервера (taxiBudgetOf_)
+      var bg = s.budgets[st]; if (!bg) return { site: st, set: false, allocated: 0, spent: 0, balance: 0, since: '', threshold: 1000, low: false, perDay: 0, byDay: [] };
+      var sp = 0, dd = {}; s.trips.forEach(function (x) { if (x.status === 'active' && x.date >= bg.since && x.site === st) { sp += x.amount; dd[x.date] = (dd[x.date] || 0) + x.amount; } });
+      var run = bg.allocated, nd = Math.max(1, Math.round((Date.parse(today() + 'T00:00:00Z') - Date.parse(bg.since + 'T00:00:00Z')) / 86400000) + 1), bal = r2(bg.allocated - sp);
+      return { site: st, set: true, allocated: bg.allocated, spent: r2(sp), balance: bal, since: bg.since, threshold: 1000, low: bal < 1000, perDay: r2(sp / nd), byDay: Object.keys(dd).sort().map(function (k) { run -= dd[k]; return { date: k, spent: r2(dd[k]), left: r2(run) }; }) };
+    }
     if (action === 'taxiCompRequest') {
       if (!isEmp) return demoRes({ ok: false, error: 'forbidden' });
       var ct = find(d.id); if (!ct) return demoRes({ ok: false, error: 'not_found' }); if (ct.status !== 'active') return demoRes({ ok: false, error: 'state' });
@@ -318,7 +341,8 @@
       if (isEmp) out.forEach(function (x) { delete x.byPhone; delete x.by; });
       else { var pm = {}; out.forEach(function (x) { x.by = x.by || 'админ'; if (x.status !== 'active') return; var k = x.byPhone || 'admin', b = pm[k] || (pm[k] = { name: x.by, phone: x.byPhone || '', count: 0, sum: 0, people: 0 }); b.count++; b.sum += x.amount; b.people += x.people; });
         bp = Object.keys(pm).map(function (k) { var b = pm[k]; return { name: b.name, phone: b.phone, count: b.count, sum: r2(b.sum), people: b.people, perPerson: b.people ? r2(b.sum / b.people) : 0 }; }).sort(function (a, b) { return b.sum - a.sum; }); }
-      return demoRes({ ok: true, role: isEmp ? 'employee' : 'admin', who: isEmp ? me[0] : 'админ', from: from, to: to, routes: ROUTES.slice(), truncated: false, items: out, byPerson: bp, budget: budget, totals: totalsOf(items) });
+      var bsites = SITES.map(demoBudget).filter(function (b) { return !isEmp || b.set; });
+      return demoRes({ ok: true, role: isEmp ? 'employee' : 'admin', who: isEmp ? me[0] : 'админ', from: from, to: to, routes: ROUTES.slice(), sites: SITES.slice(), truncated: false, items: out, byPerson: bp, budget: budget, budgets: { sites: bsites, general: null }, totals: totalsOf(items) });
     }
     if (action === 'taxiAdd') {
       var n = norm(d); if (n.error) return demoRes({ ok: false, error: n.error });
@@ -371,7 +395,8 @@
   function endSession() { localStorage.removeItem(SESSK); localStorage.removeItem(EMPK); S.role = ''; S.who = ''; S.data = null; S.last = null; S.mounted = false; L = newL(); renderLogin(); }
 
   /* ---------- состояние ---------- */
-  var S = { role: '', who: '', tab: 'add', period: 'month', from: '', to: '', data: null, err: '', loading: false, showDeleted: false, last: null, mounted: false, disabled: false, routes: ROUTES.slice() };
+  var S = { role: '', who: '', tab: 'add', period: 'month', from: '', to: '', data: null, err: '', loading: false, showDeleted: false, last: null, mounted: false, disabled: false, routes: ROUTES.slice(), sites: SITES.slice(), site: 'all' };
+  try { var sv0 = JSON.parse(localStorage.getItem(SITEK) || 'null'); if (typeof sv0 === 'string' && sv0) S.site = sv0; } catch (e) { /* без сохранённого фильтра */ }
   function newL(mode, phone) { return { step: 'start', readyAt: 0, lockUntil: 0, timer: null, mode: mode || 'emp', phone: phone || '', name: '' }; }
   var L = newL();
   var root = $('#view-root'), tabbar = $('#tabbar'), overlayRoot = $('#overlay-root'), toasts = $('#toasts'), uid = 0;
@@ -437,7 +462,7 @@
     v.appendChild(h('h1', null, 'Учёт такси', LIVE ? null : h('span', { class: 'demobadge', 'data-testid': 'demo-badge', text: 'ДЕМО' })));
     v.appendChild(h('p', { class: 'lead', text: L.mode === 'emp' ? 'Поездки на работу: дата, сумма, сколько человек и чек. Вход по номеру телефона: код придёт вам в Telegram. Вы видите только свои поездки.' : 'Поездки сотрудников на работу: дата, сумма, сколько человек и чек. Вход администратора — по тому же коду из Telegram, что и в кабинете админа.' }));
     if (L.step === 'start') loginStart(v); else loginCode(v);
-    v.appendChild(h('p', { class: 'foot', text: LIVE ? (L.mode === 'emp' ? 'Вход для сотрудников открыт с 9:00 до 20:00 по Москве. Бот входа: ' + BOT_NAME + '. Если вы его ещё не подключали, после «Получить код» появится короткая инструкция; пока бот не подключён, код получит администратор и передаст вам лично.' : 'Код приходит в админский чат Telegram. Если вы уже входили в кабинет админа на этом устройстве, повторный вход не нужен.') : 'Демо-режим · все данные вымышлены' }));
+    v.appendChild(h('p', { class: 'foot', text: LIVE ? (L.mode === 'emp' ? 'Вход для сотрудников открыт ' + hrsText() + ' по Москве. Бот входа: ' + BOT_NAME + '. Если вы его ещё не подключали, после «Получить код» появится короткая инструкция; пока бот не подключён, код получит администратор и передаст вам лично.' : 'Код приходит в админский чат Telegram. Если вы уже входили в кабинет админа на этом устройстве, повторный вход не нужен.') : 'Демо-режим · все данные вымышлены' }));
     if (L.mode === 'emp' && L.step === 'start') v.appendChild(h('div', { class: 'tx-adminlink' }, h('button', { class: 'link', type: 'button', 'data-testid': 'mode-admin', onclick: function () { L = newL('admin', L.phone); renderLogin(); } }, 'Вход для администратора')));
   }
   function loginStart(v) {
@@ -472,7 +497,7 @@
     function showGeoNeed(reason) { clear(geoBox); if (reason) geoBox.appendChild(geoNeed(reason, function () { btn.click(); })); }
     if (emp && L.geoErr) showGeoNeed(L.geoErr);
     v.appendChild(h('div', { class: 'gap12' }, h('div', { class: 'field' }, h('label', { class: 'l', text: emp ? 'Телефон' : 'Ваш телефон' }), ph), nm ? h('div', { class: 'field' }, h('label', { class: 'l' }, 'Ваше ФИО ', h('span', { text: 'по желанию' })), nm) : null, geoBox, btn, geoHint, err));
-    v.appendChild(h('div', { class: 'steps' }, h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: emp ? 'Введите свой номер телефона, нажмите «Получить код» и разрешите определение местоположения (без него код не выдаётся): 4 цифры придут вам в Telegram.' : 'Введите свой номер телефона и нажмите «Получить код в Telegram»: админ увидит, кто просит доступ, и 4 цифры придут в админский чат.' })), h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: emp ? 'Введите код. Сессия держится до конца рабочего дня (до 20:00), потом код запросите снова.' : 'Введите код. Сессия держится 12 часов, потом код запросите снова.' }))));
+    v.appendChild(h('div', { class: 'steps' }, h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: emp ? 'Введите свой номер телефона, нажмите «Получить код» и разрешите определение местоположения (без него код не выдаётся): 4 цифры придут вам в Telegram.' : 'Введите свой номер телефона и нажмите «Получить код в Telegram»: админ увидит, кто просит доступ, и 4 цифры придут в админский чат.' })), h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: emp ? 'Введите код. Сессия держится до ' + hhT(taxiHrs().to) + ' по Москве, потом код запросите снова.' : 'Введите код. Сессия держится 12 часов, потом код запросите снова.' }))));
     if (!emp) v.appendChild(h('button', { class: 'btn ghost tx-mode', type: 'button', 'data-testid': 'mode-emp', onclick: function () { L = newL('emp', L.phone); renderLogin(); } }, 'Я сотрудник: войти по номеру телефона'));
   }
   function loginCode(v) {
@@ -486,7 +511,7 @@
       go.disabled = true; clear(go); go.appendChild(h('span', { class: 'spinner' })); go.appendChild(document.createTextNode(' Проверяем…'));
       (L.mode === 'emp' ? call('codeVerify', { phone: L.phone, code: c, purpose: 'taxi' }) : call('adminCodeVerify', { code: c })).then(function (r) {
         busy = false;
-        if (r.ok && r.token) { if (L.mode === 'emp') store(EMPK, { token: r.token, exp: r.expiresAt, at: Date.now(), role: 'employee' }); else store(SESSK, { token: r.token, exp: r.expiresAt, at: Date.now() }); clearInterval(L.timer); L = newL(); boot(); return; }
+        if (r.ok && r.token) { if (L.mode === 'emp' && r.loginHours) saveHrs(r.loginHours.from, r.loginHours.to, r.loginHours.off); if (L.mode === 'emp') store(EMPK, { token: r.token, exp: r.expiresAt, at: Date.now(), role: 'employee' }); else store(SESSK, { token: r.token, exp: r.expiresAt, at: Date.now() }); clearInterval(L.timer); L = newL(); boot(); return; }
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         clear(go); go.appendChild(document.createTextNode('Войти')); go.disabled = true;
         if (r.error === 'wrong') { boxes.forEach(function (b) { b.value = ''; b.setAttribute('aria-invalid', 'true'); }); otp.classList.remove('bad'); void otp.offsetWidth; otp.classList.add('bad'); showErr('Неверный код. Осталось ' + r.left + ' ' + plural(r.left, ['попытка', 'попытки', 'попыток']) + '.'); boxes[0].focus(); }
@@ -590,6 +615,8 @@
     var n = ++uid, init = o.init || {}, file = null, busyFile = false, el;
     var fDate = h('input', { class: 'inp', type: 'date', id: 'fd' + n, max: today(), 'data-testid': 'f-date', required: true });
     var fRoute = h('select', { class: 'inp', id: 'fr' + n, 'data-testid': 'f-route' });
+    var fSite = h('select', { class: 'inp', id: 'fs' + n, 'data-testid': 'f-site', required: true });
+    function siteOptions(v) { clear(fSite); fSite.appendChild(h('option', { value: '', text: 'Выберите площадку' })); S.sites.forEach(function (x) { fSite.appendChild(h('option', { value: x, text: x })); }); fSite.value = S.sites.indexOf(v) >= 0 ? v : ''; }
     var fOther = h('input', { class: 'inp', type: 'text', id: 'fo' + n, maxlength: String(LIM.other), placeholder: 'Откуда → куда', 'aria-label': 'Свой маршрут', 'data-testid': 'f-route-text', autocomplete: 'off' });
     var otherBox = h('div', { class: 'tx-other', hidden: true }, fOther);
     var fAmount = h('input', { class: 'inp tx-amount', type: 'text', inputmode: 'decimal', id: 'fa' + n, placeholder: '0', autocomplete: 'off', 'data-testid': 'f-amount' });
@@ -605,7 +632,7 @@
     var tile = h('div', { class: 'tx-tile', 'data-testid': 'f-tile', tabindex: '-1' });
     var btnCam = h('button', { class: 'btn', type: 'button', 'data-testid': 'f-cam', onclick: function () { inCam.click(); } }, ico('camera', 'sm'), 'Снять чек');
     var btnGal = h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'f-gal', onclick: function () { inFile.click(); } }, ico('image', 'sm'), 'Фото / PDF');
-    function fieldOf(k) { return { date: fDate, route: fRoute, amount: fAmount, people: fPeople, file: tile }[k]; }
+    function fieldOf(k) { return { date: fDate, route: fRoute, amount: fAmount, people: fPeople, file: tile, site: fSite }[k]; }
     function drawTile() {
       clear(tile); tile.classList.toggle('has', !!file || busyFile); tile.classList.toggle('keep', !file && !!o.editing);
       if (busyFile) { tile.appendChild(h('span', { class: 'spinner' })); tile.appendChild(h('span', { class: 'tn', text: 'Обрабатываем фото…' })); return; }
@@ -632,11 +659,13 @@
     fAmount.addEventListener('input', function () { updPer(); setErr('amount', ''); });
     fPeople.addEventListener('input', function () { fPeople.value = fPeople.value.replace(/\D/g, '').slice(0, 1); updPer(); setErr('people', ''); });
     fDate.addEventListener('input', function () { setErr('date', ''); });
-    fRoute.addEventListener('change', function () { otherBox.hidden = fRoute.value !== OTHER; setErr('route', ''); if (!otherBox.hidden) fOther.focus(); });
+    fRoute.addEventListener('change', function () { otherBox.hidden = fRoute.value !== OTHER; setErr('route', ''); var rs = siteOfRoute(fRoute.value); if (rs) { fSite.value = rs; setErr('site', ''); } if (!otherBox.hidden) fOther.focus(); });   // маршрут подсказывает площадку
+    fSite.addEventListener('change', function () { setErr('site', ''); });
     fOther.addEventListener('input', function () { setErr('route', ''); });
     fNote.addEventListener('input', function () { cnt.textContent = fNote.value.length + ' / ' + LIM.note; });
     function fill(v) {
       fDate.value = v.date || today(); routeOptions(fRoute, v.route || S.routes[0]); otherBox.hidden = fRoute.value !== OTHER; fOther.value = v.routeText || '';
+      siteOptions(v.site && S.sites.indexOf(v.site) >= 0 ? v.site : siteOfRoute(fRoute.value) || v.lastSite || ''); setErr('site', '');
       fAmount.value = v.amount ? String(v.amount).replace('.', ',') : ''; fPeople.value = String(v.people || 1); fNames.value = v.names || ''; fNote.value = v.note || ''; cnt.textContent = fNote.value.length + ' / ' + LIM.note; updPer();
       ['date', 'route', 'amount', 'people', 'file'].forEach(function (k) { setErr(k, ''); });
     }
@@ -647,6 +676,7 @@
     el = h('div', { class: 'tx-form gap16', 'data-testid': o.p + '-form' },
       h('div', { class: 'field' }, h('label', { class: 'l', for: 'fd' + n }, 'Дата поездки'), fDate, errEl('date')),
       h('div', { class: 'field' }, h('label', { class: 'l', for: 'fr' + n }, 'Маршрут'), fRoute, otherBox, errEl('route')),
+      h('div', { class: 'field' }, h('label', { class: 'l', for: 'fs' + n }, 'Площадка ', h('span', { text: 'обязательно' })), fSite, errEl('site')),
       h('div', { class: 'tx-row2' },
         h('div', { class: 'field' }, h('label', { class: 'l', for: 'fa' + n }, 'Сумма, ₽'), fAmount, errEl('amount')),
         h('div', { class: 'field' }, h('label', { class: 'l', for: 'fp' + n }, 'Людей в машине'), h('div', { class: 'tx-step' }, minus, fPeople, plus), errEl('people'))),
@@ -656,21 +686,22 @@
     fill(init); drawTile();
     return {
       el: el, focus: function () { fAmount.focus(); },
-      setBusy: function (b) { [fDate, fRoute, fOther, fAmount, fPeople, fNames, fNote, btnCam, btnGal, minus, plus].forEach(function (x) { x.disabled = b; }); },
-      reset: function (keep) { setFile(null); fill({ route: keep.route, routeText: keep.routeText, people: keep.people }); },
+      setBusy: function (b) { [fDate, fRoute, fOther, fSite, fAmount, fPeople, fNames, fNote, btnCam, btnGal, minus, plus].forEach(function (x) { x.disabled = b; }); },
+      reset: function (keep) { setFile(null); fill({ route: keep.route, routeText: keep.routeText, people: keep.people, site: keep.site }); },
       collect: function () {   // → Promise<payload | null>; ошибки показывает у полей
-        var v = { date: fDate.value, route: fRoute.value, routeText: fOther.value, amount: String(fAmount.value).trim(), people: people(), names: fNames.value, note: fNote.value }, e = checkTrip(v, S.routes), first = null;
-        ['date', 'route', 'amount', 'people'].forEach(function (k) { setErr(k, e[k] ? ERR[e[k]] : ''); if (e[k] && !first) first = k; });
+        var v = { date: fDate.value, route: fRoute.value, routeText: fOther.value, amount: String(fAmount.value).trim(), people: people(), names: fNames.value, note: fNote.value, site: fSite.value, checkSite: true }, e = checkTrip(v, S.routes), first = null;
+        if (!v.site) e.site = 'bad_site';
+        ['date', 'route', 'site', 'amount', 'people'].forEach(function (k) { setErr(k, e[k] ? ERR[e[k]] : ''); if (e[k] && !first) first = k; });
         if (e.note || e.names) { more.open = true; toast(ERR[e.note || e.names], 'bad'); if (!first) first = 'note'; }
         if (!file && !o.editing) { setErr('file', ERR.receipt_required); if (!first) first = 'file'; }
         if (first) { var f = fieldOf(first) || fNote; try { f.focus(); } catch (x) { /* ignore */ } if (f.scrollIntoView) f.scrollIntoView({ block: 'center' }); return Promise.resolve(null); }
-        var body = { date: v.date, route: v.route, amount: parseAmount(v.amount), people: v.people, names: v.names.trim(), note: v.note.trim() };
+        var body = { date: v.date, route: v.route, amount: parseAmount(v.amount), people: v.people, names: v.names.trim(), note: v.note.trim(), site: v.site };
         if (v.route === OTHER) body.routeText = v.routeText.trim();
         if (!file) return Promise.resolve(body);
         return blobB64(file.blob).then(function (b64) { body.file = { b64: b64 }; body.pdfFlag = file.kind === 'pdf'; return body; });
       },
       serverErr: function (code) {
-        var k = { bad_date: 'date', future_date: 'date', old_date: 'date', bad_amount: 'amount', amount_big: 'amount', bad_people: 'people', bad_route: 'route', route_long: 'route', receipt_required: 'file', bad_file: 'file', too_big: 'file' }[code];
+        var k = { bad_date: 'date', future_date: 'date', old_date: 'date', bad_amount: 'amount', amount_big: 'amount', bad_people: 'people', bad_route: 'route', route_long: 'route', bad_site: 'site', receipt_required: 'file', bad_file: 'file', too_big: 'file' }[code];
         if (!k) return false; setErr(k, ERR[code]); var f = fieldOf(k); if (f && f.focus) { try { f.focus(); } catch (x) { /* ignore */ } } return true;
       }
     };
@@ -683,7 +714,7 @@
   function mount() {
     clear(root); S.mounted = true; document.title = 'Учёт такси'; tabbar.hidden = false;
     var lp = lastPrefs();
-    form = tripForm({ p: 'add', init: { route: lp.route, routeText: lp.routeText, people: lp.people } });
+    form = tripForm({ p: 'add', init: { route: lp.route, routeText: lp.routeText, people: lp.people, site: lp.site } });
     var saveBtn = h('button', { class: 'btn big tx-save', type: 'button', 'data-testid': 'f-save' }, ico('check'), 'Сохранить поездку');
     savedBox = h('div', { class: 'tx-saved', role: 'status', 'data-testid': 'saved', hidden: true });
     saveBtn.addEventListener('click', function () { submitAdd(saveBtn, false); });
@@ -724,7 +755,7 @@
       call('taxiAdd', sendBody(body)).then(function (r) {
         idle();
         if (r.ok) {
-          store(LASTK, { route: body.route, routeText: body.routeText || '', people: body.people });
+          store(LASTK, { route: body.route, routeText: body.routeText || '', people: body.people, site: body.site });   // площадка запоминается как последний выбор
           S.last = { id: r.id, date: body.date, amount: body.amount, people: body.people, perPerson: r.perPerson };
           form.reset(lastPrefs()); showSaved(); toast('Поездка сохранена'); if (S.data) loadList(true);
           return;
@@ -758,7 +789,7 @@
     var pb = periodBounds(); S.loading = true; S.err = ''; if (!quiet) renderList();
     return call('taxiList', { from: pb.from, to: pb.to }).then(function (r) {
       S.loading = false; if (!session()) return;
-      if (r.ok) { S.data = r; S.err = ''; S.role = r.role || S.role; S.who = r.who || S.who; if (r.routes && r.routes.length) S.routes = r.routes; } else if (r.error !== 'auth') S.err = errText(r);
+      if (r.ok) { S.data = r; S.err = ''; S.role = r.role || S.role; S.who = r.who || S.who; if (r.routes && r.routes.length) S.routes = r.routes; if (r.sites && r.sites.length) S.sites = r.sites; } else if (r.error !== 'auth') S.err = errText(r);
       renderList();
     });
   }
@@ -779,21 +810,35 @@
     }
     if (S.err) { listBody.appendChild(h('div', { class: 'errbox', role: 'alert', 'data-testid': 'list-err' }, ico('alert'), h('div', null, h('b', { text: 'Не удалось загрузить журнал' }), h('span', { text: S.err }), h('div', null, h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'list-retry', onclick: function () { loadList(); } }, 'Повторить'))))); return; }
     if (!d) { listBody.appendChild(h('div', { class: 'stack', 'aria-busy': 'true', 'data-testid': 'list-skel' }, h('div', { class: 'sk c' }), h('div', { class: 'sk c' }))); return; }
-    var tt = d.totals, items = d.items || [];
-    if (d.budget && (d.budget.set || isAdmin())) listBody.insertBefore(budgetCard(d.budget), listBody.firstChild);   // остаток бюджета: только админу (сервер сотруднику его не отдаёт)
+    // TAXI_SITES_V1: фильтр по площадке (Все / площадки) — действует на плитки бюджета, итоги периода, «По людям», «По дням» и список; выбор запоминается
+    var siteNow = S.site === 'all' || S.sites.indexOf(S.site) >= 0 || (S.site === NO_SITE && (d.items || []).some(function (x) { return x.site === NO_SITE; })) ? S.site : 'all';
+    var siteList = S.sites.concat((d.items || []).some(function (x) { return x.site === NO_SITE; }) ? [NO_SITE] : []);
+    var sf = h('div', { class: 'segrow tx-seg tx-sites', role: 'group', 'aria-label': 'Площадка', 'data-testid': 'site-filter' },
+      [['all', 'Все']].concat(siteList.map(function (x) { return [x, x]; })).map(function (o, i) { return h('button', { type: 'button', 'aria-pressed': siteNow === o[0] ? 'true' : 'false', 'data-testid': 'site-f' + i, 'data-site': o[0], onclick: function () { S.site = o[0]; store(SITEK, o[0]); renderList(); } }, o[1]); }));
+    head.appendChild(sf);
+    var allItems = d.items || [], items = siteNow === 'all' ? allItems : allItems.filter(function (x) { return (x.site || NO_SITE) === siteNow; }), tt = siteNow === 'all' ? d.totals : totalsOf(items);
+    var bsrc = d.budgets || { sites: [], general: d.budget || null }, blist = bsrc.sites.filter(function (b) { return siteNow === 'all' || b.site === siteNow; });
+    if (bsrc.general && (bsrc.general.set || isAdmin()) && siteNow === 'all') blist = blist.concat([bsrc.general]);
+    if (blist.length) { var bwrap = h('div', { class: 'tx-budgets', 'data-testid': 'budgets' }); blist.forEach(function (b) { bwrap.appendChild(budgetCard(b)); }); listBody.insertBefore(bwrap, listBody.firstChild); }   // по блоку на площадку; сотруднику сервер отдаёт только заданные (только суммы)
+    var dayBudgets = blist.filter(function (b) { return b.set; });
     listBody.appendChild(h('div', { class: 'sumgrid tx-sum', 'data-testid': 'totals' },
       sumCard('Поездок', String(tt.count), '', 't-count'), sumCard('Общая сумма', money(tt.sum), '', 't-sum'),
       sumCard('Пассажиров', String(tt.people), 'человек всего', 't-people'), sumCard('На человека', tt.people ? money(tt.perPerson) : '—', 'в среднем', 't-per')));
-    if (isAdmin() && d.byPerson && d.byPerson.length) {   // итоги по людям: только админу (сервер сотруднику их не отдаёт)
+    var byPerson = d.byPerson;
+    if (byPerson && siteNow !== 'all') { var pm = {}; items.forEach(function (x) { if (x.status !== 'active') return; var k = x.byPhone || 'admin', b = pm[k] || (pm[k] = { name: x.by || 'админ', count: 0, sum: 0, people: 0 }); b.count++; b.sum += x.amount; b.people += x.people; }); byPerson = Object.keys(pm).map(function (k) { return pm[k]; }).sort(function (a, b) { return b.sum - a.sum; }); }
+    if (isAdmin() && byPerson && byPerson.length) {   // итоги по людям: только админу (сервер сотруднику их не отдаёт)
       var pp = h('div', { class: 'tx-days tx-persons', 'data-testid': 'by-person' });
-      d.byPerson.forEach(function (b) { pp.appendChild(h('div', { class: 'tx-day pr', 'data-testid': 'person-row' }, h('span', { class: 'dd', text: b.name }), h('span', { class: 'dn', text: b.count + ' ' + plural(b.count, ['поездка', 'поездки', 'поездок']) + ' · ' + b.people + ' чел.' }), h('b', { class: 'num', text: money(b.sum) }))); });
+      byPerson.forEach(function (b) { pp.appendChild(h('div', { class: 'tx-day pr', 'data-testid': 'person-row' }, h('span', { class: 'dd', text: b.name }), h('span', { class: 'dn', text: b.count + ' ' + plural(b.count, ['поездка', 'поездки', 'поездок']) + ' · ' + b.people + ' чел.' }), h('b', { class: 'num', text: money(b.sum) }))); });
       listBody.appendChild(h('div', { class: 'card' }, h('h2', { text: 'По людям' }), pp));
     }
-    var csvBtn = h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'csv', disabled: !tt.count, onclick: function () { exportCsv(d); } }, ico('download', 'sm'), 'Скачать CSV');
+    var csvBtn = h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'csv', disabled: !tt.count, onclick: function () { exportCsv({ from: d.from, to: d.to, items: items, totals: tt, site: siteNow }); } }, ico('download', 'sm'), 'Скачать CSV');
     listBody.appendChild(h('div', { class: 'tx-actions' }, csvBtn, tt.deleted ? h('label', { class: 'tx-chk' }, h('input', { type: 'checkbox', checked: S.showDeleted, 'data-testid': 'show-del', onchange: function (e) { S.showDeleted = e.target.checked; renderList(); } }), h('span', { text: 'Показывать удалённые (' + tt.deleted + ')' })) : null));
     if (tt.byDay.length) {
       var days = h('div', { class: 'tx-days', 'data-testid': 'by-day' });
-      tt.byDay.forEach(function (b) { days.appendChild(h('div', { class: 'tx-day', 'data-testid': 'day-row' }, h('span', { class: 'dd', text: dmy(b.date).slice(0, 5) + ' ' + dowOf(b.date) }), h('span', { class: 'dn', text: b.count + ' ' + plural(b.count, ['поездка', 'поездки', 'поездок']) + ' · ' + b.people + ' чел.' }), h('span', { class: 'tx-dsum' }, h('b', { class: 'num', text: money(b.sum) }), leftAfter(d.budget, b.date) !== null ? h('span', { class: 'tx-dleft num' + (leftAfter(d.budget, b.date) < (d.budget.threshold || 0) ? ' low' : ''), 'data-testid': 'day-left', text: 'остаток ' + (leftAfter(d.budget, b.date) < 0 ? '−' + money(-leftAfter(d.budget, b.date)) : money(leftAfter(d.budget, b.date))) }) : null))); });
+      tt.byDay.forEach(function (b) {
+        var lefts = h('span', { class: 'tx-dlefts' }); dayBudgets.forEach(function (bg) { var lv = leftAfter(bg, b.date); if (lv === null) return; lefts.appendChild(h('span', { class: 'tx-dleft num' + (lv < (bg.threshold || 0) ? ' low' : ''), 'data-testid': 'day-left', 'data-site': bg.site, text: (dayBudgets.length > 1 && bg.site ? bg.site + ': ' : '') + 'остаток ' + (lv < 0 ? '−' + money(-lv) : money(lv)) })); });   // остаток после дня по площадке
+        days.appendChild(h('div', { class: 'tx-day', 'data-testid': 'day-row' }, h('span', { class: 'dd', text: dmy(b.date).slice(0, 5) + ' ' + dowOf(b.date) }), h('span', { class: 'dn', text: b.count + ' ' + plural(b.count, ['поездка', 'поездки', 'поездок']) + ' · ' + b.people + ' чел.' }), h('span', { class: 'tx-dsum' }, h('b', { class: 'num', text: money(b.sum) }), lefts)));
+      });
       listBody.appendChild(h('div', { class: 'card' }, h('h2', { text: 'По дням' }), days));
     }
     var shown = items.filter(function (x) { return x.status === 'active' || S.showDeleted; });
@@ -802,16 +847,17 @@
     if (d.truncated) listBody.appendChild(h('p', { class: 'help', text: 'Показаны не все поездки периода. Сузьте период.' }));
   }
   function budgetCard(b) {   // TAXI_BUDGET_TILES_V1: плитки как «Поездок / Общая сумма»: Выделено, Потрачено, Остаток (красный ниже порога), В среднем в день; всегда с даты бюджета, период не влияет
-    if (!b.set) return h('div', { class: 'card tx-budget none', 'data-testid': 'budget' }, h('div', { class: 'l', text: 'Бюджет такси' }), h('div', { class: 's', 'data-testid': 'budget-sub', text: 'Бюджет не задан. Отправьте боту @tableworks_bot команду /budget 10000.' }));
+    var bn = b.site ? 'Бюджет такси «' + b.site + '»' : 'Бюджет такси (общий)', bc = b.site ? '/budget ' + b.site + ' ' : '/budget ' + (S.sites[0] || '') + ' ';
+    if (!b.set) return h('div', { class: 'card tx-budget none', 'data-testid': 'budget', 'data-site': b.site || '' }, h('div', { class: 'l', text: bn }), h('div', { class: 's', 'data-testid': 'budget-sub', text: 'Бюджет не задан. Отправьте боту @tableworks_bot команду ' + bc + '10000.' }));
     var neg = function (n) { return n < 0 ? '−' + money(-n) : money(n); };
     var left = h('div', { class: 'card sumcard tx-bleft' + (b.low ? ' low' : ''), 'data-testid': 'b-left' }, h('div', { class: 'n num', 'data-testid': 'budget-bal', text: neg(b.balance) }), h('div', { class: 'l', text: 'Остаток' }),
       h('div', { class: 's', 'data-testid': 'budget-sub', text: 'Выделено ' + money(b.allocated) + ' · потрачено ' + money(b.spent) + (b.low ? ' · меньше ' + money(b.threshold) : '') }));
-    return h('section', { class: 'tx-budget-tiles', 'data-testid': 'budget', 'data-low': b.low ? '1' : '0', 'aria-label': 'Бюджет такси' },
-      h('div', { class: 'row between tx-bhead' }, h('h2', { text: 'Бюджет такси' }), h('span', { class: 'cap', text: 'с ' + dmy(b.since) })),
+    return h('section', { class: 'tx-budget-tiles', 'data-testid': 'budget', 'data-site': b.site || '', 'data-low': b.low ? '1' : '0', 'aria-label': bn },
+      h('div', { class: 'row between tx-bhead' }, h('h2', { 'data-testid': 'budget-name', text: bn }), h('span', { class: 'cap', text: 'с ' + dmy(b.since) })),
       left,
       h('div', { class: 'sumgrid tx-sum' }, sumCard('Выделено', money(b.allocated), 'с ' + dmy(b.since).slice(0, 5), 'b-alloc'), sumCard('Потрачено', money(b.spent), 'с даты бюджета', 'b-spent'),
         b.perDay !== undefined ? sumCard('В среднем в день', money(b.perDay), 'с ' + dmy(b.since).slice(0, 5) + ' по сегодня', 'b-perday') : null),
-      isAdmin() ? h('p', { class: 'help tx-bhint', text: 'Пополнить: боту @tableworks_bot /budget +5000, задать заново: /budget 10000.' }) : null);
+      isAdmin() ? h('p', { class: 'help tx-bhint', text: b.site ? 'Пополнить: боту @tableworks_bot ' + bc + '+5000, задать заново: ' + bc + '10000.' : 'Старый общий бюджет (до площадок). Задайте бюджет площадки: ' + bc + '10000.' }) : null);
   }
   function leftAfter(b, date) {   // остаток после дня (по данным сервера); null для дней до даты бюджета
     if (!b || !b.set || !b.byDay || date < b.since) return null;
@@ -820,7 +866,7 @@
   var COMP_TXT = { pending: ['Ждёт оплаты', 'warn'], paid: ['Оплачено', 'ok'], rejected: ['Отклонено', 'bad'] };
   function compAsk(x, btn) {
     if (!requireOnline()) return;
-    confirmAct({ title: 'Компенсировать проезд?', text: 'Администратору уйдёт заявка: дата ' + dmy(x.date) + ', ' + x.route + ', ' + money(x.amount) + '. Деньги переводят по СБП на ваш номер телефона или на карту из заявки на аванс.', yes: 'Отправить заявку' }).then(function (c) {
+    confirmAct({ title: 'Компенсировать проезд?', text: 'Администратору уйдёт заявка: дата ' + dmy(x.date) + ', ' + x.route + (x.site ? ', площадка «' + x.site + '»' : '') + ', ' + money(x.amount) + '. Деньги переводят по СБП на ваш номер телефона или на карту из заявки на аванс.', yes: 'Отправить заявку' }).then(function (c) {
       if (!c) return; btn.disabled = true;
       call('taxiCompRequest', { id: x.id }).then(function (r) {
         btn.disabled = false;
@@ -852,7 +898,7 @@
     }
     return h('article', { class: 'card acard tx-trip' + (del ? ' deleted' : ''), 'data-testid': 'trip', 'data-id': x.id, 'data-status': x.status },
       h('div', { class: 'hd' }, h('div', { class: 'grow' }, h('div', { class: 'nm', text: dmy(x.date) + ' · ' + dowOf(x.date) }), h('div', { class: 'meta', text: x.route })), h('div', { class: 'amt num', text: money(x.amount) })),
-      h('div', { class: 'tx-meta' }, chip(x.people + ' ' + plural(x.people, ['человек', 'человека', 'человек']), 'info', 'car'), chip('на человека ' + money(x.perPerson), 'gray'), del ? chip('Удалено', 'bad', 'trash') : null, x.changed && !del ? chip('Исправлено', 'warn') : null, cst ? h('span', { class: 'chip ' + cst[1], 'data-testid': 'comp-status', 'data-comp': x.comp.status, text: 'Компенсация: ' + cst[0] }) : null, isAdmin() && x.by ? h('span', { class: 'chip gray', 'data-testid': 'trip-by', text: 'внёс: ' + x.by }) : null),
+      h('div', { class: 'tx-meta' }, chip(x.people + ' ' + plural(x.people, ['человек', 'человека', 'человек']), 'info', 'car'), chip('на человека ' + money(x.perPerson), 'gray'), h('span', { class: 'chip ' + (x.site && x.site !== NO_SITE ? 'info' : 'warn'), 'data-testid': 'trip-site', text: '📍 ' + (x.site || NO_SITE) }), del ? chip('Удалено', 'bad', 'trash') : null, x.changed && !del ? chip('Исправлено', 'warn') : null, cst ? h('span', { class: 'chip ' + cst[1], 'data-testid': 'comp-status', 'data-comp': x.comp.status, text: 'Компенсация: ' + cst[0] }) : null, isAdmin() && x.by ? h('span', { class: 'chip gray', 'data-testid': 'trip-by', text: 'внёс: ' + x.by }) : null),
       x.names ? h('div', { class: 'txt' }, h('b', { text: 'Пассажиры' }), x.names) : null, x.note ? h('div', { class: 'txt' }, h('b', { text: 'Примечание' }), x.note) : null,
       del ? h('div', { class: 'txt add', 'data-testid': 'del-reason' }, h('b', { text: 'Причина удаления' }), x.reason) : null, acts);
   }
@@ -865,7 +911,7 @@
     });
   }
   function editTrip(x) {
-    var other = x.route.indexOf(OTHER + ': ') === 0, ef = tripForm({ p: 'edit', editing: true, init: { date: x.date, route: other ? OTHER : x.route, routeText: other ? x.route.slice(OTHER.length + 2) : '', amount: x.amount, people: x.people, names: x.names, note: x.note } });
+    var other = x.route.indexOf(OTHER + ': ') === 0, ef = tripForm({ p: 'edit', editing: true, init: { date: x.date, route: other ? OTHER : x.route, routeText: other ? x.route.slice(OTHER.length + 2) : '', amount: x.amount, people: x.people, names: x.names, note: x.note, site: x.site } });
     var save = h('button', { class: 'btn', type: 'button', 'data-testid': 'edit-save' }, 'Сохранить'), ctl;
     if (x.names || x.note) $('details', ef.el).open = true;
     save.addEventListener('click', function () {
@@ -902,14 +948,14 @@
   }
   function num(n) { return (Math.round(n * 100) / 100).toFixed(2).replace('.', ','); }
   function csvText(d) {
-    var rows = [['Дата', 'Маршрут', 'Сумма, ₽', 'Людей', 'На человека, ₽', 'ФИО пассажиров', 'Примечание', 'ID', 'Создано (МСК)'].concat(isAdmin() ? ['Внёс'] : [])];
+    var rows = [['Дата', 'Маршрут', 'Площадка', 'Сумма, ₽', 'Людей', 'На человека, ₽', 'ФИО пассажиров', 'Примечание', 'ID', 'Создано (МСК)'].concat(isAdmin() ? ['Внёс'] : [])];
     d.items.filter(function (x) { return x.status === 'active'; }).slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.created < b.created ? -1 : 1); })
-      .forEach(function (x) { rows.push([dmy(x.date), x.route, num(x.amount), x.people, num(x.perPerson), x.names, x.note, x.id, x.created].concat(isAdmin() ? [x.by || 'админ'] : [])); });
-    var t = d.totals; rows.push(['Итого', 'поездок: ' + t.count, num(t.sum), t.people, t.people ? num(t.perPerson) : '', '', '', '', ''].concat(isAdmin() ? [''] : []));
+      .forEach(function (x) { rows.push([dmy(x.date), x.route, x.site || NO_SITE, num(x.amount), x.people, num(x.perPerson), x.names, x.note, x.id, x.created].concat(isAdmin() ? [x.by || 'админ'] : [])); });
+    var t = d.totals; rows.push(['Итого', 'поездок: ' + t.count, d.site && d.site !== 'all' ? d.site : 'все площадки', num(t.sum), t.people, t.people ? num(t.perPerson) : '', '', '', '', ''].concat(isAdmin() ? [''] : []));
     return '\ufeff' + rows.map(function (r) { return r.map(csvCell).join(';'); }).join('\r\n') + '\r\n';
   }
   function exportCsv(d) {
-    var blob = new Blob([csvText(d)], { type: 'text/csv;charset=utf-8' }), url = URL.createObjectURL(blob), a = h('a', { href: url, download: 'taxi_' + d.from + '_' + d.to + '.csv', hidden: true });
+    var blob = new Blob([csvText(d)], { type: 'text/csv;charset=utf-8' }), url = URL.createObjectURL(blob), a = h('a', { href: url, download: 'taxi_' + d.from + '_' + d.to + (d.site && d.site !== 'all' ? '_' + d.site.replace(/\s+/g, '_') : '') + '.csv', hidden: true });
     document.body.appendChild(a); a.click(); setTimeout(function () { a.remove(); URL.revokeObjectURL(url); }, 1500); toast('Файл CSV сформирован');
   }
 
@@ -1262,6 +1308,14 @@
   function route() { var t = tabOk(location.hash.replace(/^#\//, '')); if (S.mounted) { setTab(t); if (t === 'list' && !S.data && !S.loading) loadList(); if (t === 'car' && C.driver === undefined && !C.loading) carLoad(); if (t === 'drv' && !D.data && !D.loading) drvLoad(); } }
   window.addEventListener('hashchange', function () { if (session()) route(); });
   window.addEventListener('online', function () { if (S.mounted) offlineBanner(); }); window.addEventListener('offline', function () { if (S.mounted) offlineBanner(); });
+  // автовыход сотрудника по часам учёта такси (МСК): вне окна или вход был до последнего закрытия (полночь при to=24) — сессия закрывается; сервер проверяет то же самое
+  function taxiLastClose(hr) { var m = mskNow(), c = Date.UTC(m.getUTCFullYear(), m.getUTCMonth(), m.getUTCDate(), hr.to, 0, 0); if (c > m.getTime()) c -= 86400000; return c - 3 * 3600000; }
+  function hoursTick() {
+    if (!LIVE) return; var se = load(EMPK, null); if (!se || !se.token || load(SESSK, null)) return;
+    var hr = taxiHrs(); if (hr.off) return; var h = mskNow().getUTCHours();
+    if (h < hr.from || h >= hr.to || (se.at && se.at < taxiLastClose(hr))) { endSession(); toast(errText({ error: 'closed', from: hr.from, to: hr.to }), 'warn'); }
+  }
+  setInterval(hoursTick, 60000); document.addEventListener('visibilitychange', function () { if (!document.hidden) hoursTick(); });
   function boot() {
     var WANTK = 'pr.taxi.want';   // вкладка из ссылки (например taxi.html#/car с главной «Мои выплаты»): помним до входа и открываем после
     if (!session()) { try { if (/^#\/(add|list|car|drv)$/.test(location.hash)) sessionStorage.setItem(WANTK, location.hash); } catch (e) { /* без sessionStorage остаётся сам хэш */ } renderLogin(); return; }

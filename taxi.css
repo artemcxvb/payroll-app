@@ -139,3 +139,12 @@ body.taxipage .app { max-width: 520px; }
 .tx-dleft.low { color: var(--bad); font-weight: 700; }
 .tx-budget-tiles .tx-sum .sumcard:nth-child(3):last-child { grid-column: 1 / -1; }
 .tx-bhint { margin: 0; }
+
+/* TAXI_SITES_V1: блоки бюджета по площадкам и фильтр площадки */
+.tx-budgets { display: grid; gap: 16px; margin-bottom: 4px; }
+.tx-budgets .tx-budget-tiles { margin-bottom: 0; }
+.tx-sites { flex-wrap: wrap; }
+.tx-dlefts { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.tx-bhead { gap: 8px; align-items: baseline; }
+.tx-bhead .cap { white-space: nowrap; flex: none; }
+.tx-budgets .tx-bhead h2 { font-size: 19px; line-height: 1.25; }

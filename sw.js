@@ -1,5 +1,5 @@
 /* Service worker: оболочка приложения кэшируется, чтобы данные можно было смотреть без сети. */
-var CACHE = 'pr-shell-v37';
+var CACHE = 'pr-shell-v38';
 var SHELL = ['banks/banks.js', 'banks/absolut.png', 'banks/akbars.png', 'banks/alfa.png', 'banks/atb.png', 'banks/bankkazani.png', 'banks/centrinvest.png', 'banks/crediteurope.png', 'banks/domrf.png', 'banks/homecredit.png', 'banks/khlynov.png', 'banks/mkb.png', 'banks/modul.png', 'banks/mts.png', 'banks/otkritie.png', 'banks/otp.png', 'banks/ozon.png', 'banks/raiffeisen.png', 'banks/renaissance.png', 'banks/rosbank.png', 'banks/sber.png', 'banks/sinara.png', 'banks/sovcom.png', 'banks/tbank.png', 'banks/tochka.png', 'banks/ubrr.png', 'banks/veb.png', 'banks/vtb.png', 'banks/wb.png', 'banks/yandex.png', 'banks/yoomoney.png', 'banks/zenit.png', './', 'index.html', 'app.js', 'style.css', 'mock-data.js', 'config.js', 'manifest.webmanifest', 'company-banner.jpg', 'admin.html', 'admin.js', 'admin.css', 'taxi.html', 'taxi.js', 'taxi.css',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];   // фото демо-режима в кэш при установке не берём (в боевом режиме они не нужны), они попадают в кэш при первом показе
 
