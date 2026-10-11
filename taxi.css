@@ -148,3 +148,6 @@ body.taxipage .app { max-width: 520px; }
 .tx-bhead { gap: 8px; align-items: baseline; }
 .tx-bhead .cap { white-space: nowrap; flex: none; }
 .tx-budgets .tx-bhead h2 { font-size: 19px; line-height: 1.25; }
+
+/* fix: long site label in «По дням» on phones */
+.tx-dleft{white-space:normal;text-align:right;max-width:150px;line-height:1.25}
