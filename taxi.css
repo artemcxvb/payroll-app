@@ -151,3 +151,4 @@ body.taxipage .app { max-width: 520px; }
 
 /* fix: long site label in «По дням» on phones */
 .tx-dleft{white-space:normal;text-align:right;max-width:150px;line-height:1.25}
+.tx-comp{margin-top:12px}

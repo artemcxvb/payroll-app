@@ -824,6 +824,9 @@
     listBody.appendChild(h('div', { class: 'sumgrid tx-sum', 'data-testid': 'totals' },
       sumCard('Поездок', String(tt.count), '', 't-count'), sumCard('Общая сумма', money(tt.sum), '', 't-sum'),
       sumCard('Пассажиров', String(tt.people), 'человек всего', 't-people'), sumCard('На человека', tt.people ? money(tt.perPerson) : '—', 'в среднем', 't-per')));
+    // TAXI_COMP_TILES_V1: Потрачено (активные поездки периода/площадки) · Компенсировано (заявки «Оплачено») · К компенсации (ждут); без данных comp от сервера — не показываем
+    if (items.some(function (x) { return 'comp' in x; })) { var cs = { spent: 0, paid: 0, pend: 0, np: 0, nw: 0 }; items.forEach(function (x) { if (x.status !== 'active') return; cs.spent += x.amount; if (x.comp && x.comp.status === 'paid') { cs.paid += x.amount; cs.np++; } else if (x.comp && x.comp.status === 'pending') { cs.pend += x.amount; cs.nw++; } });
+      listBody.appendChild(h('div', { class: 'sumgrid tx-sum tx-comp', 'data-testid': 'comp-totals' }, sumCard('Потрачено', money(cs.spent), 'за период', 'c-spent'), sumCard('Компенсировано', money(cs.paid), cs.np + ' ' + plural(cs.np, ['поездка', 'поездки', 'поездок']), 'c-paid'), sumCard('К компенсации', money(cs.pend), cs.nw ? 'ждёт оплаты: ' + cs.nw : 'нет заявок', 'c-pend'))); }
     var byPerson = d.byPerson;
     if (byPerson && siteNow !== 'all') { var pm = {}; items.forEach(function (x) { if (x.status !== 'active') return; var k = x.byPhone || 'admin', b = pm[k] || (pm[k] = { name: x.by || 'админ', count: 0, sum: 0, people: 0 }); b.count++; b.sum += x.amount; b.people += x.people; }); byPerson = Object.keys(pm).map(function (k) { return pm[k]; }).sort(function (a, b) { return b.sum - a.sum; }); }
     if (isAdmin() && byPerson && byPerson.length) {   // итоги по людям: только админу (сервер сотруднику их не отдаёт)
