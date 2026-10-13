@@ -826,7 +826,7 @@
       sumCard('Пассажиров', String(tt.people), 'человек всего', 't-people'), sumCard('На человека', tt.people ? money(tt.perPerson) : '—', 'в среднем', 't-per')));
     // TAXI_COMP_TILES_V1: Потрачено (активные поездки периода/площадки) · Компенсировано (заявки «Оплачено») · К компенсации (ждут); без данных comp от сервера — не показываем
     if (items.some(function (x) { return 'comp' in x; })) { var cs = { spent: 0, paid: 0, pend: 0, np: 0, nw: 0 }; items.forEach(function (x) { if (x.status !== 'active') return; cs.spent += x.amount; if (x.comp && x.comp.status === 'paid') { cs.paid += x.amount; cs.np++; } else if (x.comp && x.comp.status === 'pending') { cs.pend += x.amount; cs.nw++; } });
-      listBody.appendChild(h('div', { class: 'sumgrid tx-sum tx-comp', 'data-testid': 'comp-totals' }, sumCard('Потрачено', money(cs.spent), 'за период', 'c-spent'), sumCard('Компенсировано', money(cs.paid), cs.np + ' ' + plural(cs.np, ['поездка', 'поездки', 'поездок']), 'c-paid'), sumCard('К компенсации', money(cs.pend), cs.nw ? 'ждёт оплаты: ' + cs.nw : 'нет заявок', 'c-pend'))); }
+      listBody.appendChild(h('div', { class: 'sumgrid tx-sum tx-comp', 'data-testid': 'comp-totals' }, sumCard('Потрачено', money(cs.spent), 'за период', 'c-spent', 'blue'), sumCard('Компенсировано', money(cs.paid), cs.np + ' ' + plural(cs.np, ['поездка', 'поездки', 'поездок']), 'c-paid', 'green'), sumCard('К компенсации', money(cs.pend), cs.nw ? 'ждёт оплаты: ' + cs.nw : 'нет заявок', 'c-pend', 'orange'))); }
     var byPerson = d.byPerson;
     if (byPerson && siteNow !== 'all') { var pm = {}; items.forEach(function (x) { if (x.status !== 'active') return; var k = x.byPhone || 'admin', b = pm[k] || (pm[k] = { name: x.by || 'админ', count: 0, sum: 0, people: 0 }); b.count++; b.sum += x.amount; b.people += x.people; }); byPerson = Object.keys(pm).map(function (k) { return pm[k]; }).sort(function (a, b) { return b.sum - a.sum; }); }
     if (isAdmin() && byPerson && byPerson.length) {   // итоги по людям: только админу (сервер сотруднику их не отдаёт)
@@ -885,7 +885,7 @@
       call('taxiCompDecide', { id: x.comp.id, to: to }).then(function (r) { btn.disabled = false; if (r.ok) { toast(to === 'paid' ? 'Отмечено: оплачено' : 'Компенсация отклонена'); loadList(true); } else toast(ERR[r.error] || errText(r), 'bad'); });
     });
   }
-  function sumCard(l, n, s, tid) { return h('div', { class: 'card sumcard' }, h('div', { class: 'n num', 'data-testid': tid, text: n }), h('div', { class: 'l', text: l }), s ? h('div', { class: 's', text: s }) : null); }
+  function sumCard(l, n, s, tid, tone) { return h('div', { class: 'card sumcard' + (tone ? ' tone-' + tone : '') }, h('div', { class: 'n num', 'data-testid': tid, text: n }), h('div', { class: 'l', text: l }), s ? h('div', { class: 's', text: s }) : null); }
   function tripCard(x) {
     var del = x.status === 'deleted', acts = h('div', { class: 'acts tx-acts' });
     if (x.hasFile) acts.appendChild(h('button', { class: 'btn ghost fbtn', type: 'button', 'data-testid': 'open-receipt', onclick: function () { openReceipt(x); } }, ico(x.fileKind === 'pdf' ? 'file' : 'receipt', 'sm'), 'Чек'));

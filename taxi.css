@@ -152,3 +152,7 @@ body.taxipage .app { max-width: 520px; }
 /* fix: long site label in «По дням» on phones */
 .tx-dleft{white-space:normal;text-align:right;max-width:150px;line-height:1.25}
 .tx-comp{margin-top:12px}
+.sumcard.tone-blue{background:rgba(47,91,234,.09);border-color:rgba(47,91,234,.25)}.sumcard.tone-blue .n{color:#2348c9}
+.sumcard.tone-green{background:rgba(22,163,74,.10);border-color:rgba(22,163,74,.25)}.sumcard.tone-green .n{color:#15803d}
+.sumcard.tone-orange{background:rgba(234,138,22,.12);border-color:rgba(234,138,22,.3)}.sumcard.tone-orange .n{color:#b45309}
+[data-theme=dark] .sumcard.tone-blue .n{color:#8fa8ff}[data-theme=dark] .sumcard.tone-green .n{color:#6ee7a0}[data-theme=dark] .sumcard.tone-orange .n{color:#fbbf6a}
