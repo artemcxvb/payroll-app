@@ -2150,6 +2150,148 @@
   function fmPct(x) { return x == null ? '—' : (Math.round(x * 1000) / 10).toFixed(1).replace('.', ',') + '%'; }
   function fmCls(p) { return p == null ? '' : p >= 1 ? 'ok' : p >= 0.9 ? 'lg' : p >= 0.7 ? 'ye' : p >= 0.5 ? 'or' : 'rd'; }
   function fmM(n) { return n == null ? '—' : money(n); }
+  /* ---------- FOREMAN_OPS_V1: несистемные операции бригадира → «Часовые услуги (табель)» ---------- */
+  var FO_ERR = { bad_employee: 'Выберите сотрудника из списка.', bad_date: 'Дата должна быть в текущем периоде и не позже сегодня.', bad_shift: 'Выберите смену.', bad_service: 'Выберите услугу из списка.',
+    bad_hours: 'Часы: от 0,5 до 24 с шагом 0,5.', day_cap: 'У сотрудника за этот день уже 24 ч — больше нельзя.', period_closed: 'Период закрыт — изменения недоступны.', changed: 'Строку уже изменили в таблице. Обновите страницу.',
+    not_found: 'Запись не найдена.', not_unassigned: 'Эти часы уже назначены. Обновите страницу.', no_room: 'В табеле нет свободных строк.', rate_limit: 'Слишком много действий. Попробуйте через час.', forbidden: 'Доступно только бригадиру.', busy: 'Сервер занят, попробуйте ещё раз.' };
+  function foHrs(n) { return String(n).replace('.', ','); }
+  function foSend(body) {
+    if (!requireOnline()) return Promise.resolve(null);
+    var p = LIVE ? api('fmOp', body) : Promise.resolve(foDemo(body));
+    return p.then(function (r) {
+      if (r && r.ok) { if (r.ops) S.data.foreman.ops = r.ops; try { var se = session(); if (LIVE && se) store(CK, { phone: se.phone, data: S.data }); } catch (e) { /* кэш необязателен */ } return r; }
+      toast((r && FO_ERR[r.error]) || 'Не удалось сохранить. Попробуйте ещё раз.', 'bad'); return null;
+    }, function () { toast('Нет связи с сервером.', 'bad'); return null; });
+  }
+  function foDemo(b) {   // демо: те же правила на копии в памяти
+    var o = S.data.foreman.ops, today = o.today, rate = function (n) { var s = o.services.filter(function (x) { return x.name === n; })[0]; return s ? s.rate : 0; };
+    var load = function (name, date, skip) { return o.entries.filter(function (e) { return e.name === name && e.date === date && e.id !== skip; }).reduce(function (a, e) { return a + e.hours; }, 0); };
+    var h = +String(b.hours || '').replace(',', '.'), okH = h >= 0.5 && h <= 24 && h * 2 === Math.round(h * 2);
+    if (b.op === 'add' || (b.op === 'edit' && b.date)) {
+      if (o.employees.indexOf(b.name) < 0) return { ok: false, error: 'bad_employee' }; if (!b.date || b.date < o.start || b.date > o.end || b.date > today) return { ok: false, error: 'bad_date' };
+      if (!rate(b.service)) return { ok: false, error: 'bad_service' }; if (!okH) return { ok: false, error: 'bad_hours' }; if (load(b.name, b.date, b.id) + h > 24) return { ok: false, error: 'day_cap' };
+    }
+    if (b.op === 'add') o.entries.unshift({ id: 'FO-DEMO-' + rid(), kind: 'добавлена', name: b.name, date: b.date, shift: b.shift, service: b.service, hours: h, comment: b.comment || '', rate: rate(b.service) });
+    else if (b.op === 'assign') {
+      var u = o.unassigned.filter(function (x) { return x.row === b.row; })[0]; if (!u) return { ok: false, error: 'not_unassigned' }; if (o.employees.indexOf(b.name) < 0) return { ok: false, error: 'bad_employee' };
+      if (!okH || h > u.hours) return { ok: false, error: 'bad_hours' };
+      o.entries.unshift({ id: 'FO-DEMO-' + rid(), kind: 'назначена', row: u.row, name: b.name, date: u.date, shift: u.shift, service: u.service, hours: h, comment: b.comment || '', rate: u.rate });
+      if (h < u.hours) u.hours = Math.round((u.hours - h) * 100) / 100; else o.unassigned.splice(o.unassigned.indexOf(u), 1);
+    } else {
+      var e = o.entries.filter(function (x) { return x.id === b.id; })[0]; if (!e) return { ok: false, error: 'not_found' };
+      if (b.op === 'del') { o.entries.splice(o.entries.indexOf(e), 1); if (e.kind === 'назначена') { var same = o.unassigned.filter(function (x) { return x.row === e.row; })[0]; if (same) same.hours = Math.round((same.hours + e.hours) * 100) / 100; else o.unassigned.push({ row: e.row, date: e.date, shift: e.shift, service: e.service, hours: e.hours, rate: e.rate }); } }
+      else if (e.kind === 'назначена') e.name = b.name; else { e.name = b.name; e.date = b.date; e.shift = b.shift; e.service = b.service; e.hours = h; e.rate = rate(b.service); if (b.comment !== undefined) e.comment = b.comment; }
+    }
+    o.unassignedHours = Math.round(o.unassigned.reduce(function (a, x) { return a + x.hours; }, 0) * 100) / 100;
+    return { ok: true, ops: o };
+  }
+  function foSelect(id, opts, val, ph) {
+    var s = h('select', { class: 'inp fo-sel', id: id, 'data-testid': id }, h('option', { value: '', text: ph }));
+    opts.forEach(function (x) { var o = h('option', { value: x.v, text: x.t }); if (x.v === val) o.selected = true; s.appendChild(o); }); return s;
+  }
+  function foForm(o, init, mode) {   // mode: 'add' | 'edit' | 'assign' | 'editAssign'
+    init = init || {}; var fx = mode === 'assign' || mode === 'editAssign', maxH = mode === 'assign' ? init.hours : 24, pid = 'fo' + rid();
+    var emp = foSelect(pid + '-emp', o.employees.map(function (n) { return { v: n, t: n }; }), init.name || '', 'Выберите сотрудника');
+    emp.setAttribute('data-testid', 'fo-emp');
+    var maxD = o.end < o.today ? o.end : o.today;
+    var date = h('input', { class: 'inp', type: 'date', id: pid + '-date', 'data-testid': 'fo-date', min: o.start, max: maxD, value: init.date || maxD });
+    var shift = init.shift || 'День', seg = h('div', { class: 'seg fo-seg', role: 'group', 'aria-label': 'Смена' });
+    ['День', 'Ночь'].forEach(function (s) { seg.appendChild(h('button', { type: 'button', 'aria-pressed': String(s === shift), 'data-testid': 'fo-shift-' + (s === 'День' ? 'day' : 'night'), text: (s === 'День' ? '☀️ ' : '🌙 ') + s,
+      onclick: function () { shift = s; [].forEach.call(seg.children, function (b) { b.setAttribute('aria-pressed', String(b.textContent.indexOf(s) >= 0)); }); } })); });
+    var svc = foSelect(pid + '-svc', o.services.map(function (s) { return { v: s.name, t: s.name + ' · ' + money(s.rate) + '/ч' }; }), init.service || '', 'Выберите услугу');
+    svc.setAttribute('data-testid', 'fo-svc');
+    var hrs = h('input', { class: 'inp fo-h', type: 'text', inputmode: 'decimal', id: pid + '-h', 'data-testid': 'fo-hours', value: foHrs(init.hours || (fx ? init.hours : 11)), 'aria-label': 'Часы' });
+    function hv() { return +String(hrs.value).replace(',', '.'); }
+    function step(d) { var v = Math.max(0.5, Math.min(maxH, (hv() || 0) + d)); hrs.value = foHrs(Math.round(v * 2) / 2); calc(); }
+    var com = h('textarea', { class: 'inp fo-com', id: pid + '-c', 'data-testid': 'fo-comment', rows: '2', maxlength: '200', placeholder: 'Например: перебор поддонов у ворот 7 (необязательно)' }); com.value = init.comment || '';
+    var out = h('div', { class: 'fo-calc', 'data-testid': 'fo-calc', 'aria-live': 'polite' });
+    function rate() { if (fx) return init.rate || 0; var s = o.services.filter(function (x) { return x.name === svc.value; })[0]; return s ? s.rate : 0; }
+    function calc() { var r = rate(), v = hv(); clear(out); if (!r || !(v > 0)) { out.textContent = 'Выберите услугу и часы — покажем сумму.'; return; } add(out, [foHrs(v) + ' ч × ' + money(r) + ' = ', h('b', { text: money(v * r) }), ' по тарифу · сотруднику ' + Math.round(o.share * 100) + '% = ', h('b', { text: money(v * r * o.share) })]); }
+    svc.addEventListener('change', calc); hrs.addEventListener('input', calc); calc();
+    function fld(l, sub, c, f) { return h('div', { class: 'field fo-f' }, h('label', { class: 'l', for: f }, l, sub ? h('span', { text: sub }) : null), c); }
+    var el = h('div', { class: 'fo-form' },
+      fld('Сотрудник', 'из списка «Сотрудники»', emp, emp.id),
+      fx ? h('p', { class: 'cap', text: dmy(init.date) + ' · ' + init.shift + ' · ' + init.service }) : [fld('Дата', 'период ' + dmy(o.start) + '–' + dmy(o.end), date, date.id), fld('Смена', '', seg), fld('Услуга', 'тариф из «Нормативы по участкам»', svc, svc.id)],
+      mode === 'editAssign' ? null : fld('Часы', mode === 'assign' ? 'из ' + foHrs(init.hours) + ' ч; остаток останется не назначенным' : 'шаг 0,5 ч, не больше 24 ч в день', h('div', { class: 'fo-step' },
+        h('button', { type: 'button', class: 'btn ghost fo-pm', 'aria-label': 'Меньше', 'data-testid': 'fo-minus', onclick: function () { step(-0.5); } }, '−'), hrs,
+        h('button', { type: 'button', class: 'btn ghost fo-pm', 'aria-label': 'Больше', 'data-testid': 'fo-plus', onclick: function () { step(0.5); } }, '+')), hrs.id),
+      fld('Комментарий', 'необязательно', com, com.id), mode === 'editAssign' ? null : out);
+    return { el: el, get: function () {
+      var b = { name: emp.value, comment: com.value.trim() };
+      if (!fx) { b.date = date.value; b.shift = shift; b.service = svc.value; } if (mode !== 'editAssign') b.hours = String(hrs.value).replace(',', '.');
+      return b; } };
+  }
+  function foDo(body, msg, ctl) { return foSend(body).then(function (r) { if (!r) return; if (ctl) ctl.close(true); toast(msg); render(); }); }
+  function foSheet(o, title, init, mode, extra, okText, msg) {
+    var f = foForm(o, init, mode), ctl, btn = h('button', { class: 'btn', type: 'button', 'data-testid': 'fo-sheet-save', onclick: function () { btn.disabled = true; foDo(Object.assign(f.get(), extra), msg, ctl).then(function () { btn.disabled = false; }); } }, okText);
+    ctl = openSheet({ title: title, body: f.el, footer: btn });
+  }
+  function foBlocks(v, o) {
+    var ro = !o.canEdit;
+    var f = foForm(o, {}, 'add'), save = h('button', { class: 'btn', type: 'button', 'data-testid': 'fo-add', disabled: ro || null,
+      onclick: function () { save.disabled = true; foSend(Object.assign({ op: 'add' }, f.get())).then(function (r) { save.disabled = false; if (r) { toast('Добавлено в табель: ' + foHrs(r.ops && r.ops.entries[0] ? r.ops.entries[0].hours : '') + ' ч'); render(); } }); } }, 'Добавить в табель');
+    v.appendChild(h('section', { class: 'card fm-sec fo', 'data-testid': 'fo-form' }, h('h2', { text: 'Добавить несистемную операцию' }),
+      h('p', { class: 'cap', text: ro ? 'Период закрыт — добавлять и править записи нельзя.' : 'Часовые работы, которых нет в системе заказчика. Запись сразу попадает в «Часовые услуги (табель)» и в выплату сотрудника; админ видит её в журнале.' }),
+      ro ? null : f.el, ro ? null : save));
+    var u = h('section', { class: 'card fm-sec fo', 'data-testid': 'fo-unassigned' }, h('h2', { text: o.unassigned.length ? 'Не назначено за период: ' + foHrs(o.unassignedHours) + ' ч' : 'Все часы клиента назначены' }));
+    if (o.unassigned.length) {
+      u.appendChild(h('div', { class: 'fo-warn', text: o.unassigned.length + ' строк клиента без ФИО — по ним никто не получает ЗП. Выберите сотрудника, и часы уйдут ему; можно назначить часть часов.' }));
+      var srt = o.unassigned.slice().sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : a.row - b.row; }), all = S.foAll || srt.length <= 6;
+      srt.slice(0, all ? srt.length : 5).forEach(function (x) {
+        u.appendChild(h('div', { class: 'fo-it', 'data-testid': 'fo-un-row' }, h('div', null, dmy(x.date).slice(0, 5) + ' · ' + x.shift + ' · ' + x.service, h('div', { class: 's', text: foHrs(x.hours) + ' ч · ' + money(x.rate) + '/ч · строка ' + x.row })),
+          ro ? null : h('button', { class: 'fo-a', type: 'button', 'data-testid': 'fo-assign', onclick: function () { foSheet(o, 'Назначить часы', x, 'assign', { op: 'assign', row: x.row }, 'Назначить', 'Часы назначены'); } }, 'Назначить ›')));
+      });
+      if (!all) u.appendChild(h('button', { class: 'btn ghost mt8', type: 'button', 'data-testid': 'fo-un-more', onclick: function () { S.foAll = true; render(); } }, 'Показать все ' + srt.length + ' строк'));
+    } else u.appendChild(h('p', { class: 'cap', text: 'Строк без ФИО за период нет.' }));
+    v.appendChild(u);
+    var l = h('section', { class: 'card fm-sec fo', 'data-testid': 'fo-list' }, h('h2', { text: 'Мои записи за период' }),
+      h('p', { class: 'cap', text: ro ? 'Период закрыт.' : 'Править и удалять можно до конца периода (' + dmy(o.end) + '). Каждое действие видно админу.' }));
+    if (!o.entries.length) l.appendChild(h('p', { class: 'cap', text: 'Пока записей нет.' }));
+    o.entries.forEach(function (e) {
+      var as = e.kind === 'назначена';
+      l.appendChild(h('div', { class: 'fo-it', 'data-testid': 'fo-entry' }, h('div', null, e.name, as ? h('span', { class: 'fo-tag', text: 'назначено' }) : null,
+        h('div', { class: 's', text: dmy(e.date).slice(0, 5) + ' · ' + e.shift + ' · ' + e.service + ' · ' + foHrs(e.hours) + ' ч' + (e.comment ? ' · ' + e.comment : '') })),
+        h('div', { class: 'fo-r' }, h('b', { text: money(e.hours * e.rate * o.share) }), ro ? null : h('div', { class: 'fo-acts' },
+          h('button', { class: 'fo-a', type: 'button', 'aria-label': 'Изменить', 'data-testid': 'fo-edit', onclick: function () { foSheet(o, as ? 'Изменить сотрудника' : 'Изменить запись', e, as ? 'editAssign' : 'edit', { op: 'edit', id: e.id }, 'Сохранить', 'Запись изменена'); } }, '✎'),
+          h('button', { class: 'fo-a del', type: 'button', 'aria-label': 'Удалить', 'data-testid': 'fo-del', onclick: function () {
+            confirmDlg({ title: 'Удалить запись?', body: h('p', { text: e.name + ', ' + dmy(e.date) + ', ' + foHrs(e.hours) + ' ч' + (as ? '. Часы вернутся в «Не назначено».' : ' будут убраны из табеля.') }), yes: 'Удалить', danger: true })
+              .then(function (y) { if (y) foDo({ op: 'del', id: e.id }, 'Запись удалена'); }); } }, '🗑')))));
+    });
+    if (o.entries.length) { var th = o.entries.reduce(function (a, e) { return a + e.hours; }, 0), tm = o.entries.reduce(function (a, e) { return a + e.hours * e.rate * o.share; }, 0); l.appendChild(h('div', { class: 'fo-tot', text: 'Итого: ' + foHrs(Math.round(th * 100) / 100) + ' ч · ' + money(tm) + ' сотрудникам' })); }
+    v.appendChild(l);
+  }
+  /* FOREMAN_SLIDER_V1: «что если» — ползунок средней производительности; считает в браузере по параметрам сервера, ничего не пишет и сам возвращается на место */
+  function fmPayAt(f, p) { var thr = f.threshold == null ? 0.5 : f.threshold; if (p <= thr) return 0; return Math.max(0, Math.round(((f.people || 0) * (p - thr) * (f.rate || 0) - (f.lost || 0)) * 100) / 100); }
+  function fmSlider(f) {
+    var thr = f.threshold == null ? 0.5 : f.threshold, ex = f.gross > 0 && f.people && f.rate ? thr + f.gross / (f.people * f.rate) : (f.avg || 0), act = Math.round(ex * 1000) / 10, MAX = 150, raf = 0, idle = 0;   // точная средняя из «до вычета брака»: при ней формула даёт ровно серверную сумму
+    var rng = h('input', { type: 'range', class: 'fs-rng', min: '0', max: String(MAX), step: '0.1', value: String(act), 'data-testid': 'fs-range', 'aria-label': 'Средняя производительность бригады, %' });
+    var pct = h('b', { class: 'fs-pct', 'data-testid': 'fs-pct' }), pay = h('div', { class: 'fs-pay', 'data-testid': 'fs-pay' }), diff = h('div', { class: 'fs-diff', 'data-testid': 'fs-diff' });
+    var marks = h('div', { class: 'fs-marks', 'aria-hidden': 'true' }), you = h('span', { class: 'fs-you', text: 'сейчас' });
+    [[thr * 100, 'порог ' + Math.round(thr * 100) + '%'], [100, '100%'], [120, '120%']].forEach(function (m) { var s = h('span', { class: 'fs-mk', text: m[1] }); s.style.left = (m[0] / MAX * 100) + '%'; marks.appendChild(s); });
+    you.style.left = (act / MAX * 100) + '%'; marks.appendChild(you);
+    function show(p, real) {
+      var v = real ? f.pay : fmPayAt(f, p / 100), d = Math.round((v - (f.pay || 0)) * 100) / 100;
+      pct.textContent = String(Math.round(p * 10) / 10).replace('.', ',') + '%'; pay.textContent = money(v || 0);
+      diff.textContent = real ? 'сейчас · двигайте ползунок, чтобы посчитать' : (d >= 0 ? '+' : '−') + money(Math.abs(d)).replace('−', '') + ' к текущему';
+      diff.className = 'fs-diff' + (real ? '' : d > 0 ? ' pos' : d < 0 ? ' neg' : ''); rng.setAttribute('aria-valuetext', pct.textContent + ', ' + pay.textContent);
+    }
+    function back() {
+      clearTimeout(idle); cancelAnimationFrame(raf); var from = +rng.value, t0 = 0;
+      if (Math.abs(from - act) < 0.05) { rng.value = String(act); show(act, true); return; }
+      function stepA(ts) { if (!t0) t0 = ts; var k = Math.min(1, (ts - t0) / 400), e = 1 - Math.pow(1 - k, 3), p = from + (act - from) * e; rng.value = String(p); show(p, false);
+        if (k < 1) raf = requestAnimationFrame(stepA); else { rng.value = String(act); show(act, true); } }
+      raf = requestAnimationFrame(stepA);
+    }
+    rng.addEventListener('input', function () { cancelAnimationFrame(raf); show(+rng.value, false); });
+    ['pointerup', 'pointercancel', 'touchend', 'touchcancel', 'mouseup', 'blur'].forEach(function (ev) { rng.addEventListener(ev, back); });
+    rng.addEventListener('keydown', function () { clearTimeout(idle); cancelAnimationFrame(raf); });
+    rng.addEventListener('keyup', function () { clearTimeout(idle); idle = setTimeout(back, 1200); });   // клавиатура: вернётся через 1,2 с без нажатий или при уходе фокуса
+    show(act, true);
+    return h('section', { class: 'card fm-sec fs', 'data-testid': 'fs' }, h('h2', { text: 'Сколько я мог бы заработать' }),
+      h('div', { class: 'fs-top' }, h('div', null, h('span', { class: 'cap', text: 'Средняя бригады ' }), pct), pay), diff,
+      h('div', { class: 'fs-track' }, rng, marks),
+      h('p', { class: 'cap', text: 'Считается по той же формуле: ' + (f.people || 0) + ' чел × (производительность − ' + Math.round(thr * 100) + '%) × ' + money(f.rate || 0) + ' − вычет за брак ' + money(f.lost || 0) + '. Отпустите — ползунок вернётся на ваше значение.' }));
+  }
   function viewBrig() {
     var f = S.data && S.data.foreman, v = h('div', { class: 'view fm', id: 'main', 'data-testid': 'brig' });
     v.appendChild(pageTop('Бригада', f && f.period ? 'Период ' + f.period : ''));
@@ -2157,6 +2299,8 @@
     var thr = f.threshold == null ? 0.5 : f.threshold, avg = f.avg, top = Math.max(1.3, (avg || 0) + 0.1);
     v.appendChild(h('div', { class: 'hero', 'data-testid': 'fm-pay' }, h('div', { class: 'lbl', text: 'Ваше вознаграждение сейчас' }), h('div', { class: 'big', text: fmM(f.pay) }),
       h('div', { class: 'note', text: (f.gross != null ? 'до вычета брака ' + fmM(f.gross) : '') + (f.lost ? ' · вычет за брак −' + fmM(f.lost).replace('−', '') : '') })));
+    if (f.avg != null && f.rate != null) v.appendChild(fmSlider(f));   // FOREMAN_SLIDER_V1
+    if (f.ops && f.ops.ok) foBlocks(v, f.ops);   // FOREMAN_OPS_V1
     function pos(x) { return Math.max(0, Math.min(100, x / top * 100)) + '%'; }
     function at(el, x) { el.style.left = pos(x); return el; }   // CSP: только CSSOM, без атрибута style
     var fill = h('div', { class: 'fill' }); fill.style.width = pos(avg || 0);

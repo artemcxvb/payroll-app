@@ -615,3 +615,37 @@ textarea.inp { padding: 12px 14px; min-height: 110px; font-size: 16px; resize: v
 .fm .ok { background: #c9f0d6; color: #0f7a3a; } .fm .lg { background: #e3f6e9; color: #2f7a4b; } .fm .ye { background: #fff0cf; color: #8a5300; } .fm .or { background: #ffe0c2; color: #a14a00; } .fm .rd { background: #fde3e1; color: #b3261e; }
 .fm-note { background: var(--warn-bg); color: var(--warn); border-radius: 12px; padding: 10px; font-size: 13px; margin-top: 10px; }
 .fm-scroll { overflow-x: auto; } .fm-heat { border-collapse: collapse; font-size: 11px; } .fm-heat td, .fm-heat th { padding: 4px 3px; text-align: center; border: 1px solid var(--bg); min-width: 22px; } .fm-heat th:first-child { text-align: left; white-space: nowrap; } .fm-heat .h { font-weight: 600; } .fm-heat .e { background: var(--card2); }
+/* FOREMAN_SLIDER_V1 */
+.fs-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 8px; }
+.fs-pct { font-size: 20px; } .fs-pay { font-size: 26px; font-weight: 800; letter-spacing: -.01em; }
+.fs-diff { color: var(--muted); font-size: 13.5px; min-height: 20px; text-align: right; } .fs-diff.pos { color: var(--ok); font-weight: 700; } .fs-diff.neg { color: var(--bad); font-weight: 700; }
+.fs-track { position: relative; padding: 6px 0 30px; margin: 4px 0 6px; }
+.fs-rng { width: 100%; height: 44px; accent-color: var(--primary); touch-action: pan-y; cursor: pointer; }
+.fs-rng:focus-visible { outline: none; box-shadow: var(--focus); border-radius: 10px; }
+.fs-marks { position: absolute; left: 10px; right: 10px; bottom: 0; height: 28px; pointer-events: none; }
+.fs-mk, .fs-you { position: absolute; transform: translateX(-50%); font-size: 11.5px; color: var(--muted); white-space: nowrap; top: 12px; }
+.fs-mk::before, .fs-you::before { content: ''; position: absolute; left: 50%; top: -10px; width: 2px; height: 8px; background: var(--line); }
+.fs-you { top: -2px; color: var(--primary-strong); font-weight: 700; } .fs-you::before { display: none; }
+/* FOREMAN_OPS_V1 */
+.fo-form { display: grid; gap: 12px; margin: 10px 0 14px; }
+.fo-sel { font-size: 16px; } .fo-seg { grid-template-columns: 1fr 1fr; }
+.fo-step { display: flex; gap: 8px; align-items: center; } .fo-step .inp { text-align: center; font-weight: 800; font-size: 20px; }
+.fo-pm { width: 56px; min-width: 56px; padding: 0; font-size: 22px; }
+.fo-com { min-height: 64px !important; }
+.fo-calc { background: var(--primary-soft); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
+.fo-warn { background: var(--bad-bg); color: var(--bad); border-radius: 12px; padding: 10px 12px; font-size: 14px; margin: 8px 0; }
+.fo-it { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.fo-it .s { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.fo-a { background: none; border: 0; color: var(--primary-strong); font-weight: 700; font-size: 14px; min-height: 40px; min-width: 40px; white-space: nowrap; }
+.fo-r { text-align: right; white-space: nowrap; } .fo-acts { display: flex; justify-content: flex-end; }
+.fo-tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 6px; background: var(--card2); color: var(--muted); margin-left: 6px; }
+.fo-tot { border-top: 1px solid var(--line); padding-top: 10px; font-weight: 700; font-size: 14px; }
+/* FM_HEAT_FIX_V1: числа и дни в одну строку, все дневные колонки одной ширины (влезает «120»), имя закреплено слева, сетка листается вбок */
+.fm-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.fm-heat { width: max-content; table-layout: fixed; font-size: 12px; font-variant-numeric: tabular-nums; }
+.fm-heat td, .fm-heat th { white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
+.fm-heat td, .fm-heat tr > th:not(:first-child) { width: 32px; min-width: 32px; max-width: 32px; padding: 4px 0; box-sizing: border-box; }
+.fm-heat tr > th:first-child { position: sticky; left: 0; z-index: 1; background: var(--card); padding: 4px 8px 4px 0; }
+.fo-form { grid-template-columns: minmax(0, 1fr); } .fo-form .inp, .fo-form select { min-width: 0; max-width: 100%; box-sizing: border-box; } .fo-step .inp { flex: 1 1 auto; width: auto; }
+.fs-track, .fs-rng { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.fo-it > div:first-child { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; } .fo-it > .fo-a, .fo-r { flex: 0 0 auto; } .fo-a { padding: 0 4px; }
