@@ -191,6 +191,8 @@
     if (action === 'adminAccess') return demoRes({ ok: true, items: s.acc, limited: (s.limited || []).map(function (x) { return { phone: x.phone, name: x.name, kind: x.kind, until: Date.now() + x.off, requests: x.requests, wrong: x.wrong }; }) });
     if (action === 'adminJobs') return demoRes({ ok: true, items: s.jobs });
     if (action === 'adminPromos') return demoRes({ ok: true, items: s.promos });
+    if (action === 'adminDisputes') { s.dsp = s.dsp || [{ id: 'dsp-demo1', at: '2026-10-18 12:10', name: 'Ахметов Муслим', caseId: 's2', row: 2, date: '2026-10-07', cat: 'Ошибки', title: 'Разместил физически без системы', amount: 400, comment: 'Ячейку занял кладовщик, я разместил по его указанию', status: 'open', reply: '' }]; store(DEMOK, s); return demoRes({ ok: true, items: s.dsp }); }   // V2 демо
+    if (action === 'adminDisputeDecide') { var dx = (s.dsp || []).filter(function (x) { return x.id === d.id; })[0]; if (!dx) return demoRes({ ok: false, error: 'not_found' }); if (dx.status !== 'open') return demoRes({ ok: false, error: 'already' }); dx.status = d.decision === 'remove' ? 'removed' : 'rejected'; dx.reply = d.reply || ''; s.log.push({ at: nowMsk(), action: d.decision === 'remove' ? 'спор: штраф снят' : 'спор: отклонён', object: dx.name, details: dx.title }); store(DEMOK, s); return demoRes({ ok: true, sent: true, items: s.dsp }); }
     if (action === 'adminLog') return demoRes({ ok: true, items: s.log.slice().reverse().slice(0, 50) });
     if (action === 'adminResetLimits') {
       var rph = String(d.phone || '').replace(/\D/g, '').replace(/^8(?=\d{10}$)/, '7'); if (rph.length === 10) rph = '7' + rph; if (!/^79\d{9}$/.test(rph)) return demoRes({ ok: false, error: 'bad_phone' });
@@ -731,6 +733,29 @@
   }
 
   /* ---------- сводка ---------- */
+  /* V2_IMPROVEMENTS_V1: очередь споров по штрафам. «Снять» = «Учитывать» 0 в одной строке «Штрафов» ведомости (после подтверждения, с записью в журнал); сотрудник получает ответ в Telegram */
+  function dspCard() {
+    var items = S.dsp || [], open = items.filter(function (x) { return x.status === 'open'; }), done = items.filter(function (x) { return x.status !== 'open'; }).slice(0, 5);
+    var c = h('section', { class: 'card stack', 'aria-labelledby': 'dsp-h', 'data-testid': 'dsp-card' }, h('h2', { id: 'dsp-h', text: 'Споры по штрафам' + (open.length ? ' · ' + open.length : '') }));
+    if (!items.length) { c.appendChild(h('p', { class: 'cap', text: 'Споров нет.' })); return c; }
+    function decide(x, dec) {
+      confirmAct({ title: dec === 'remove' ? 'Снять штраф?' : 'Отклонить спор?', who: x.name, quote: (x.date ? x.date.split('-').reverse().join('.') : '') + ' · ' + x.cat + ' · ' + x.title + ' · ' + money(x.amount),
+        text: dec === 'remove' ? 'В ведомости в листе «Штрафы» (строка ' + x.row + ') «Учитывать» станет 0 — только в этой строке. Действие попадёт в журнал, сотрудник получит сообщение.' : 'Штраф останется. Сотрудник получит ответ в Telegram.',
+        yes: dec === 'remove' ? 'Снять штраф' : 'Отклонить', danger: dec === 'remove', reason: dec === 'reject', reasonLabel: 'Ответ сотруднику' }).then(function (r) {
+        if (!r) return; call('adminDisputeDecide', { id: x.id, decision: dec, confirm: true, reply: r.reason || '' }).then(function (res) {
+          if (res.ok) { S.dsp = res.items; toast(dec === 'remove' ? 'Штраф снят' + (res.sent ? ', сотрудник уведомлён' : '') : 'Спор отклонён'); render(); } else toast(res.error === 'fine_changed' ? 'Строка в «Штрафах» изменилась — проверьте вручную.' : errText(res), 'bad'); });
+      });
+    }
+    open.forEach(function (x) {
+      c.appendChild(h('div', { class: 'dsp-it', 'data-testid': 'dsp-item' }, h('div', { class: 'row between' }, h('b', { text: x.name }), h('b', { text: money(x.amount) })),
+        h('div', { class: 'cap', text: (x.date ? x.date.split('-').reverse().join('.') : '') + ' · ' + x.cat + ' · ' + x.title }), h('p', { class: 'dsp-c', text: '«' + x.comment + '»' }),
+        h('div', { class: 'btnrow' }, h('button', { class: 'btn', type: 'button', 'data-testid': 'dsp-remove', onclick: function () { decide(x, 'remove'); } }, 'Снять штраф'),
+          h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'dsp-reject', onclick: function () { decide(x, 'reject'); } }, 'Отклонить'))));
+    });
+    if (!open.length) c.appendChild(h('p', { class: 'cap', text: 'Новых споров нет.' }));
+    done.forEach(function (x) { c.appendChild(h('div', { class: 'logrow' }, h('b', { text: x.status === 'removed' ? 'Снят' : 'Отклонён' }), h('span', { text: x.name + ' · ' + money(x.amount) + (x.reply ? ' · ' + x.reply : '') }))); });
+    return c;
+  }
   function viewSum() {
     var v = h('main', { class: 'view adm-tabs-pad', id: 'main' }), s = S.sum;
     v.appendChild(pageHead('Сводка'));
@@ -747,6 +772,7 @@
     g.appendChild(tile('apps', s.applications.sent, 'Новые отклики', '', 'sum-apps'));
     g.appendChild(tile('acc', s.blocked, 'Заблокировано', s.blocked ? 'доступ закрыт' : 'никто не заблокирован', 'sum-acc'));
     v.appendChild(g);
+    v.appendChild(dspCard());   // V2_IMPROVEMENTS_V1: споры по штрафам
     v.appendChild(notifyCard(s));
     v.appendChild(promoCard(s));
     v.appendChild(h('section', { class: 'card stack', 'aria-labelledby': 'ref-h' }, h('h2', { id: 'ref-h', text: 'Справочники (только просмотр)' }),
@@ -917,8 +943,9 @@
   }
   function loadSummary() {
     if (!session()) return Promise.resolve();
-    return Promise.all([call('adminSummary'), call('adminLog'), call('adminPromos')]).then(function (rs) {
+    return Promise.all([call('adminSummary'), call('adminLog'), call('adminPromos'), call('adminDisputes')]).then(function (rs) {
       if (!session()) return;
+      if (rs[3] && rs[3].ok) S.dsp = rs[3].items;
       if (rs[2].ok) S.promoItems = promoItemsFrom(rs[2].items);
       if (rs[0].ok) { S.sum = rs[0]; delete S.err.sum; S.log = rs[1].ok ? rs[1].items : S.log; } else if (rs[0].error !== 'auth') S.err.sum = errText(rs[0]);
       render();

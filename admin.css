@@ -109,3 +109,5 @@ body.adminpage .app { max-width: 520px; }
 .limrow { flex-wrap: wrap; }
 .limrow .cap { font-size: 13px; color: var(--muted); }
 @media (max-width: 400px) { .limrow .cp { width: 100%; } }
+/* V2_IMPROVEMENTS_V1: споры */
+.dsp-it { border-top: 1px solid var(--line); padding: 10px 0; } .dsp-c { margin: 6px 0; font-style: italic; }

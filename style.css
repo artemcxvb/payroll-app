@@ -649,3 +649,16 @@ textarea.inp { padding: 12px 14px; min-height: 110px; font-size: 16px; resize: v
 .fo-form { grid-template-columns: minmax(0, 1fr); } .fo-form .inp, .fo-form select { min-width: 0; max-width: 100%; box-sizing: border-box; } .fo-step .inp { flex: 1 1 auto; width: auto; }
 .fs-track, .fs-rng { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .fo-it > div:first-child { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; } .fo-it > .fo-a, .fo-r { flex: 0 0 auto; } .fo-a { padding: 0 4px; }
+/* V2_IMPROVEMENTS_V1 */
+.v2 .h3 { margin: 14px 0 6px; font-size: 14px; }
+.v2-type { margin: 6px 0; font-size: 13.5px; } .v2-tl { display: flex; justify-content: space-between; gap: 8px; } .v2-tl span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v2-bar { height: 8px; border-radius: 4px; background: var(--card2); margin-top: 4px; overflow: hidden; } .v2-bar i { display: block; height: 100%; background: var(--bad); border-radius: 4px; }
+button.v2-pp { width: 100%; background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; color: inherit; font: inherit; font-size: 14px; }
+.v2-att-top { display: flex; gap: 8px; align-items: center; margin: 8px 0; } .v2-att-top .inp { flex: 1; min-width: 0; } .v2-att-top .seg { flex: 1; }
+.v2-ar > div:first-child { min-width: 0; flex: 1; } .v2-ab { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+.v2-ab .fo-a { border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; } .v2-ab .fo-a.on { background: var(--primary-soft); border-color: var(--primary-strong); }
+.v2-rs { max-width: 128px; min-height: 40px; font-size: 14px; padding: 0 8px; }
+.v2-dsp .cap { margin-top: 6px; }
+.ks-act { padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; } .ks-act .cap { margin: 2px 0 6px; }
+.ks-pipe { display: flex; gap: 4px; } .ks-st { flex: 1; text-align: center; font-size: 12px; padding: 4px 2px; border-radius: 8px; background: var(--card2); color: var(--muted); }
+.ks-st.on { background: var(--primary-soft); color: var(--primary-strong); font-weight: 700; }

@@ -227,7 +227,7 @@
     me: function (phone) {
       var cs = server.consent(phone); if (!cs.ok) return { ok: true, consent: cs, today: M.today, fetchedAt: Date.now() };   // без согласия данные не отдаются
       var s = srv(), u = userByPhone(phone);
-      return { consent: cs, user: u, periods: M.periods, shifts: M.shifts, cases: s.cases, advances: s.advances, incidents: s.incidents, promos: M.promos, jobs: M.jobs, applications: s.applications.filter(function (x) { return x.userId === u.id; }), today: M.today, fetchedAt: Date.now(), foreman: qs.get('foreman') === '1' && M.foreman ? M.foreman : undefined };
+      return { consent: cs, user: u, periods: M.periods, shifts: M.shifts, cases: s.cases, advances: s.advances, incidents: s.incidents, promos: M.promos, jobs: M.jobs, applications: s.applications.filter(function (x) { return x.userId === u.id; }), today: M.today, fetchedAt: Date.now(), disputes: V2D.disputes.slice(), konsolOn: true, statements: M.demoStatement ? (function () { var o = {}; o[M.periods[0].id] = M.demoStatement; return o; })() : undefined, foreman: qs.get('foreman') === '1' && M.foreman ? M.foreman : undefined };
     },
     submitExplanation: function (id, text, photos) {
       var s = srv(), c = s.cases.filter(function (x) { return x.id === id; })[0];
@@ -465,7 +465,7 @@
     M.promos = d.promos || []; M.jobs = d.jobs || [];
     M.OPS.length = 0; Object.keys(OPI).forEach(function (k) { delete OPI[k]; }); (d.ops || []).forEach(function (o) { M.OPS.push(o); OPI[o.id] = o; });
     if (d.hours) { M.HOURS_SHIFT = d.hours; NORM_SHIFT_H = d.hours; }
-    if (d.cfg) { var c = d.cfg; CFG.advWeekLimit = c.advWeekLimit; CFG.advShare = c.advShare; CFG.advStep = c.advStep; CFG.advMin = c.advMin; CFG.advDeadlineDow = c.advDeadlineDow; CFG.advDeadlineHour = c.advDeadlineHour; CFG.advPayDow = c.advPayDow; CFG.incidentReserve = c.incidentReserve; CFG.deductShare = c.deductShare; M.SHARE = c.payShare; CFG.cardRequired = c.cardRequired === true; }
+    if (d.cfg) { var c = d.cfg; CFG.advWeekLimit = c.advWeekLimit; CFG.advShare = c.advShare; CFG.advStep = c.advStep; CFG.advMin = c.advMin; CFG.advDeadlineDow = c.advDeadlineDow; CFG.advDeadlineHour = c.advDeadlineHour; CFG.advPayDow = c.advPayDow; CFG.incidentReserve = c.incidentReserve; CFG.deductShare = c.deductShare; M.SHARE = c.payShare; CFG.cardRequired = c.cardRequired === true; CFG.payoutDate = /^\d{4}-\d\d-\d\d$/.test(c.payoutDate || '') ? c.payoutDate : ''; }
   }
   function filesB64(a) { return Promise.all((a || []).map(function (f) { return blobB64(f.blob).then(function (b) { return { b64: b }; }); })); }
   var backend = LIVE ? {
@@ -904,6 +904,7 @@
       h('div', { class: 'eq' }, h('span', { class: 'num', text: 'Начислено ' + money(c.accrued) }), h('span', { class: 'num', text: 'Удержано ' + minus(c.withheld) }))));
     v.appendChild(reportBtn('report-home'));
     v.appendChild(advHomeCard());
+    v2HomeCards(v, c);   // V2_IMPROVEMENTS_V1
     v.appendChild(moreTiles());
     v.appendChild(carLink());
     // разбор суммы
@@ -1494,6 +1495,7 @@
       } else ft.appendChild(h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'view-' + c.id, onclick: function () { openExplView(c); } }, 'Посмотреть отправленное'));
       el.appendChild(ft);
     }
+    v2CaseDispute(el, c);   // V2_IMPROVEMENTS_V1
     return el;
   }
   function viewDed() {
@@ -2074,6 +2076,7 @@
     var seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Тема оформления' });
     [['auto', 'Авто'], ['light', 'Светлая'], ['dark', 'Тёмная']].forEach(function (x) { seg.appendChild(h('button', { type: 'button', 'aria-pressed': pref === x[0] ? 'true' : 'false', 'data-theme-set': x[0], onclick: function () { setTheme(x[0]); render(); } }, x[1])); });
     v.appendChild(moreTiles());
+    if (S.data.konsolOn || !LIVE) v.appendChild(v2KonsolCard());   // V2_IMPROVEMENTS_V1
     v.appendChild(h('a', { class: 'btn ghost mydata-link', href: '#/mydata', 'data-testid': 'open-mydata' }, ico('lock', 'sm'), 'Мои данные и согласие'));
     v.appendChild(h('a', { class: 'btn ghost mydata-link', href: 'taxi.html', 'data-testid': 'open-taxi' }, ico('car', 'sm'), 'Учёт такси'));
     v.appendChild(h('section', { class: 'card gap12', 'aria-labelledby': 'th-h' }, h('h2', { id: 'th-h', text: 'Оформление' }), seg));
@@ -2292,6 +2295,165 @@
       h('div', { class: 'fs-track' }, rng, marks),
       h('p', { class: 'cap', text: 'Считается по той же формуле: ' + (f.people || 0) + ' чел × (производительность − ' + Math.round(thr * 100) + '%) × ' + money(f.rate || 0) + ' − вычет за брак ' + money(f.lost || 0) + '. Отпустите — ползунок вернётся на ваше значение.' }));
   }
+  /* ---------- V2_IMPROVEMENTS_V1: «Где вырасти», брак по людям, явка, ползунок и прогноз сотрудника, «Оспорить штраф», акты Консоли ---------- */
+  var V2_ERR = { forbidden: 'Нет доступа.', rate_limit: 'Слишком часто. Попробуйте позже.', bad_date: 'Дата вне периода или в будущем.', bad_shift: 'Выберите смену.', bad_employee: 'Сотрудник не найден.', bad_reason: 'Укажите причину.',
+    bad_comment: 'Напишите, почему вы не согласны (от 3 символов).', bad_case: 'Этот штраф нельзя оспорить.', already: 'Спор по этому штрафу уже на рассмотрении.', busy: 'Сервер занят, попробуйте ещё раз.', not_configured: 'Связь с Консолью не настроена.', unavailable: 'Консоль сейчас недоступна.' };
+  var V2D = { att: [], disputes: [] };   // демо: записи в памяти
+  function v2Demo(action, b) {
+    if (action === 'fmAtt') { V2D.att = V2D.att.filter(function (x) { return !(x.date === b.date && x.shift === b.shift && x.name === b.name); }); V2D.att.unshift({ date: b.date, shift: b.shift, name: b.name, present: b.present, reason: b.present ? '' : b.reason, comment: b.comment || '' }); return { ok: true, att: { ok: true, reasons: ['болен', 'отгул', 'прогул', 'другое'], items: V2D.att.slice() } }; }
+    if (action === 'disputeAdd') { if (V2D.disputes.some(function (x) { return x.caseId === b.caseId && x.status === 'open'; })) return { ok: false, error: 'already' }; V2D.disputes.push({ id: 'dsp-demo' + V2D.disputes.length, caseId: b.caseId, comment: b.comment, status: 'open', at: new Date().toISOString().slice(0, 16).replace('T', ' ') }); return { ok: true, disputes: V2D.disputes.slice() }; }
+    if (action === 'konsol') return { ok: true, acts: (window.MOCK && MOCK.konsol) || [], fetchedAt: '' };
+    return { ok: false, error: 'unknown_action' };
+  }
+  function v2Send(action, body) {
+    if (!requireOnline()) return Promise.resolve(null);
+    var p = LIVE ? api(action, body) : delay(200).then(function () { return v2Demo(action, body); });
+    return p.then(function (r) { if (r && r.ok) return r; toast((r && V2_ERR[r.error]) || 'Не удалось. Попробуйте ещё раз.', 'bad'); return null; }, function () { toast('Нет связи с сервером.', 'bad'); return null; });
+  }
+  function v2Pct(x) { return String(Math.round(x * 10) / 10).replace('.', ',') + '%'; }
+  // 2. «Где вырасти»: прибавка = (цель − %) × смены ÷ смены бригады × «+1 п.»
+  function v2Grow(f) {
+    var T = (f.v2 && f.v2.growTarget) || 0.7, p1 = f.plus1 || 0, ts = f.shifts || 0; if (!p1 || !ts) return null;
+    var me = String((S.data && S.data.user && S.data.user.name) || '').split(' ').slice(0, 2).join(' ').toLowerCase(), rows = (f.team || []).filter(function (x) { return x.perf != null && x.perf < T && x.name.toLowerCase() !== me; }).map(function (x) { return { name: x.name, perf: x.perf, shifts: x.shifts, gain: (T - x.perf) * 100 * x.shifts / ts * p1 }; }).sort(function (a, b) { return b.gain - a.gain; });   // сам бригадир — не в списке
+    var s = h('section', { class: 'card fm-sec v2', 'data-testid': 'v2-grow' }, h('h2', { text: 'Где вырасти' }), h('p', { class: 'cap', text: 'Если подтянуть до ' + Math.round(T * 100) + '% тех, кто ниже, ваш KPI вырастет. Считается по формуле листа: (цель − производительность) × смены человека ÷ ' + ts + ' смен бригады × ' + money(p1) + ' за +1 п.' }));
+    if (!rows.length) { s.appendChild(h('p', { class: 'cap', text: 'Все работают на ' + Math.round(T * 100) + '% и выше.' })); return s; }
+    rows.slice(0, 3).forEach(function (x) { s.appendChild(h('div', { class: 'fm-row', 'data-testid': 'v2-grow-row' }, h('span', null, x.name, h('div', { class: 's', text: fmPct(x.perf) + ' → ' + Math.round(T * 100) + '% · ' + x.shifts + ' см' })), h('b', { class: 'pos', text: '+' + money(x.gain) }))); });
+    var all = rows.reduce(function (a, x) { return a + x.gain; }, 0);
+    s.appendChild(h('div', { class: 'fo-tot', 'data-testid': 'v2-grow-all', text: (rows.length > 3 ? 'Все ' + rows.length + ' ниже цели вместе: +' : 'Все вместе: +') + money(all) }));
+    if (rows.length > 3) { var t3 = rows.slice(0, 3).reduce(function (a, x) { return a + x.gain; }, 0); s.appendChild(h('p', { class: 'cap', text: 'Эти трое вместе: +' + money(t3) + '.' })); }
+    return s;
+  }
+  // 3. брак по людям и типам
+  function v2Defects(f) {
+    var d = f.v2 && f.v2.defects; if (!d) return null;
+    var s = h('section', { class: 'card fm-sec v2', 'data-testid': 'v2-def' }, h('h2', { text: 'Брак и ошибки: кто и что' }), h('p', { class: 'cap', text: 'Из листа «Штрафы»: учтённые записи за период' + (d.start ? ' ' + dmy(d.start).slice(0, 5) + '–' + dmy(d.end).slice(0, 5) : '') + '. Всего ' + money(d.total) + (f.lost ? ', из них вам в вычет ' + fmPct(f.damageShare) + ' = ' + money(f.lost) : '') + '.' }));
+    if (!d.people.length) { s.appendChild(h('p', { class: 'cap', text: 'За период учтённого брака нет.' })); return s; }
+    var mx = d.types.length ? d.types[0].total : 1;
+    s.appendChild(h('h3', { class: 'h3', text: 'По типам' }));
+    d.types.slice(0, 6).forEach(function (t) { var bar = h('i'); bar.style.width = Math.max(3, t.total / mx * 100) + '%'; s.appendChild(h('div', { class: 'v2-type', 'data-testid': 'v2-def-type' }, h('div', { class: 'v2-tl' }, h('span', { text: t.type + ' · ' + t.count }), h('b', { text: money(t.total) })), h('div', { class: 'v2-bar' }, bar))); });
+    s.appendChild(h('h3', { class: 'h3', text: 'По людям' }));
+    d.people.forEach(function (p) {
+      s.appendChild(h('button', { class: 'fo-it v2-pp', type: 'button', 'data-testid': 'v2-def-person', onclick: function () {
+        openSheet({ title: p.name, body: h('div', null, h('p', { class: 'cap', text: 'Учтено за период: ' + money(p.total) + ' · ' + p.items.length + ' ' + plural(p.items.length, ['запись', 'записи', 'записей']) }),
+          p.items.map(function (x) { return h('div', { class: 'fo-it' }, h('div', null, x.title, h('div', { class: 's', text: dmy(x.date) + ' · ' + x.cat + (x.type ? ' · ' + x.type : '') })), h('b', { text: money(x.amount) })); }),
+          d.reconUrl ? h('a', { class: 'btn ghost mt8', href: d.reconUrl, target: '_blank', rel: 'noopener' }, 'Открыть файл сверки') : null) }); } },
+        h('div', null, p.name, h('div', { class: 's', text: p.items.length + ' ' + plural(p.items.length, ['запись', 'записи', 'записей']) })), h('b', { class: 'neg', text: money(p.total) + ' ›' })));
+    });
+    if (d.reconUrl) s.appendChild(h('a', { class: 'btn ghost mt8', href: d.reconUrl, target: '_blank', rel: 'noopener', 'data-testid': 'v2-recon' }, 'Файл сверки брака'));
+    return s;
+  }
+  // 4. явка (только информация)
+  function v2Att(f) {
+    var a = (f.v2 && f.v2.att) || { items: [] }, names = (f.ops && f.ops.ok && f.ops.employees) || (f.team || []).map(function (x) { return x.name; }).concat(f.idle || []);
+    var today = (S.data && S.data.today) || new Date().toISOString().slice(0, 10), st = S.v2att = S.v2att || { date: today, shift: 'День' };
+    var reasons = a.reasons || ['болен', 'отгул', 'прогул', 'другое'];
+    var s = h('section', { class: 'card fm-sec v2', id: 'v2-att', 'data-testid': 'v2-att' }, h('h2', { text: 'Явка' }), h('p', { class: 'cap', text: 'Отметьте, кто вышел. Только для информации: на зарплату и KPI не влияет. Видно админу в журнале.' }));
+    var di = h('input', { type: 'date', class: 'inp', value: st.date, max: today, min: (f.ops && f.ops.start) || null, 'data-testid': 'v2-att-date', 'aria-label': 'Дата', onchange: function () { st.date = di.value || today; render(); } });
+    var seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Смена' });
+    ['День', 'Ночь'].forEach(function (x) { seg.appendChild(h('button', { type: 'button', 'aria-pressed': st.shift === x ? 'true' : 'false', 'data-testid': 'v2-att-shift', onclick: function () { st.shift = x; render(); } }, x)); });
+    s.appendChild(h('div', { class: 'v2-att-top' }, di, seg));
+    var mark = {}; (a.items || []).forEach(function (x) { if (x.date === st.date && x.shift === st.shift && !mark[x.name]) mark[x.name] = x; });
+    var cnt = Object.keys(mark).filter(function (k) { return mark[k].present; }).length;
+    s.appendChild(h('div', { class: 'cap', 'data-testid': 'v2-att-sum', text: 'Отмечено: ' + Object.keys(mark).length + ' из ' + names.length + ' · вышли ' + cnt }));
+    function save(nm, present, reason) {
+      v2Send('fmAtt', { date: st.date, shift: st.shift, name: nm, present: present, reason: reason || '' }).then(function (r) { if (r) { f.v2 = f.v2 || {}; f.v2.att = r.att; toast(nm + ': ' + (present ? 'вышел' : 'не вышел — ' + reason)); render(); } });
+    }
+    names.forEach(function (nm) {
+      var m = mark[nm], sel = h('select', { class: 'inp v2-rs', 'aria-label': 'Причина: ' + nm, 'data-testid': 'v2-att-reason' }, h('option', { value: '', text: 'причина…' }), reasons.map(function (r) { return h('option', { value: r, text: r, selected: m && !m.present && m.reason === r ? true : null }); }));
+      sel.addEventListener('change', function () { if (sel.value) save(nm, false, sel.value); });
+      s.appendChild(h('div', { class: 'fo-it v2-ar', 'data-testid': 'v2-att-row' }, h('div', null, nm, m ? h('div', { class: 's', text: m.present ? 'вышел' : 'не вышел · ' + m.reason }) : null),
+        h('div', { class: 'v2-ab' }, h('button', { class: 'fo-a' + (m && m.present ? ' on' : ''), type: 'button', 'data-testid': 'v2-att-yes', 'aria-pressed': m && m.present ? 'true' : 'false', onclick: function () { save(nm, true); } }, 'Вышел'),
+          m && !m.present ? sel : h('button', { class: 'fo-a', type: 'button', 'data-testid': 'v2-att-no', onclick: function (e) { var b = e.currentTarget; b.replaceWith(sel); sel.focus(); } }, 'Не вышел'))));
+    });
+    return s;
+  }
+  function v2BrigCards(v, f) {
+    [v2Grow(f), v2Defects(f), v2Att(f)].forEach(function (x) { if (x) v.appendChild(x); });
+    if (S.q && S.q.att) setTimeout(function () { var e = document.getElementById('v2-att'); if (e) e.scrollIntoView(); S.q = null; }, 50);
+  }
+  // 5. ползунок сотрудника (линейно: начислено ÷ производительность × p), возвращается на место
+  function v2EmpSlider(c) {
+    var act = Math.round((c.perf || 0) * 10) / 10; if (!(act > 0) || !(c.accrued > 0)) return null;
+    var stu = S.data.statements && S.data.statements[c.p.id], units = (stu && stu.units) || c.units, per = c.accrued / act, upu = units ? units / act : 0, MAX = 150, raf = 0, idle = 0;
+    var rng = h('input', { type: 'range', class: 'fs-rng', min: '0', max: String(MAX), step: '0.1', value: String(act), 'data-testid': 'v2-es-range', 'aria-label': 'Моя производительность, %' });
+    var pct = h('b', { class: 'fs-pct', 'data-testid': 'v2-es-pct' }), pay = h('div', { class: 'fs-pay', 'data-testid': 'v2-es-pay' }), diff = h('div', { class: 'fs-diff', 'data-testid': 'v2-es-diff' });
+    var marks = h('div', { class: 'fs-marks', 'aria-hidden': 'true' }), you = h('span', { class: 'fs-you', text: 'сейчас' });
+    [[50, '50%'], [100, '100%'], [120, '120%']].forEach(function (m) { var s = h('span', { class: 'fs-mk', text: m[1] }); s.style.left = (m[0] / MAX * 100) + '%'; marks.appendChild(s); });
+    you.style.left = (Math.min(act, MAX) / MAX * 100) + '%'; marks.appendChild(you);
+    function show(p, real) {
+      var val = real ? c.accrued : per * p, d = val - c.accrued;
+      pct.textContent = v2Pct(p); pay.textContent = money(val);
+      diff.textContent = real ? 'начислено сейчас · двигайте ползунок' : (d >= 0 ? '+' : '−') + money(Math.abs(d)) + (upu ? ' · ≈' + num(Math.round(upu * p)) + ' ед.' : '');
+      diff.className = 'fs-diff' + (real ? '' : d > 0 ? ' pos' : d < 0 ? ' neg' : ''); rng.setAttribute('aria-valuetext', pct.textContent + ', ' + pay.textContent);
+    }
+    function back() {
+      clearTimeout(idle); cancelAnimationFrame(raf); var from = +rng.value, t0 = 0;
+      if (Math.abs(from - act) < 0.05) { rng.value = String(act); show(act, true); return; }
+      function stepA(ts) { if (!t0) t0 = ts; var k = Math.min(1, (ts - t0) / 400), e = 1 - Math.pow(1 - k, 3), p = from + (act - from) * e; rng.value = String(p); show(p, false); if (k < 1) raf = requestAnimationFrame(stepA); else { rng.value = String(act); show(act, true); } }
+      raf = requestAnimationFrame(stepA);
+    }
+    rng.addEventListener('input', function () { cancelAnimationFrame(raf); show(+rng.value, false); });
+    ['pointerup', 'pointercancel', 'touchend', 'touchcancel', 'mouseup', 'blur'].forEach(function (ev) { rng.addEventListener(ev, back); });
+    rng.addEventListener('keydown', function () { clearTimeout(idle); cancelAnimationFrame(raf); });
+    rng.addEventListener('keyup', function () { clearTimeout(idle); idle = setTimeout(back, 1200); });
+    show(act, true);
+    return h('section', { class: 'card fs v2', 'data-testid': 'v2-es' }, h('div', { class: 'card-h' }, h('h2', { text: 'Сколько я мог бы заработать' })),
+      h('div', { class: 'fs-top' }, h('div', null, h('span', { class: 'cap', text: 'Производительность ' }), pct), pay), diff, h('div', { class: 'fs-track' }, rng, marks),
+      h('p', { class: 'cap', 'data-testid': 'v2-es-cap', text: 'Каждый +1% производительности ≈ +' + money(per) + ' к начислению за период. Отпустите — ползунок вернётся на ваше значение.' }));
+  }
+  // 6. прогноз выплаты; дата — только если задана PAYOUT_DATE
+  function v2Forecast(c) {
+    if (c.p.status !== 'open') return null;
+    var stm = S.data.statements && S.data.statements[c.p.id], n = (stm && stm.shifts) || c.shifts.filter(function (x) { return !x.planned; }).length, avg = n ? c.accrued / n : 0;
+    var s = h('section', { class: 'card v2', 'data-testid': 'v2-fc' }, h('div', { class: 'card-h' }, h('h2', { text: 'Прогноз выплаты' })));
+    function line(l, r, tid, cls) { s.appendChild(h('div', { class: 'line' + (cls ? ' ' + cls : ''), 'data-testid': tid || null }, h('div', { class: 'nm', text: l }), h('div', { class: 'am num', text: r }))); }
+    line('Начислено', money(c.accrued));
+    var fines = (c.by.brak || 0) + (c.by.error || 0); if (fines) line('Брак и ошибки', minus(fines));
+    if (c.by.advance) line('Аванс', minus(c.by.advance)); if (c.by.housing) line('Проживание', minus(c.by.housing)); if (c.by.other) line('Прочее', minus(c.by.other));
+    if (c.withheld !== c.own && c.own) line('Удержано с учётом лимита', minus(c.withheld));
+    line('К выплате сейчас', money(c.payout), 'v2-fc-pay', 'total');
+    if (avg > 0) { line('Ещё 1 смена (≈' + money(avg) + ')', '≈ ' + money(c.payout + avg), 'v2-fc-1'); line('Ещё 2 смены', '≈ ' + money(c.payout + 2 * avg), 'v2-fc-2'); }
+    var pd = CFG.payoutDate; if (pd) line('Дата выплаты', dlong(pd), 'v2-fc-date');
+    s.appendChild(h('p', { class: 'cap', text: 'Оценка: средняя смена периода = начислено ÷ ' + n + ' ' + plural(n, ['смена', 'смены', 'смен']) + '. Итог — по ведомости после закрытия периода.' }));
+    return s;
+  }
+  function v2HomeCards(v, c) { var a = v2Forecast(c), b = v2EmpSlider(c); if (a) v.appendChild(a); if (b) v.appendChild(b); }
+  // 8. «Оспорить штраф»
+  var DSP_ST = { open: ['На рассмотрении', 'warn', 'clock'], removed: ['Штраф снят', 'ok', 'check'], rejected: ['Спор отклонён', 'bad', 'x'] };
+  function v2DisputeOf(id) { var a = (S.data.disputes || []).filter(function (x) { return x.caseId === id; }); return a[a.length - 1] || null; }
+  function v2OpenDispute(c) {
+    var ta = h('textarea', { class: 'inp', rows: '4', maxlength: '500', 'data-testid': 'dsp-text', placeholder: 'Почему вы не согласны? Например: коробка пришла мятой, есть фото у кладовщика.' });
+    var btn = h('button', { class: 'btn', type: 'button', 'data-testid': 'dsp-send' }, 'Отправить на рассмотрение'), sh;
+    btn.addEventListener('click', function () { var t = ta.value.trim(); if (t.length < 3) { toast(V2_ERR.bad_comment, 'warn'); return; } btn.disabled = true;
+      v2Send('disputeAdd', { caseId: c.id, comment: t }).then(function (r) { btn.disabled = false; if (r) { S.data.disputes = r.disputes; sh.close(); toast('Спор отправлен — админ рассмотрит и ответит в Telegram'); render(); } }); });
+    sh = openSheet({ title: 'Оспорить штраф', body: h('div', null, h('div', { class: 'fo-it' }, h('div', null, c.title, h('div', { class: 's', text: KIND[c.kind].n + ' · ' + dmy(c.date) })), h('b', { text: money(c.amount) })), h('label', { class: 'cap', text: 'Комментарий' }), ta), footer: btn });
+  }
+  function v2CaseDispute(el, c) {
+    if (c.kind !== 'brak' && c.kind !== 'error') return;
+    var d = v2DisputeOf(c.id), box = h('div', { class: 'ft v2-dsp', 'data-testid': 'dsp-' + c.id });
+    if (d) { var st = DSP_ST[d.status] || DSP_ST.open; box.appendChild(h('div', { class: 'row between' }, chip('Спор: ' + st[0].toLowerCase(), st[1], st[2]), h('span', { class: 'cap', text: (d.at || '').slice(0, 10) }))); if (d.reply) box.appendChild(h('p', { class: 'cap', text: 'Ответ: ' + d.reply })); }   // повторный спор после решения — только через админа
+    else box.appendChild(h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'dispute-' + c.id, onclick: function () { v2OpenDispute(c); } }, 'Оспорить'));
+    el.appendChild(box);
+    if (S.q && S.q.dispute === c.id && !d) { S.q = null; setTimeout(function () { v2OpenDispute(c); }, 60); }
+  }
+  // 9. акты Консоли (сервер ходит в API, токен во фронт не попадает)
+  var KS_STEPS = [['not_accepted', 'Акт'], ['accepted', 'Подписан'], ['paid', 'Оплачен']];
+  function v2KonsolCard() {
+    var s = h('section', { class: 'card v2', 'data-testid': 'ks' }, h('div', { class: 'card-h' }, h('h2', { text: 'Акты в Консоли' })), h('p', { class: 'cap', text: 'Статус ваших актов в «Консоли»: подписан ли акт и пришла ли оплата.' }));
+    var out = h('div', { 'data-testid': 'ks-list' }), btn = h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'ks-load' }, 'Показать статус');
+    function draw(r) {
+      clear(out); if (!r.acts.length) { out.appendChild(h('p', { class: 'cap', text: 'Актов пока нет.' })); return; }
+      r.acts.forEach(function (a) {
+        var lvl = a.status === 'paid' || a.payStatus === 'paid' ? 2 : a.status === 'accepted' || a.status === 'accepted_by_company' ? 1 : a.status === 'annulled' ? -1 : 0, pipe = h('div', { class: 'ks-pipe' });
+        KS_STEPS.forEach(function (x, i) { pipe.appendChild(h('span', { class: 'ks-st' + (lvl >= i ? ' on' : ''), text: x[1] })); });
+        out.appendChild(h('div', { class: 'ks-act', 'data-testid': 'ks-act' }, h('div', { class: 'row between' }, h('b', { text: 'Акт № ' + (a.number || '—') + (a.start ? ' · ' + dmy(a.start).slice(0, 5) + '–' + dmy(a.end || a.start).slice(0, 5) : '') }), h('b', { class: 'num', text: money(a.amount) })),
+          h('div', { class: 'cap', text: a.title + ' · ' + a.statusText + (a.payDate ? ' · оплачен ' + dmy(a.payDate) : '') }), lvl < 0 ? h('div', { class: 'cap', text: 'Аннулирован' }) : pipe));
+      });
+    }
+    btn.addEventListener('click', function () { btn.disabled = true; v2Send('konsol', {}).then(function (r) { btn.disabled = false; if (r) { S.ks = r; draw(r); btn.textContent = 'Обновить'; } }); });
+    s.appendChild(out); s.appendChild(btn); if (S.ks) { draw(S.ks); btn.textContent = 'Обновить'; }
+    return s;
+  }
   function viewBrig() {
     var f = S.data && S.data.foreman, v = h('div', { class: 'view fm', id: 'main', 'data-testid': 'brig' });
     v.appendChild(pageTop('Бригада', f && f.period ? 'Период ' + f.period : ''));
@@ -2300,6 +2462,7 @@
     v.appendChild(h('div', { class: 'hero', 'data-testid': 'fm-pay' }, h('div', { class: 'lbl', text: 'Ваше вознаграждение сейчас' }), h('div', { class: 'big', text: fmM(f.pay) }),
       h('div', { class: 'note', text: (f.gross != null ? 'до вычета брака ' + fmM(f.gross) : '') + (f.lost ? ' · вычет за брак −' + fmM(f.lost).replace('−', '') : '') })));
     if (f.avg != null && f.rate != null) v.appendChild(fmSlider(f));   // FOREMAN_SLIDER_V1
+    v2BrigCards(v, f);   // V2_IMPROVEMENTS_V1
     if (f.ops && f.ops.ok) foBlocks(v, f.ops);   // FOREMAN_OPS_V1
     function pos(x) { return Math.max(0, Math.min(100, x / top * 100)) + '%'; }
     function at(el, x) { el.style.left = pos(x); return el; }   // CSP: только CSSOM, без атрибута style
@@ -2356,7 +2519,7 @@
   function render() {
     if (!session()) return renderLogin();
     if (S.consent && !S.consent.ok) return renderConsent();
-    var r = (location.hash.replace(/^#\//, '') || 'home'); if (!VIEWS[r] || (r === 'brig' && S.data && !isForeman())) r = 'home'; S.route = r;
+    var r = (location.hash.replace(/^#\//, '') || 'home'), qi = r.indexOf('?'); if (qi >= 0) { var uq = new URLSearchParams(r.slice(qi + 1)); S.q = { dispute: uq.get('dispute') || '', att: uq.get('att') === '1' }; r = r.slice(0, qi) || 'home'; }   /* V2: ссылки из Telegram #/ded?dispute=… и #/brig?att=1 */ if (!VIEWS[r] || (r === 'brig' && S.data && !isForeman())) r = 'home'; S.route = r;
     document.title = (TITLES[r] || TABS.filter(function (t) { return t[0] === r; })[0][1]) + ' · Мои выплаты';
     tabbar.hidden = false; offlineBanner();
     var y = window.scrollY; clear(root);
