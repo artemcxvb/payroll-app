@@ -22,7 +22,7 @@ function starsTxt(n){return n+' '+plural(n,'звезда','звезды','звё
 function lz(content,cls,attrs){attrs=attrs||{};var b=h('button',Object.assign({class:'lzb'},attrs),h('div',{class:'lz'+(cls?' '+cls:'')},h('div',{class:'in'},content)));return b}
 /* ---------- audio: один AudioContext, разблокировка первым касанием (iOS), декодированные буферы, кеш и предзагрузка ---------- */
 window.QLOG=[];function lg(k,f,v){QLOG.push({k:k,f:f,v:v==null?1:v,t:performance.now()})}
-var QA=window.QA={started:[],failed:[],tts:[]}, AC=null, OUT=null, MG=null, BUF={}, vTok=0, vSrc=null, mSrc=null, ruVoice=null, unlocked=false;
+var QA=window.QA={started:[],failed:[],tts:[],plays:[]}, AC=null, OUT=null, MG=null, BUF={}, vTok=0, vSrc=null, mSrc=null, ruVoice=null, unlocked=false;
 function ensureAC(){if(AC)return AC;var C=window.AudioContext||window.webkitAudioContext;if(!C)return null;try{AC=new C();OUT=AC.createGain();OUT.connect(AC.destination);MG=AC.createGain();MG.gain.value=.35;MG.connect(OUT)}catch(e){AC=null}return AC}
 function unlock(){var c=ensureAC();if(c){if(c.state!=='running')c.resume();if(!unlocked){try{var s=c.createBufferSource();s.buffer=c.createBuffer(1,1,22050);s.connect(OUT);s.start(0)}catch(e){}}}
   if(!unlocked&&window.speechSynthesis){if(!ruVoice)pickVoice();try{var u=new SpeechSynthesisUtterance(' ');u.volume=0;speechSynthesis.speak(u)}catch(e){}}unlocked=true}
@@ -39,10 +39,10 @@ function playBuf(name,vol,isVoice){var tok=isVoice?++vTok:0;
   return loadBuf(name).then(function(b){if(!b)return false;if(isVoice&&tok!==vTok)return true;if(muted)return true;
     if(AC.state!=='running')return false;   /* контекст не разблокирован — пусть говорит запасной синтез */
     var s=AC.createBufferSource(),g=AC.createGain();g.gain.value=vol==null?1:vol;s.buffer=b;s.connect(g);g.connect(OUT);
-    QA.started.push(name);lg(isVoice?'v':'s',name,g.gain.value);
-    return new Promise(function(res){var done=false,t,fin=function(){if(done)return;done=true;clearTimeout(t);if(vSrc===s)vSrc=null;res(true)};
-      s.onended=fin;t=setTimeout(fin,b.duration*1000+700);   /* страховка: ended иногда не приходит */
-      if(isVoice){if(vSrc)try{vSrc.stop()}catch(e){};vSrc=s;s._fin=fin}
+    QA.started.push(name);lg(isVoice?'v':'s',name,g.gain.value);var rec={n:name,dur:b.duration,t0:AC.currentTime,played:0,stopped:false};if(isVoice)QA.plays.push(rec);
+    return new Promise(function(res){var done=false,t,fin=function(){if(done)return;done=true;clearInterval(t);rec.played=AC.currentTime-rec.t0;rec.stopped=!!s._stopped;if(vSrc===s)vSrc=null;res(true)};
+      s.onended=fin;t=setInterval(function(){if(AC.currentTime-rec.t0>b.duration+1)fin()},500);   /* страховка, если ended не пришёл: по часам AudioContext (они стоят на паузе/прерывании), а не по setTimeout */
+      if(isVoice){if(vSrc){vSrc._stopped=true;try{vSrc.stop()}catch(e){}};vSrc=s;s._fin=fin}
       try{s.start(0)}catch(e){fin()}})})}
 function snd(name,vol){return playBuf(name,vol,false)}
 function voice(name,fallbackText){
@@ -53,7 +53,7 @@ function host(on){var e=$('.host');if(e)e.style.visibility=on?'visible':'hidden'
 function speak(t,tok){return new Promise(function(r){if(!t||!window.speechSynthesis)return r();var done=false,fin=function(){if(!done){done=true;clearTimeout(to);r()}};
   var u=new SpeechSynthesisUtterance(t);u.lang='ru-RU';if(ruVoice)u.voice=ruVoice;u.rate=1.05;u.onend=fin;u.onerror=fin;QA.tts.push(t.slice(0,30));lg('tts',t.slice(0,30));
   var to=setTimeout(fin,1500+t.length*85);try{speechSynthesis.cancel();speechSynthesis.speak(u)}catch(e){fin()}})}
-function stopVoice(keepHost){lg('vstop');vTok++;if(vSrc){var s=vSrc;vSrc=null;try{s.stop()}catch(e){}if(s._fin)s._fin()}if(window.speechSynthesis)try{speechSynthesis.cancel()}catch(e){}if(!keepHost){host(false);duck(false);calm(false)}}
+function stopVoice(keepHost){lg('vstop');vTok++;if(vSrc){var s=vSrc;vSrc=null;s._stopped=true;try{s.stop()}catch(e){}if(s._fin)s._fin()}if(window.speechSynthesis)try{speechSynthesis.cancel()}catch(e){}if(!keepHost){host(false);duck(false);calm(false)}}
 function startMusic(){if(!audioOn||muted||!ensureAC()||mSrc)return;var my=mSrc={};loadBuf('m_suspense').then(function(b){if(mSrc!==my||!b)return;var s=AC.createBufferSource();s.buffer=b;s.loop=true;s.connect(MG);s.start(0);mSrc=s;lg('m')})}
 function stopMusic(){lg('mstop');if(mSrc&&mSrc.stop)try{mSrc.stop()}catch(e){}mSrc=null}
 function duck(on){if(MG&&AC)MG.gain.setTargetAtTime(on?.1:.32,AC.currentTime,.15)}
@@ -77,7 +77,7 @@ function pick(){var m=seenMap(),now=Date.now(),cd=COOLDOWN_DAYS*864e5,used={},pl
     var fresh=pool.filter(function(q){return !m[q.id]}),cool=pool.filter(function(q){return m[q.id]&&now-m[q.id]>cd}),rest=pool.slice().sort(function(a,b){return (m[a.id]||0)-(m[b.id]||0)});
     var src=fresh.length?fresh:cool.length?cool:rest.slice(0,Math.max(1,Math.ceil(rest.length/3)));var q=src[Math.floor(Math.random()*src.length)];if(q){used[q.id]=1;out.push(q)}});
   return out}
-function newGame(topic){clearT();clearInterval(callT);stopVoice();poll=null;ladOpen=false;G={topic:'mix',qs:forceQ(pick()),i:0,phase:'q',fifty:false,help:false,aud:false,removed:[],sel:null,helpTxt:null,res:null,startBal:st.stars,call:null};screen='game';pushNav();preload(['lock1','lock2','ok1','ok2','ok3','bad','s_lock','s_correct','s_wrong','m_suspense']);askQ(true)}
+function newGame(topic){clearT();clearInterval(callT);stopVoice();poll=null;ladOpen=false;G={topic:'mix',qs:forceQ(pick()),i:0,phase:'q',fifty:false,help:false,aud:false,removed:[],sel:null,helpTxt:null,res:null,startBal:st.stars,call:null};screen='game';pushNav();preload(['lock1','lock2','ok1','ok2','ok3','bad','safe','ladder','fifty','help','poll','penalty','s_lock','s_correct','s_wrong','s_coin','m_suspense']);askQ(true)}
 function forceQ(a){var f=+P.get('q');if(f){var q=Q.filter(function(x){return x.id===f})[0];if(q)a[0]=q}return a}   /* отладка: ?q=ID — первым вопросом */
 function safeStars(i){var s=0;for(var k=0;k<i;k++)if(SAFE[k])s=LADDER[k];return s}
 function askQ(first){var q=G.qs[G.i],nx=G.qs[G.i+1];G.phase='dim';G.sel=null;G.removed=[];G.helpTxt=null;G.shown=false;G.enter=false;poll=null;
@@ -85,8 +85,8 @@ function askQ(first){var q=G.qs[G.i],nx=G.qs[G.i+1];G.phase='dim';G.sel=null;G.r
   later(function(){G.phase='q';G.enter=true;render();if(FAST)app.querySelectorAll('.ans.enter').forEach(function(e){e.style.animationDelay='0s'});G.enter=false;G.shown=true;startMusic();   /* анимация появления — один раз, дальше перерисовки её не повторяют */
     voice('q'+q.id,q.q+'. '+q.a.map(function(a,j){return L[j]+': '+a}).join('. '))},1000)}
 function choose(j){if(!G||G.phase!=='q'||G.call||G.removed.indexOf(j)>=0)return;var q=G.qs[G.i];markSeen(q.id);G.sel=j;G.phase='lock';stopVoice();render();
-  snd('s_lock',.8);voice(Math.random()<.5?'lock1':'lock2','Это ваш окончательный ответ? Принято.');
-  later(function(){reveal(j===q.correct)},3800)}   /* драматическая пауза */
+  snd('s_lock',.8);var g=G,lp=voice(Math.random()<.5?'lock1':'lock2','Это ваш окончательный ответ? Принято.'),tp=new Promise(function(r){later(r,3800)});
+  Promise.all([lp,tp]).then(function(){if(G===g&&G.phase==='lock')reveal(j===q.correct)})}   /* раскрытие — после фразы ведущего, а не поверх неё */   /* драматическая пауза */
 function reveal(ok){var q=G.qs[G.i],g=G,step=G.i;G.phase=ok?'ok':'bad';stopMusic();render();
   var alive=function(){return G===g&&G.i===step&&(G.phase==='ok'||G.phase==='bad')};   /* цепочка озвучки: реакция → (несгораемая) → пояснение; обрывается при «Дальше» */
   if(ok){snd('s_correct',.9);if(SAFE[step])later(function(){confetti(50)},500)}
@@ -95,7 +95,7 @@ function reveal(ok){var q=G.qs[G.i],g=G,step=G.i;G.phase=ok?'ok':'bad';stopMusic
     .then(function(){if(alive()&&ok&&SAFE[step]&&step<9)return voice('safe','Несгораемая сумма!')})
     .then(function(){if(alive())return voice('e'+q.id,q.explain)})},ok?400:700)}
 function next(){if(!G||(G.phase!=='ok'&&G.phase!=='bad'))return;   /* двойное нажатие больше не завершает игру */
-  stopVoice();if(G.phase==='ok'){if(G.i===9)return finish('win');G.i++;ladOpen=true;G.phase='ladder';render();snd('s_coin',.5);voice('ladder','Лестница');later(function(){if(G&&G.phase==='ladder'){ladOpen=false;askQ()}},FAST?300:3200)}else finish('lost')}
+  stopVoice();if(G.phase==='ok'){if(G.i===9)return finish('win');G.i++;ladOpen=true;G.phase='ladder';render();snd('s_coin',.5);var g=G,lp=voice('ladder','Лестница'),tp=new Promise(function(r){later(r,FAST?300:3200)});Promise.all([lp,tp]).then(function(){if(G===g&&G.phase==='ladder'){ladOpen=false;askQ()}})}else finish('lost')}
 function takeStars(){if(!G||G.phase!=='q'||G.call||G.i===0)return;stopVoice();finish('take')}
 function finish(how){clearT();clearInterval(callT);poll=null;stopMusic();ladOpen=false;var safe=safeStars(G.i),step=LADDER[G.i];
   var earned=how==='win'?LADDER[9]:how==='take'?LADDER[G.i-1]:safe, penalty=0;
@@ -156,7 +156,7 @@ function viewMenu(){var played=st.lastPlay===new Date().toISOString().slice(0,10
     h('a',{href:'#',class:'sm',style:'color:#8f9ac0;margin-top:6px','data-testid':'m-admin',onclick:function(e){e.preventDefault();go('admin')},text:'Кабинет админа (макет)'}),
     played?h('div',{class:'sm',text:'Сегодня уже сыграно (в прототипе можно ещё раз).'}):null,
     welcomed?null:h('div',{class:'sm hint',text:'🔊 Коснитесь экрана — включится звук'}))}
-function startTopic(t){preload(['intro','s_lock','m_suspense']);if(Date.now()-welcomeAt>12000)snd('s_intro',.55);   /* мелодия не повторяется, если только что звучала в меню */voice('intro','Добро пожаловать в игру «Звезда склада»!').then(function(){if(screen==='intro')newGame(t)});later(function(){if(screen==='intro')newGame(t)},FAST?300:10000)}
+function startTopic(t){preload(['intro','s_lock','m_suspense']);if(Date.now()-welcomeAt>12000)snd('s_intro',.55);   /* мелодия не повторяется, если только что звучала в меню */voice('intro','Добро пожаловать в игру «Звезда склада»!').then(function(){if(screen==='intro')newGame(t)});later(function(){if(screen==='intro')newGame(t)},FAST?300:40000)}   /* вопрос 1 ждёт конца вступления (раньше таймер 10 с обрывал 17-секундное интро); 40 с — только страховка */
 function viewGame(){var q=G.qs[G.i],ph=G.phase,stage=h('div',{class:'stage'}),main=h('div',null);
   main.appendChild(h('div',{class:'hdr',style:'margin:6px 0'},h('div',{class:'sm',text:'Вопрос '+(G.i+1)+' из 10 · '+lr(G.i)+(SAFE[G.i]?' · несгораемая':'')}),h('button',{class:'ladtoggle','data-testid':'lad-toggle',onclick:function(){ladOpen=!ladOpen;render()}},'≡ Лестница')));
   main.appendChild(lifes());main.appendChild(h('div',{class:'host'},h('i',{class:'mic'}),'Ведущий говорит…'));
