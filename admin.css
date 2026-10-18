@@ -111,3 +111,5 @@ body.adminpage .app { max-width: 520px; }
 @media (max-width: 400px) { .limrow .cp { width: 100%; } }
 /* V2_IMPROVEMENTS_V1: споры */
 .dsp-it { border-top: 1px solid var(--line); padding: 10px 0; } .dsp-c { margin: 6px 0; font-style: italic; }
+/* PROMO_OCT_V1 */
+.po-cnt { grid-template-columns: repeat(2, 1fr); } .po-c { display: flex; flex-direction: column; padding: 8px 10px; border-radius: 12px; background: var(--card2, rgba(0,0,0,.04)); } .po-c b { font-size: 20px; }

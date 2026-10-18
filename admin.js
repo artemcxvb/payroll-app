@@ -191,6 +191,8 @@
     if (action === 'adminAccess') return demoRes({ ok: true, items: s.acc, limited: (s.limited || []).map(function (x) { return { phone: x.phone, name: x.name, kind: x.kind, until: Date.now() + x.off, requests: x.requests, wrong: x.wrong }; }) });
     if (action === 'adminJobs') return demoRes({ ok: true, items: s.jobs });
     if (action === 'adminPromos') return demoRes({ ok: true, items: s.promos });
+    if (action === 'adminPromoOct') return demoRes({ ok: true, sent: 0, clicked: 2, recipients: 12, from: '2026-10-18', to: '2026-10-31', minPerf: 70, caption: '🎁 Акция октября: приз 5 000 ₽! (демо)', photo: '', items: [{ at: '2026-10-18 20:05', name: 'Демо Иван', phone: '+7 900 000-00-01', perf: 78.4, shifts: 3, fines: 0, finesSum: 0, meets: true }, { at: '2026-10-18 20:07', name: 'Демо Пётр', phone: '+7 900 000-00-02', perf: 61.2, shifts: 2, fines: 1, finesSum: 400, meets: false }] });   // PROMO_OCT_V1 демо
+    if (action === 'adminPromoOctSend') return demoRes(d.dry ? { ok: true, dry: true, recipients: 12, todo: 12, alreadySent: 0, names: ['Демо Иван', 'Демо Пётр'] } : { ok: true, tgDryRun: true, sent: 0 });
     if (action === 'adminDisputes') { s.dsp = s.dsp || [{ id: 'dsp-demo1', at: '2026-10-18 12:10', name: 'Ахметов Муслим', caseId: 's2', row: 2, date: '2026-10-07', cat: 'Ошибки', title: 'Разместил физически без системы', amount: 400, comment: 'Ячейку занял кладовщик, я разместил по его указанию', status: 'open', reply: '' }]; store(DEMOK, s); return demoRes({ ok: true, items: s.dsp }); }   // V2 демо
     if (action === 'adminDisputeDecide') { var dx = (s.dsp || []).filter(function (x) { return x.id === d.id; })[0]; if (!dx) return demoRes({ ok: false, error: 'not_found' }); if (dx.status !== 'open') return demoRes({ ok: false, error: 'already' }); dx.status = d.decision === 'remove' ? 'removed' : 'rejected'; dx.reply = d.reply || ''; s.log.push({ at: nowMsk(), action: d.decision === 'remove' ? 'спор: штраф снят' : 'спор: отклонён', object: dx.name, details: dx.title }); store(DEMOK, s); return demoRes({ ok: true, sent: true, items: s.dsp }); }
     if (action === 'adminLog') return demoRes({ ok: true, items: s.log.slice().reverse().slice(0, 50) });
@@ -734,6 +736,27 @@
 
   /* ---------- сводка ---------- */
   /* V2_IMPROVEMENTS_V1: очередь споров по штрафам. «Снять» = «Учитывать» 0 в одной строке «Штрафов» ведомости (после подтверждения, с записью в журнал); сотрудник получает ответ в Telegram */
+  /* PROMO_OCT_V1: «Акция: кто участвует» — счётчики, участники с актуальными условиями; рассылка только по кнопке с подтверждением */
+  function promoOctCard() {
+    var p = S.promoOct, c = h('section', { class: 'card stack', 'aria-labelledby': 'po-h', 'data-testid': 'promo-oct' }, h('h2', { id: 'po-h', text: 'Акция: кто участвует' }));
+    if (!p) { c.appendChild(h('p', { class: 'cap', text: 'Нет данных (обновите сводку).' })); return c; }
+    if (!LIVE) c.appendChild(h('p', { class: 'help', 'data-testid': 'po-demo', text: 'ДЕМО: вымышленные участники.' }));
+    c.appendChild(h('p', { class: 'cap', text: 'Приз 5 000 ₽: период ' + p.from.split('-').reverse().join('.').slice(0, 5) + '–' + p.to.split('-').reverse().join('.').slice(0, 5) + ', без ошибок и штрафов, производительность от ' + p.minPerf + '%.' }));
+    var meets = p.items.filter(function (x) { return x.meets; }).length;
+    c.appendChild(h('div', { class: 'sumgrid po-cnt', 'data-testid': 'promo-counts' }, [['Получателей', p.recipients < 0 ? '—' : p.recipients], ['Отправлено', p.sent], ['Нажали «Участвую»', p.clicked], ['Выполняют сейчас', meets]].map(function (x) { return h('div', { class: 'po-c' }, h('b', { text: String(x[1]) }), h('span', { class: 'cap', text: x[0] })); })));
+    if (!p.items.length) c.appendChild(h('p', { class: 'cap', text: 'Пока никто не нажал.' }));
+    p.items.forEach(function (x) {
+      c.appendChild(h('div', { class: 'dsp-it', 'data-testid': 'po-item' }, h('div', { class: 'row between' }, h('b', { text: x.name }), h('span', { class: 'chip ' + (x.meets ? 'ok' : 'warn'), text: x.meets ? 'выполняет' : 'не выполняет' })),
+        h('div', { class: 'cap', text: dmyT(x.at) + ' · ' + x.phone + ' · ' + (x.perf == null ? 'смен нет' : String(x.perf).replace('.', ',') + '% за ' + x.shifts + ' см') + ' · ошибок/штрафов: ' + x.fines + (x.finesSum ? ' (' + money(x.finesSum) + ')' : '') })));
+    });
+    var dryB = h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'po-dry', onclick: function () { call('adminPromoOctSend', { dry: true }).then(function (r) { if (!r.ok) return toast(errText(r), 'bad');
+      confirmAct({ title: 'Кому уйдёт акция', text: 'Получат: ' + r.todo + ' (уже получили: ' + r.alreadySent + ').\n' + r.names.join(', '), yes: 'Понятно' }); }); } }, 'Проверить получателей');
+    var sendB = h('button', { class: 'btn', type: 'button', 'data-testid': 'po-send', onclick: function () {
+      confirmAct({ title: 'Разослать акцию?', quote: p.caption, text: 'Фото с подписью и кнопкой «🎁 Участвую» уйдёт всем привязанным сотрудникам, которые её ещё не получали. Отменить отправленное нельзя.', yes: 'Разослать', danger: true }).then(function (y) {
+        if (!y) return; call('adminPromoOctSend', { confirm: 'РАЗОСЛАТЬ' }).then(function (r) { if (!r.ok) return toast(errText(r), 'bad'); toast(r.tgDryRun ? 'TG_DRY_RUN: ничего не отправлено' : 'Отправлено: ' + r.sent + (r.failed ? ', ошибок: ' + r.failed : '') + (r.remaining ? ', осталось: ' + r.remaining + ' — нажмите ещё раз' : '')); loadSummary(); }); }); } }, 'Разослать акцию…');
+    c.appendChild(h('div', { class: 'btnrow' }, dryB, sendB));
+    return c;
+  }
   function dspCard() {
     var items = S.dsp || [], open = items.filter(function (x) { return x.status === 'open'; }), done = items.filter(function (x) { return x.status !== 'open'; }).slice(0, 5);
     var c = h('section', { class: 'card stack', 'aria-labelledby': 'dsp-h', 'data-testid': 'dsp-card' }, h('h2', { id: 'dsp-h', text: 'Споры по штрафам' + (open.length ? ' · ' + open.length : '') }));
@@ -772,6 +795,7 @@
     g.appendChild(tile('apps', s.applications.sent, 'Новые отклики', '', 'sum-apps'));
     g.appendChild(tile('acc', s.blocked, 'Заблокировано', s.blocked ? 'доступ закрыт' : 'никто не заблокирован', 'sum-acc'));
     v.appendChild(g);
+    v.appendChild(promoOctCard());   // PROMO_OCT_V1
     v.appendChild(dspCard());   // V2_IMPROVEMENTS_V1: споры по штрафам
     v.appendChild(notifyCard(s));
     v.appendChild(promoCard(s));
@@ -943,9 +967,10 @@
   }
   function loadSummary() {
     if (!session()) return Promise.resolve();
-    return Promise.all([call('adminSummary'), call('adminLog'), call('adminPromos'), call('adminDisputes')]).then(function (rs) {
+    return Promise.all([call('adminSummary'), call('adminLog'), call('adminPromos'), call('adminDisputes'), call('adminPromoOct')]).then(function (rs) {
       if (!session()) return;
       if (rs[3] && rs[3].ok) S.dsp = rs[3].items;
+      if (rs[4] && rs[4].ok) S.promoOct = rs[4];
       if (rs[2].ok) S.promoItems = promoItemsFrom(rs[2].items);
       if (rs[0].ok) { S.sum = rs[0]; delete S.err.sum; S.log = rs[1].ok ? rs[1].items : S.log; } else if (rs[0].error !== 'auth') S.err.sum = errText(rs[0]);
       render();
