@@ -227,7 +227,7 @@
     me: function (phone) {
       var cs = server.consent(phone); if (!cs.ok) return { ok: true, consent: cs, today: M.today, fetchedAt: Date.now() };   // без согласия данные не отдаются
       var s = srv(), u = userByPhone(phone);
-      return { consent: cs, user: u, periods: M.periods, shifts: M.shifts, cases: s.cases, advances: s.advances, incidents: s.incidents, promos: M.promos, jobs: M.jobs, applications: s.applications.filter(function (x) { return x.userId === u.id; }), today: M.today, fetchedAt: Date.now() };
+      return { consent: cs, user: u, periods: M.periods, shifts: M.shifts, cases: s.cases, advances: s.advances, incidents: s.incidents, promos: M.promos, jobs: M.jobs, applications: s.applications.filter(function (x) { return x.userId === u.id; }), today: M.today, fetchedAt: Date.now(), foreman: qs.get('foreman') === '1' && M.foreman ? M.foreman : undefined };
     },
     submitExplanation: function (id, text, photos) {
       var s = srv(), c = s.cases.filter(function (x) { return x.id === id; })[0];
@@ -697,9 +697,10 @@
   function explReturnedCount() { return S.data ? S.data.cases.filter(function (c) { return c.expl && c.expl.status === 'waiting' && c.expl.returned; }).length : 0; }
   function waitingCount() { return S.data ? S.data.cases.filter(function (c) { return c.expl && c.expl.status === 'waiting'; }).length : 0; }
   function returnedCount() { return S.data ? (S.data.incidents || []).filter(function (i) { return i.status === 'returned'; }).length : 0; }
-  var TABS = [['home', 'Главная', 'home'], ['cal', 'Календарь', 'cal'], ['ops', 'Операции', 'box'], ['ded', 'Вычеты', 'ded'], ['adv', 'Аванс', 'wallet'], ['me', 'Профиль', 'user']];
+  var TABS0 = [['home', 'Главная', 'home'], ['cal', 'Календарь', 'cal'], ['ops', 'Операции', 'box'], ['ded', 'Вычеты', 'ded'], ['adv', 'Аванс', 'wallet'], ['me', 'Профиль', 'user']], TABS = TABS0;
+  function isForeman() { return !!(S.data && S.data.foreman); }   // FOREMAN_V1: вкладка «Бригада» только когда сервер прислал блок foreman
   function renderTabs() {
-    clear(tabbar);
+    clear(tabbar); TABS = isForeman() ? TABS0.slice(0, 5).concat([['brig', 'Бригада', 'trend']], TABS0.slice(5)) : TABS0; tabbar.style.gridTemplateColumns = 'repeat(' + TABS.length + ', 1fr)';
     TABS.forEach(function (t) {
       var n = t[0] === 'ded' ? waitingCount() + returnedCount() : 0, wn = t[0] === 'ded' ? waitingCount() : 0, rn = t[0] === 'ded' ? returnedCount() : 0;
       tabbar.appendChild(h('a', { class: 'tab', href: '#/' + t[0], 'aria-current': (S.route === t[0] || (t[0] === 'home' && (S.route === 'promo' || S.route === 'jobs')) || (t[0] === 'me' && S.route === 'mydata')) ? 'page' : null, 'data-tab': t[0], 'aria-label': t[1] + (wn ? ', ждут объяснения: ' + wn : '') + (rn ? ', возвращено на доработку: ' + rn : '') },
@@ -2145,12 +2146,73 @@
   }
 
   /* ---------- роутер ---------- */
-  var VIEWS = { home: viewHome, ops: viewOps, cal: viewCal, ded: viewDed, adv: viewAdv, me: viewMe, promo: viewPromo, jobs: viewJobs, mydata: viewMyData };
-  var TITLES = { promo: 'Акции и бонусы', jobs: 'Вакансии', mydata: 'Мои данные' };
+  /* ---------- FOREMAN_V1: кабинет бригадира ---------- */
+  function fmPct(x) { return x == null ? '—' : (Math.round(x * 1000) / 10).toFixed(1).replace('.', ',') + '%'; }
+  function fmCls(p) { return p == null ? '' : p >= 1 ? 'ok' : p >= 0.9 ? 'lg' : p >= 0.7 ? 'ye' : p >= 0.5 ? 'or' : 'rd'; }
+  function fmM(n) { return n == null ? '—' : money(n); }
+  function viewBrig() {
+    var f = S.data && S.data.foreman, v = h('div', { class: 'view fm', id: 'main', 'data-testid': 'brig' });
+    v.appendChild(pageTop('Бригада', f && f.period ? 'Период ' + f.period : ''));
+    if (!f || f.ok === false) { v.appendChild(emptyState('trend', 'Данные бригады недоступны', 'Не удалось прочитать лист «KPI бригадира». Попробуйте позже.')); return v; }
+    var thr = f.threshold == null ? 0.5 : f.threshold, avg = f.avg, top = Math.max(1.3, (avg || 0) + 0.1);
+    v.appendChild(h('div', { class: 'hero', 'data-testid': 'fm-pay' }, h('div', { class: 'lbl', text: 'Ваше вознаграждение сейчас' }), h('div', { class: 'big', text: fmM(f.pay) }),
+      h('div', { class: 'note', text: (f.gross != null ? 'до вычета брака ' + fmM(f.gross) : '') + (f.lost ? ' · вычет за брак −' + fmM(f.lost).replace('−', '') : '') })));
+    function pos(x) { return Math.max(0, Math.min(100, x / top * 100)) + '%'; }
+    function at(el, x) { el.style.left = pos(x); return el; }   // CSP: только CSSOM, без атрибута style
+    var fill = h('div', { class: 'fill' }); fill.style.width = pos(avg || 0);
+    var bar = h('div', { class: 'fm-bar', 'data-testid': 'fm-bar' }, fill,
+      at(h('span', { class: 'mk up' }, 'порог ', h('b', { text: fmPct(thr) })), thr),
+      at(h('span', { class: 'mk dn' }, 'норма ', h('b', { text: '100%' })), 1),
+      at(h('span', { class: 'mk up' }, 'цель ', h('b', { text: fmPct(f.benchPlan || 1.2) })), f.benchPlan || 1.2),
+      at(h('span', { class: 'you', text: 'вы ' + fmPct(avg) }), avg || 0));
+    var k = h('section', { class: 'card fm-sec' }, h('h2', { text: 'Ваш KPI: средняя производительность бригады' }),
+      h('div', { class: 'fm-chips' }, h('div', null, h('span', { text: 'Сейчас' }), h('b', { text: fmPct(avg) })), h('div', null, h('span', { text: 'Работали в периоде' }), h('b', { text: (f.people || 0) + ' чел · ' + (f.shifts || 0) + ' смен' }))), bar);
+    function row(l, r, cls) { k.appendChild(h('div', { class: 'fm-row' }, h('span', { text: l }), h('b', { class: cls || '', text: r }))); }
+    if (avg != null) row(avg >= thr ? 'Порог ' + fmPct(thr) + ' пройден' : 'До порога ' + fmPct(thr) + ': ещё ' + fmPct(thr - avg).replace('%', ' п.'), avg >= thr ? '+' + fmPct(avg - thr).replace('%', ' п.') : '0 ₽', avg >= thr ? 'pos' : 'neg');
+    if (avg != null && avg < 1) row('При 100% (ещё ' + fmPct(1 - avg).replace('%', ' п.') + ')', fmM(f.at100));
+    if (avg != null && avg < 1.2) row('При 120% (ещё ' + fmPct(1.2 - avg).replace('%', ' п.') + ')', fmM(f.at120));
+    if (f.plus1 != null) row('Каждый +1 п. средней производительности', '+' + fmM(f.plus1), 'pos');
+    if (f.defects != null) row('Брак и ошибки бригады за период', fmM(f.defects), 'neg');
+    v.appendChild(k);
+    var per = f.rate != null ? f.rate / 100 : null, ex = h('section', { class: 'card fm-sec', 'data-testid': 'fm-why' }, h('h2', { text: 'За что я получаю' }));
+    ex.appendChild(h('ol', null,
+      h('li', { text: 'Платят за каждого, кто работал в периоде, и только за производительность бригады выше ' + fmPct(thr) + '.' }),
+      per != null ? h('li', { text: 'Один процентный пункт сверх порога за одного человека стоит ' + fmM(per) + ' (ставка ' + fmM(f.rate) + ' за 100 п.).' }) : null,
+      f.gross != null ? h('li', { text: 'Сейчас: ' + (f.people || 0) + ' чел × (' + fmPct(avg) + ' − ' + fmPct(thr) + ') × ' + fmM(f.rate) + ' = ' + fmM(f.gross) + '.' }) : null,
+      f.lost ? h('li', { text: 'Минус ' + fmPct(f.damageShare) + ' от брака и ошибок бригады: ' + fmPct(f.damageShare) + ' × ' + fmM(f.defects) + ' = −' + fmM(f.lost).replace('−', '') + '.' }) : null,
+      h('li', { text: 'Итого: ' + fmM(f.pay) + '. Если средняя ниже ' + fmPct(thr) + ', вознаграждение 0 ₽.' })));
+    v.appendChild(ex);
+    var t = h('section', { class: 'card fm-sec', 'data-testid': 'fm-team' }, h('h2', { text: 'Вклад каждого сотрудника' }), h('p', { class: 'cap', text: 'Выше ' + fmPct(thr) + ' человек добавляет вам деньги, ниже — уменьшает.' }));
+    var tb = h('table', { class: 'fm-t' }, h('tr', null, h('th', { text: 'Сотрудник' }), h('th', { text: 'Произв.' }), h('th', { text: 'Вклад' })));
+    (f.team || []).forEach(function (x) {
+      tb.appendChild(h('tr', { 'data-testid': 'fm-person' }, h('td', null, x.name, h('div', { class: 's', text: x.shifts + ' см · брак/ошибки ' + (x.defects ? fmM(x.defects) : '—') })),
+        h('td', null, h('span', { class: 'pc ' + fmCls(x.perf), text: fmPct(x.perf) })), h('td', { class: x.contrib == null ? '' : x.contrib >= 0 ? 'pos' : 'neg', text: x.contrib == null ? '—' : (x.contrib >= 0 ? '+' : '') + fmM(x.contrib) })));
+    });
+    tb.appendChild(h('tr', { class: 'sum' }, h('th', { text: 'Среднее бригады' }), h('th', null, h('span', { class: 'pc ' + fmCls(avg), text: fmPct(avg) })), h('th')));
+    t.appendChild(tb);
+    if ((f.idle || []).length) t.appendChild(h('div', { class: 'fm-note', 'data-testid': 'fm-idle', text: 'Не работали в периоде: ' + f.idle.join(', ') + ' — в расчёт не входят.' }));
+    v.appendChild(t);
+    if ((f.days || []).length && (f.daily || []).length) {
+      var ht = h('table', { class: 'fm-heat' }), hr = h('tr', null, h('th'));
+      f.days.forEach(function (d) { hr.appendChild(h('th', { text: d.slice(0, 2) })); }); ht.appendChild(hr);
+      f.daily.forEach(function (x) { var r = h('tr', null, h('th', { text: x.name.split(' ')[0] })); x.vals.forEach(function (p) { r.appendChild(p == null ? h('td', { class: 'e' }) : h('td', { class: 'h ' + fmCls(p / 100), text: String(Math.round(p)) })); }); ht.appendChild(r); });
+      v.appendChild(h('section', { class: 'card fm-sec', 'data-testid': 'fm-days' }, h('h2', { text: 'Производительность по дням, %' }), h('div', { class: 'fm-scroll' }, ht),
+        h('p', { class: 'cap', text: 'Цвет: ≥100 зелёный · 90–99 светло-зелёный · 70–89 жёлтый · 50–69 оранжевый · <50 красный. Пусто — смены не было.' })));
+    }
+    v.appendChild(h('section', { class: 'card fm-sec' }, h('h2', { text: 'Как устроено вознаграждение' }), h('ol', null,
+      f.benchPay != null ? h('li', { text: 'Эталон: ' + (f.benchPeople || '—') + ' человек при ' + fmPct(f.benchPlan) + ' плана = ' + fmM(f.benchPay) + ' за период.' }) : null,
+      h('li', { text: 'Схема «' + (f.scheme || 'С порогом') + '»: оплачивается только производительность выше ' + fmPct(thr) + '.' }),
+      f.plus10 != null ? h('li', { text: 'Главный рычаг — средняя производительность: +10 п. по бригаде = +' + fmM(f.plus10) + '.' }) : null,
+      h('li', { text: 'Слабый новичок невыгоден: человек ниже порога уменьшает вашу сумму.' }),
+      f.damageShare != null ? h('li', { text: 'Качество: ' + fmPct(f.damageShare) + ' от брака и ошибок бригады вычитается из вознаграждения.' }) : null)));
+    return v;
+  }
+  var VIEWS = { home: viewHome, ops: viewOps, cal: viewCal, ded: viewDed, adv: viewAdv, me: viewMe, promo: viewPromo, jobs: viewJobs, mydata: viewMyData, brig: viewBrig };
+  var TITLES = { promo: 'Акции и бонусы', jobs: 'Вакансии', mydata: 'Мои данные', brig: 'Бригада' };
   function render() {
     if (!session()) return renderLogin();
     if (S.consent && !S.consent.ok) return renderConsent();
-    var r = (location.hash.replace(/^#\//, '') || 'home'); if (!VIEWS[r]) r = 'home'; S.route = r;
+    var r = (location.hash.replace(/^#\//, '') || 'home'); if (!VIEWS[r] || (r === 'brig' && S.data && !isForeman())) r = 'home'; S.route = r;
     document.title = (TITLES[r] || TABS.filter(function (t) { return t[0] === r; })[0][1]) + ' · Мои выплаты';
     tabbar.hidden = false; offlineBanner();
     var y = window.scrollY; clear(root);
@@ -2167,7 +2229,7 @@
     if (se0) { var ck = clockState(se0); if (ck) { logout(ck === 'closed' ? closedNotice() : staleNotice()); return; } }   // запуск после LOGIN_HOUR_TO или со вчерашней сессией: сразу выход, данные не рисуем
     if (!session()) { renderLogin(); return; }
     S.blocked = false; armAuto();
-    if (!/^#\/(home|cal|ops|ded|adv|me|promo|jobs|mydata)$/.test(location.hash)) location.hash = '#/home';
+    if (!/^#\/(home|cal|ops|ded|adv|me|promo|jobs|mydata|brig)$/.test(location.hash)) location.hash = '#/home';
     S.data = null; render();
     fetchMe().then(function (r) { applyMe(r); render(); geoPing('open'); }, function () { if (S.blocked || !session()) return; clear(root); root.appendChild(h('div', { class: 'view', id: 'main' }, emptyState('wifioff', 'Нет данных', 'Подключитесь к интернету, чтобы загрузить данные.'), h('button', { class: 'btn', type: 'button', 'data-testid': 'retry-load', onclick: boot }, 'Повторить'))); });
   }
