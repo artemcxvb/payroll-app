@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 /* КОНФИГ (предложения на согласование) */
-var CFG={RUB_PER_STAR:10, LADDER_RUB:[50,100,200,300,500,1000,1500,2000,3000,5000], SAFE_STEPS:[5], PENALTY_FACTOR:1, MONTH_CAP_RUB:1000, CALL_SECONDS:30,
+var CFG={RUB_PER_STAR:10, LADDER_RUB:[50,100,200,300,500,1000,1500,2000,3000,5000], SAFE_STEPS:[5], PENALTY_FACTOR:1, MONTH_CAP_RUB:5000, CALL_SECONDS:30,
   /* ПРОТОТИП: телефон бригадира задан здесь (страница noindex). В рабочей версии номер придёт с сервера (FOREMAN_PHONES) только вошедшему сотруднику. */
   FOREMAN:{name:'Егор Ильченко', short:'Егору', tel:'+79774073549', shown:'+7 977 407-35-49'}};
 /* PENALTY_FACTOR: при ошибке с баланса списывается PENALTY_FACTOR × стоимость текущей ступени (в звёздах); баланс не ниже 0 */
