@@ -1,7 +1,9 @@
 (function(){
 'use strict';
 /* КОНФИГ (предложения на согласование) */
-var CFG={RUB_PER_STAR:10, LADDER_RUB:[50,100,200,300,500,1000,1500,2000,3000,5000], SAFE_STEPS:[5], PENALTY_FACTOR:1, MONTH_CAP_RUB:1000};
+var CFG={RUB_PER_STAR:10, LADDER_RUB:[50,100,200,300,500,1000,1500,2000,3000,5000], SAFE_STEPS:[5], PENALTY_FACTOR:1, MONTH_CAP_RUB:1000, CALL_SECONDS:30,
+  /* ПРОТОТИП: телефон бригадира задан здесь (страница noindex). В рабочей версии номер придёт с сервера (FOREMAN_PHONES) только вошедшему сотруднику. */
+  FOREMAN:{name:'Егор Ильченко', short:'Егору', tel:'+79774073549', shown:'+7 977 407-35-49'}};
 /* PENALTY_FACTOR: при ошибке с баланса списывается PENALTY_FACTOR × стоимость текущей ступени (в звёздах); баланс не ниже 0 */
 var RUB=CFG.RUB_PER_STAR, CAP=CFG.MONTH_CAP_RUB, LADDER=CFG.LADDER_RUB.map(function(r){return r/RUB}), SAFE={}, L='ABCD';CFG.SAFE_STEPS.forEach(function(i){SAFE[i]=true});
 function lr(i){return rub(LADDER[i]*RUB)}
@@ -67,9 +69,22 @@ function finish(how){clearT();stopMusic();ladOpen=false;var safe=safeStars(G.i),
   if(earned)later(function(){flyStars(earned,$('.big'))},penalty?2000:600)}
 function fifty(){if(!G||G.phase!=='q'||G.fifty)return;var q=G.qs[G.i];G.fifty=true;G.shown=true;var w=[0,1,2,3].filter(function(k){return k!==q.correct}).sort(function(){return Math.random()-.5}).slice(0,2);G.removed=w;
   stopVoice();snd('s_fifty');voice('fifty','Уберите два неверных ответа.');render();w.forEach(function(k){var b=document.querySelector('.ans[data-k="'+k+'"]');if(b)b.classList.add('anim')})}
-function help(){if(!G||G.phase!=='q'||G.help)return;var q=G.qs[G.i];G.help=true;G.shown=true;stopVoice();render();snd('s_ring',.7);
-  var conf={1:.95,2:.8,3:.65}[q.level],alt=[0,1,2,3].filter(function(k){return k!==q.correct&&G.removed.indexOf(k)<0}),pk=Math.random()<conf||!alt.length?q.correct:alt[0];
-  voice('help','Звоним бригадиру.').then(function(){G.helpTxt=(conf>.9?'Тут без вариантов — ':conf>.7?'Почти уверен: ':'Не на сто процентов, но я бы сказал ')+'«'+L[pk]+': '+q.a[pk]+'».';if(G.phase==='q')render()})}
+var callT=null;
+function help(){if(!G||G.phase!=='q'||G.help)return;G.help=true;G.shown=true;stopVoice();stopMusic();snd('s_ring',.7);voice('help','Звоним бригадиру.');
+  G.call={left:CFG.CALL_SECONDS,dialed:false};render();callT=setInterval(function(){if(!G||!G.call)return clearInterval(callT);G.call.left--;var e=$('.cd b');if(e)e.textContent=G.call.left;var r=$('.cd');if(r)r.style.setProperty('--p',G.call.left/CFG.CALL_SECONDS);if(G.call.left<=5&&G.call.left>0)snd('s_coin',.3);if(G.call.left<=0)endCall()},1000)}
+function endCall(){clearInterval(callT);if(!G||!G.call)return;G.call=null;render();startMusic()}
+function simHint(){var q=G.qs[G.i],conf={1:.95,2:.8,3:.65}[q.level],alt=[0,1,2,3].filter(function(k){return k!==q.correct&&G.removed.indexOf(k)<0}),pk=Math.random()<conf||!alt.length?q.correct:alt[0];
+  G.helpTxt='(симуляция, демо) '+(conf>.9?'Тут без вариантов — ':conf>.7?'Почти уверен: ':'Не на сто процентов, но я бы сказал ')+'«'+L[pk]+': '+q.a[pk]+'».';endCall()}
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&G&&G.call&&G.call.dialed)endCall()});
+function callCard(){var c=G.call,F=CFG.FOREMAN;return h('div',{class:'overlay','data-testid':'call'},h('div',{class:'poll callcard'},
+  h('h3',{text:'ПОМОЩЬ БРИГАДИРА'}),h('div',{class:'muted',style:'text-align:center',text:'Звоним бригадиру '+F.short+'…'}),
+  h('div',{class:'sm',style:'margin:8px 0 2px;color:#fff;font-size:13px','data-testid':'call-q',text:G.qs[G.i].q+' '+G.qs[G.i].a.map(function(x,k){return G.removed.indexOf(k)<0?L[k]+': '+x:''}).filter(Boolean).join(' · ')}),h('div',{class:'cd',style:'--p:'+(c.left/CFG.CALL_SECONDS)},h('b',{text:String(c.left)})),
+  h('div',{class:'sm',style:'text-align:center;margin-bottom:8px',text:'Игра на паузе. У вас '+CFG.CALL_SECONDS+' секунд — прочитайте вопрос и варианты.'}),
+  h('a',{class:'callbtn',href:'tel:'+F.tel,'data-testid':'call-btn',onclick:function(){c.dialed=true}},'📞 Позвонить · '+F.name),
+  h('div',{class:'sm',style:'text-align:center;margin:4px 0 10px',text:F.shown}),
+  h('button',{class:'mini',style:'width:100%;padding:10px','data-testid':'call-done',onclick:endCall},'Я поговорил — выбрать ответ'),
+  h('button',{class:'mini g',style:'width:100%;padding:9px;margin-top:8px','data-testid':'call-sim',onclick:simHint},'Нет телефона? Подсказка-симуляция (демо)'),
+  h('div',{class:'sm',style:'text-align:center;margin-top:8px;opacity:.8',text:'Разговор не записывается.'})))}
 function audience(){if(!G||G.phase!=='q'||G.aud)return;var q=G.qs[G.i];G.aud=true;G.shown=true;stopVoice();
   var live=[0,1,2,3].filter(function(k){return G.removed.indexOf(k)<0}),wc={1:62,2:48,3:36}[q.level]+Math.random()*12,v=[0,0,0,0],rest=100-wc;
   live.forEach(function(k){if(k!==q.correct){var x=Math.random();v[k]=x}});var sum=v.reduce(function(a,b){return a+b},0)||1;live.forEach(function(k){if(k!==q.correct)v[k]=Math.round(v[k]/sum*rest)});v[q.correct]=100-v.reduce(function(a,b,i){return i===q.correct?a:a+b},0);
@@ -113,12 +128,13 @@ function viewGame(){var q=G.qs[G.i],ph=G.phase,stage=h('div',{class:'stage'}),ma
       if(ph==='bad'){if(k===G.sel)c+=' wrong';if(k===q.correct)c+=' ok'}
       var b=lz([h('span',{class:'k',text:L[k]+':'}),h('span',{text:a})],null,{'data-k':k,'data-testid':'ans-'+k,disabled:ph!=='q'?'':null,onclick:function(){choose(k)}});b.className='lzb ans '+c.replace(/^ans ?/,'');b.classList.add('ans');g.appendChild(b)});
     main.appendChild(h('div',{class:'line',style:'margin:0 4px'},g));
-    if(G.helpTxt)main.appendChild(h('div',{class:'bubble','data-testid':'help-bubble'},h('b',{text:'Бригадир на связи'}),G.helpTxt));
+    if(G.helpTxt)main.appendChild(h('div',{class:'bubble','data-testid':'help-bubble'},h('b',{text:'Бригадир'}),G.helpTxt));
     if(ph==='q'||ph==='lock')main.appendChild(h('div',{class:'acts'},lz('Забрать '+(G.i?lr(G.i-1):'0 ₽')+' и уйти','gold',{'data-testid':'take',disabled:G.i===0||ph!=='q'?'':null,style:G.i===0?'opacity:.45':'',onclick:takeStars})));
     if(ph==='ok'||ph==='bad'){main.appendChild(h('div',{class:'expl','data-testid':'expl'},h('div',{html:ph==='ok'?'✅ <b>Верно!</b> ':'❌ <b>Неверно.</b> Правильный ответ: <b>'+L[q.correct]+'</b>. '}),q.explain,h('div',null,h('span',{class:'src',text:q.sourceLabel}))));
       main.appendChild(h('div',{class:'acts'},lz(ph==='ok'?(G.i===9?'🏆 Забрать главный приз':'Следующий вопрос'):'Итоги игры','gold',{'data-testid':'next',onclick:next})))}
   }
   stage.appendChild(main);stage.appendChild(ladder());
+  if(G.call)stage.appendChild(callCard());
   if(poll)stage.appendChild(h('div',{class:'overlay','data-testid':'poll',onclick:function(){poll=null;render()}},h('div',{class:'poll'},h('h3',{text:'ПОМОЩЬ ЗАЛА'}),
     h('div',{class:'bars'},poll.map(function(v,i){return h('div',{class:'bar'},h('span',{text:v+'%'}),h('i',{style:document.querySelector('.bar')?'height:'+v+'%':''}))})),
     h('div',{class:'lbls'},L.split('').map(function(x){return h('span',{text:x})})),h('div',{class:'sm',style:'text-align:center;margin-top:8px',text:'Нажмите, чтобы закрыть'}))));
