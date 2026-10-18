@@ -6,7 +6,8 @@
   var APPC = window.APP_CONFIG || {}, LIVE = APPC.mode === 'live' && /^https:\/\//.test(APPC.backendUrl || '');
   var qs = new URLSearchParams(location.search), LAT = LIVE ? 0 : qs.has('lat') ? +qs.get('lat') : 150;
   var WHOK = 'pr.admin.who', SESSK = 'pr.admin.session', DEMOK = 'pr.admin.demo', THEMEK = 'pr.theme', NBSP = '\u00a0';
-  var REASON_MIN = 3, REASON_MAX = 300, PAID_MAX = 10000;   // PAID_MAX = лимит аванса на неделю (ADV_WEEK_LIMIT), сервер проверяет ещё раз
+  var REASON_MIN = 3, REASON_MAX = 300, PAID_MAX = 10000, ADV_STEP = 500, ADV_MIN = 500;   // ADV_STEP/ADV_MIN - подсказка формы одобрения, окончательно проверяет сервер (cfg)
+    // PAID_MAX = лимит аванса на неделю (ADV_WEEK_LIMIT), сервер проверяет ещё раз
 
   /* ---------- утилиты ---------- */
   function h(tag, props) {
@@ -111,7 +112,7 @@
   var LIST_ACTION = { adv: 'adminAdvances', expl: 'adminExplanations', inc: 'adminIncidents', apps: 'adminApplications', acc: 'adminAccess' };
 
   /* ---------- рассылка акций: проверка ввода (одна и та же в форме и в демо; на сервере проверка повторяется) ---------- */
-  var PROMO = { head: '📣 Акция от «Персональное Решение»', textMin: 5, textMax: 1000, linkMax: 300, minGapMs: 600000, dupMs: 86400000 };
+  var PROMO = { head: '🔔 Уведомление от «Персональное Решение»', textMin: 5, textMax: 1000, linkMax: 300, minGapMs: 600000, dupMs: 86400000 };
   var PROMO_LINK_RE = /^https:\/\/[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}(?::\d{1,5})?(?:[\/?#][^\s<>"'\u0000-\u001f]*)?$/;
   function promoCheckInput(text, link) {   // → код ошибки или ''
     var t = String(text == null ? '' : text).replace(/\r\n?/g, '\n').trim(), n = Array.from(t).length, l = String(link == null ? '' : link).trim();
@@ -220,8 +221,14 @@
       var reason = String(d.reason || '').trim(); if (act.reason && reason.length < REASON_MIN) return demoRes({ ok: false, error: 'reason_required' });
       var it = s[key].filter(function (x) { return x.id === d.id; })[0]; if (!it) return demoRes({ ok: false, error: 'not_found' });
       if (act.from.indexOf(it.status) < 0) return demoRes({ ok: false, error: 'state', status: it.status, statusText: it.statusText });
+      var apNote = '';
+      if (key === 'adv' && d.to === 'approved' && d.amount != null) {   // демо: те же проверки суммы, что на сервере
+        var av = d.amount; if (typeof av !== 'number' || av !== Math.floor(av) || av <= 0) return demoRes({ ok: false, error: 'bad_amount' });
+        if (av > it.amount) return demoRes({ ok: false, error: 'over_requested', requested: it.amount }); if (av < ADV_MIN || av % ADV_STEP) return demoRes({ ok: false, error: 'bad_amount', step: ADV_STEP, min: ADV_MIN });
+        apNote = av !== it.amount ? ' | запрошено ' + money(it.amount) + ' → одобрено ' + money(av) : ' | сумма ' + money(av); if (av !== it.amount) { it.requested = it.amount; it.amount = av; }
+      }
       it.status = CLOSED_CODE[d.to] || d.to; it.statusText = act.text; if (reason) it.answer = reason; if (key === 'adv' && d.to === 'issued' && !(it.paid > 0)) it.paid = it.amount;
-      logit(K.label + ': ' + act.text, it.id, it.name + (reason ? ' | причина: ' + reason : '')); store(DEMOK, s); return demoRes({ ok: true, status: it.status, statusText: act.text });
+      logit(K.label + ': ' + act.text, it.id, it.name + apNote + (reason ? ' | причина: ' + reason : '')); store(DEMOK, s); return demoRes(key === 'adv' && d.to === 'approved' ? { ok: true, status: it.status, statusText: act.text, amount: it.amount, requested: it.requested || it.amount } : { ok: true, status: it.status, statusText: act.text });
     }
     if (action === 'adminBlock' || action === 'adminUnblock') {
       var ph = String(d.phone || '').replace(/\D/g, '').replace(/^8(?=\d{10}$)/, '7'); if (ph.length === 10) ph = '7' + ph; if (!/^79\d{9}$/.test(ph)) return demoRes({ ok: false, error: 'bad_phone' });
@@ -272,7 +279,7 @@
     });
   }
   function withGeo(d) { return geoGet().then(function (g) { if (g) { d.lat = g.lat; d.lon = g.lon; if (g.accuracy !== undefined) d.accuracy = g.accuracy; } return d; }); }
-  var ERR = { network: 'Нет связи с сервером. Проверьте интернет и повторите.', server: 'Сервер ответил ошибкой. Повторите через минуту.', busy: 'Таблица занята другим действием. Повторите через несколько секунд.', disabled: 'Кабинет админа выключен (ADMIN_ENABLED=0).', unknown_action: 'Сервер не знает этого действия: обновите Code.gs (см. DEPLOY.md).', not_found: 'Запись не найдена — возможно, строку удалили в таблице.', bad_phone: 'Нужен мобильный номер РФ, например +7 900 123-45-67.', reason_required: 'Укажите причину (не короче 3 символов).', req_limit: 'Лимит запросов кода исчерпан.', bad_amount: 'Сумма должна быть целым числом больше нуля.', over_limit: 'Сумма больше лимита аванса на неделю (' + PAID_MAX + ' ₽).', reason_long: 'Причина слишком длинная (до 300 символов).', unavailable: 'Файл сейчас недоступен на Яндекс Диске.', demo: 'В демо файлы не открываются.' };
+  var ERR = { network: 'Нет связи с сервером. Проверьте интернет и повторите.', server: 'Сервер ответил ошибкой. Повторите через минуту.', busy: 'Таблица занята другим действием. Повторите через несколько секунд.', disabled: 'Кабинет админа выключен (ADMIN_ENABLED=0).', unknown_action: 'Сервер не знает этого действия: обновите Code.gs (см. DEPLOY.md).', not_found: 'Запись не найдена — возможно, строку удалили в таблице.', bad_phone: 'Нужен мобильный номер РФ, например +7 900 123-45-67.', reason_required: 'Укажите причину (не короче 3 символов).', req_limit: 'Лимит запросов кода исчерпан.', bad_amount: 'Сумма должна быть целым числом больше нуля.', over_requested: 'Нельзя одобрить больше, чем заказал сотрудник.', bad_step: 'Сумма должна быть кратна ' + ADV_STEP + ' ₽ и не меньше ' + ADV_MIN + ' ₽.', over_limit: 'Сумма больше лимита аванса на неделю (' + PAID_MAX + ' ₽).', reason_long: 'Причина слишком длинная (до 300 символов).', unavailable: 'Файл сейчас недоступен на Яндекс Диске.', demo: 'В демо файлы не открываются.' };
   function errText(r) { return ERR[r && r.error] || 'Не получилось выполнить действие. Повторите.'; }
   function mskHm(ms) { return new Date(ms + 3 * 3600000).toISOString().slice(11, 16); }
   function notifyErr(r) {   // человеческие тексты отказов рассылки
@@ -479,6 +486,38 @@
       });
     });
   }
+  /* ADV_APPROVE_V1 «Одобрить»: сумму можно уменьшить (не больше заказанной, кратно ADV_STEP). Сотруднику уходит сообщение в Telegram с одобренной суммой */
+  function approveFlow(it) {
+    if (!requireOnline()) return;
+    var done = false, ctl, busy = false, req = it.amount;
+    function fin() { if (done) return; done = true; ctl.close(true); }
+    var inp = h('input', { class: 'inp', type: 'text', inputmode: 'numeric', autocomplete: 'off', maxlength: '6', 'data-testid': 'appr-amt', 'aria-label': 'Одобрить, ₽', value: String(req) });
+    var err = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'appr-err' });
+    var yes = h('button', { class: 'btn ok', type: 'button', 'data-testid': 'appr-save' }, 'Одобрить');
+    function parse() { var t = inp.value.replace(/[\s\u00a0]/g, ''); if (!/^\d+$/.test(t)) return NaN; return parseInt(t, 10); }
+    function check() {
+      var v = parse(), m = '';
+      if (inp.value.trim() === '') m = 'Введите сумму.'; else if (!isFinite(v) || v <= 0) m = ERR.bad_amount; else if (v > req) m = ERR.over_requested; else if (v < ADV_MIN || v % ADV_STEP) m = ERR.bad_step;
+      err.textContent = m; err.hidden = !m; inp.setAttribute('aria-invalid', m ? 'true' : 'false'); yes.disabled = !!m || busy; yes.textContent = !m && v !== req ? 'Одобрить ' + money(v) : 'Одобрить'; return !m;
+    }
+    inp.addEventListener('input', check);
+    yes.addEventListener('click', function () {
+      if (busy || !check()) return; var v = parse(); busy = true; yes.disabled = true; yes.textContent = 'Сохраняем…';
+      call('adminAdvanceDecide', { id: it.id, to: 'approved', from: it.statusText, amount: v }).then(function (r) {
+        busy = false;
+        if (r.ok) { fin(); toast('Одобрено: ' + money(r.amount != null ? r.amount : v) + (v !== req ? ' (заказано ' + money(req) + ')' : '')); reloadAfter('adv'); return; }
+        if (r.error === 'state') { fin(); toast('Статус уже изменён: «' + (r.statusText || r.status) + '». Список обновлён.', 'warn'); reloadAfter('adv'); return; }
+        if (r.error === 'auth' || r.error === 'disabled') { fin(); return; }
+        check(); err.textContent = r.error === 'bad_amount' && r.step ? ERR.bad_step : errText(r); err.hidden = false;
+      });
+    });
+    var body = h('div', { class: 'gap12' }, h('p', { class: 'nm', 'data-testid': 'appr-who', text: it.name + ' · заказано ' + money(req) }),
+      h('div', { class: 'field' }, h('label', { class: 'l', text: 'Одобрить, ₽' }), inp, err),
+      h('p', { class: 'help', text: 'Можно уменьшить сумму: не больше заказанной, кратно ' + ADV_STEP + ' ₽. Сотрудник получит сообщение в Telegram с одобренной суммой (если Telegram привязан); изменение записывается в журнал.' }));
+    ctl = openDialog({ title: 'Одобрить аванс', dialog: true, alert: true, focus: function () { inp.focus(); inp.select(); }, onClose: function () { done = true; }, body: body,
+      footer: h('div', { class: 'btnrow' }, h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'appr-cancel', onclick: fin }, 'Отмена'), yes) });
+    check();
+  }
   /* «Изменить сумму»: фактически выданный аванс (может отличаться от запрошенного, в том числе у уже выданных). Сотруднику Telegram не уходит */
   function paidFlow(it, cur) {
     var done = false, ctl, busy = false;
@@ -540,7 +579,7 @@
   function actsRow(kind, it, card) {
     var list = KINDS[kind].acts.filter(function (a) { return a.from.indexOf(it.status) >= 0; });
     if (!list.length) return null;
-    return h('div', { class: 'acts' }, list.map(function (a) { return h('button', { class: 'btn ' + (a.cls === 'ghost' ? 'ghost' : a.cls === 'secondary' ? 'secondary' : a.cls), type: 'button', 'data-testid': 'act-' + a.to + '-' + it.id, onclick: function () { runAct(kind, it, a, card); } }, a.label); }));
+    return h('div', { class: 'acts' }, list.map(function (a) { return h('button', { class: 'btn ' + (a.cls === 'ghost' ? 'ghost' : a.cls === 'secondary' ? 'secondary' : a.cls), type: 'button', 'data-testid': 'act-' + a.to + '-' + it.id, onclick: function () { if (kind === 'adv' && a.to === 'approved') approveFlow(it); else runAct(kind, it, a, card); } }, a.label); }));
   }
   function headRow(it, right, meta) { return h('div', { class: 'hd' }, h('div', { class: 'grow' }, h('div', { class: 'nm', text: it.name || '—' }), h('div', { class: 'meta', text: meta })), right); }
   function bankMark(name, cls) {   // реальный логотип из banks/ или значок с цветом банка и инициалами
@@ -570,6 +609,7 @@
     var issued = it.status === 'issued', paid = issued ? (it.paid > 0 ? it.paid : it.amount) : 0;
     c.appendChild(headRow(it, h('div', { class: 'amt num', 'data-testid': 'adm-amt-' + it.id, text: money(issued ? paid : it.amount) }), phoneLine(x2(it)) + ' · ' + dmyT(it.created)));
     c.appendChild(h('div', null, statusChip('adv', it)));
+    if (it.requested > it.amount && !issued) c.appendChild(h('div', { class: 'cap', 'data-testid': 'adm-apprreq-' + it.id, text: 'заказано ' + money(it.requested) + ' · одобрено ' + money(it.amount) }));
     if (issued) c.appendChild(h('div', { class: 'paidrow' + (paid !== it.amount ? ' diff' : ''), 'data-testid': 'adm-paid-' + it.id },
       h('div', { class: 'grow' }, h('div', { class: 'pl', text: 'Выдано' }), h('div', { class: 'pv num', 'data-testid': 'adm-paidv-' + it.id, text: money(paid) }), h('div', { class: 'cap', 'data-testid': 'adm-req-' + it.id, text: paid !== it.amount ? 'запрошено ' + money(it.amount) + ' · изменено админом' : 'запрошено ' + money(it.amount) })),
       h('button', { class: 'btn secondary cp', type: 'button', 'data-testid': 'adm-paid-edit-' + it.id, onclick: function () { paidFlow(it, paid); } }, 'Изменить сумму')));

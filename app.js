@@ -389,10 +389,21 @@
         navigator.geolocation.getCurrentPosition(function (p) {
           var c = p && p.coords; if (!c || typeof c.latitude !== 'number' || typeof c.longitude !== 'number' || !isFinite(c.latitude) || !isFinite(c.longitude)) return fin({ ok: false, reason: 'unavailable' });
           fin({ ok: true, lat: c.latitude, lon: c.longitude, accuracy: typeof c.accuracy === 'number' && isFinite(c.accuracy) ? Math.round(c.accuracy) : undefined });
-        }, function (e) { fin({ ok: false, reason: e && e.code === 1 ? 'denied' : e && e.code === 3 ? 'timeout' : 'unavailable' }); }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
+        }, function (e) { fin({ ok: false, reason: e && e.code === 1 ? 'denied' : e && e.code === 3 ? 'timeout' : 'unavailable' }); }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });   // GEO_FRESH_V1: всегда свежая точка, без кэша браузера
       } catch (e) { fin({ ok: false, reason: 'unavailable' }); }
     });
   }
+  /* GEO_FRESH_V1: при каждом открытии/входе и возврате в приложение - свежая геопозиция на сервер (перезаписывает прежнюю). Отказ/ошибка - молча, работа не блокируется */
+  var geoLast = 0;
+  function geoPing(reason) {
+    if (!LIVE || !session() || geoPing.busy || Date.now() - geoLast < 60000) return Promise.resolve(null);
+    geoPing.busy = true;
+    return geoGet().then(function (g) {
+      if (!g.ok) { geoPing.busy = false; return g; }
+      return api('geoPing', { lat: g.lat, lon: g.lon, accuracy: g.accuracy, reason: reason || 'open' }).then(function (r) { geoPing.busy = false; if (r && r.ok) geoLast = Date.now(); return r; }, function () { geoPing.busy = false; return null; });
+    }, function () { geoPing.busy = false; return null; });
+  }
+  window.__geoPing = geoPing;
   var GEO_WHY = {
     denied: 'Доступ к местоположению запрещён для этой страницы.', unavailable: 'Телефон не смог определить местоположение. Включите геолокацию (GPS) в настройках телефона.',
     timeout: 'Местоположение не определилось за 10 секунд. Выйдите на открытое место, включите GPS и повторите.', unsupported: 'Этот браузер не умеет определять местоположение. Откройте приложение в Chrome или Safari.'
@@ -438,7 +449,7 @@
   }
   if (LIVE) {
     setInterval(autoCheck, 30000);
-    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { autoCheck(); armAuto(); } });
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { autoCheck(); armAuto(); geoPing('resume'); } });
     window.addEventListener('pageshow', function () { autoCheck(); armAuto(); });
   }
   function api(action, body) {
@@ -2044,7 +2055,7 @@
       d.advances.slice().sort(function (a, b) { return (a.date + a.time) < (b.date + b.time) ? 1 : -1; }).forEach(function (a) {
         var st = ADV_ST[a.status];
         ul.appendChild(h('div', { class: 'hist', role: 'listitem', 'data-status': a.status }, h('div', { class: 'grow' }, h('div', { class: 'row between' }, h('span', { class: 'am num', 'data-testid': 'adv-hist-amt', text: money(a.amount) }), chip(a.status === 'issued' ? 'Выдан в субботу' : st[0], st[1], a.status === 'issued' ? 'check' : a.status === 'rejected' || a.status === 'cancelled' ? 'x' : 'clock')),
-          h('div', { class: 'cap', text: 'Заказ ' + dmy(a.date) + ' в ' + a.time + (a.payDate ? ' · выдача ' + dm(a.payDate) : '') }), a.status === 'issued' && a.requested > 0 && a.requested !== a.amount ? h('div', { class: 'cap', 'data-testid': 'adv-hist-req', text: 'Выдано ' + money(a.amount) + ', вы запрашивали ' + money(a.requested) }) : null, a.comment ? h('div', { class: 'cm', text: '«' + a.comment + '»' }) : null, payLine(a, 'adv-hist-pay'), a.answer || a.status === 'rejected' ? h('div', { class: 'ans', 'data-testid': 'adv-answer', text: (a.status === 'rejected' ? 'Причина: ' : 'Ответ: ') + (a.answer || 'не указана, уточните у администратора') }) : null)));
+          h('div', { class: 'cap', text: 'Заказ ' + dmy(a.date) + ' в ' + a.time + (a.payDate ? ' · выдача ' + dm(a.payDate) : '') }), a.status === 'issued' && a.requested > 0 && a.requested !== a.amount ? h('div', { class: 'cap', 'data-testid': 'adv-hist-req', text: 'Выдано ' + money(a.amount) + ', вы запрашивали ' + money(a.requested) }) : a.status === 'approved' && a.requested > a.amount ? h('div', { class: 'cap', 'data-testid': 'adv-hist-appr', text: 'Одобрено ' + money(a.amount) + ', вы заказывали ' + money(a.requested) }) : null, a.comment ? h('div', { class: 'cm', text: '«' + a.comment + '»' }) : null, payLine(a, 'adv-hist-pay'), a.answer || a.status === 'rejected' ? h('div', { class: 'ans', 'data-testid': 'adv-answer', text: (a.status === 'rejected' ? 'Причина: ' : 'Ответ: ') + (a.answer || 'не указана, уточните у администратора') }) : null)));
       }); hist.appendChild(ul); }
     v.appendChild(hist);
     applyWidths(v); return v;
@@ -2158,7 +2169,7 @@
     S.blocked = false; armAuto();
     if (!/^#\/(home|cal|ops|ded|adv|me|promo|jobs|mydata)$/.test(location.hash)) location.hash = '#/home';
     S.data = null; render();
-    fetchMe().then(function (r) { applyMe(r); render(); }, function () { if (S.blocked || !session()) return; clear(root); root.appendChild(h('div', { class: 'view', id: 'main' }, emptyState('wifioff', 'Нет данных', 'Подключитесь к интернету, чтобы загрузить данные.'), h('button', { class: 'btn', type: 'button', 'data-testid': 'retry-load', onclick: boot }, 'Повторить'))); });
+    fetchMe().then(function (r) { applyMe(r); render(); geoPing('open'); }, function () { if (S.blocked || !session()) return; clear(root); root.appendChild(h('div', { class: 'view', id: 'main' }, emptyState('wifioff', 'Нет данных', 'Подключитесь к интернету, чтобы загрузить данные.'), h('button', { class: 'btn', type: 'button', 'data-testid': 'retry-load', onclick: boot }, 'Повторить'))); });
   }
 
   /* ---------- панель разработчика: «Telegram администратора» ---------- */
