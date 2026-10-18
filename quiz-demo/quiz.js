@@ -42,15 +42,21 @@ function confetti(n){var cols=['#f4c430','#ff9a1a','#1fae4b','#8f75ff','#fff','#
 function flyStars(n,from,minus){var b=$('.bal');if(!b)return;var r=b.getBoundingClientRect(),f=from?from.getBoundingClientRect():{left:innerWidth/2,top:innerHeight/2,width:0,height:0};for(var i=0;i<Math.min(n,12);i++){var s=h('span',{class:'flystar',text:minus?'💥':'⭐'});var x=minus?r.left+r.width/2:f.left+f.width/2+(Math.random()*60-30),y=minus?r.top+r.height/2:f.top+f.height/2;var tx=minus?f.left+f.width/2+(Math.random()*80-40):r.left+r.width/2,ty=minus?f.top+f.height/2:r.top+r.height/2;s.style.left=x+'px';s.style.top=y+'px';s.style.setProperty('--dx',(tx-x)+'px');s.style.setProperty('--dy',(ty-y)+'px');s.style.animationDelay=(i*.07)+'s';fx.appendChild(s);(function(s){setTimeout(function(){s.remove()},1800)})(s)}setTimeout(function(){b.classList.add('bump');snd('s_coin',.6);setTimeout(function(){b.classList.remove('bump')},700)},900)}
 function dim(ms){var d=$('.dim');if(!d)return;d.classList.add('on');setTimeout(function(){d.classList.remove('on')},FAST?150:ms||900)}
 /* ---------- game ---------- */
-function pick(topic){var pool=Q.slice(),by={1:[],2:[],3:[]};pool.forEach(function(q){by[q.level].push(q)});[1,2,3].forEach(function(l){by[l].sort(function(){return Math.random()-.5})});
-  var want=[1,1,1,2,2,2,2,3,3,3],out=[];want.forEach(function(l){var c=by[l].shift()||by[2].shift()||by[1].shift()||by[3].shift();if(c)out.push(c)});return out}
-function newGame(topic){clearT();ladOpen=false;G={topic:topic||'mix',qs:pick(topic||'mix'),i:0,phase:'q',fifty:false,help:false,aud:false,removed:[],sel:null,helpTxt:null,res:null,startBal:st.stars};screen='game';askQ(true)}
+var COOLDOWN_DAYS=30;   /* прототип: история вопросов в localStorage; в рабочей версии — на сервере по сотруднику */
+function seenMap(){try{return JSON.parse(localStorage.getItem('quizDemo.seen'))||{}}catch(e){return{}}}
+function markSeen(id){var m=seenMap();m[id]=Date.now();localStorage.setItem('quizDemo.seen',JSON.stringify(m))}
+function pick(){var m=seenMap(),now=Date.now(),cd=COOLDOWN_DAYS*864e5,used={},plan=[1,1,1,2,2,2,3,3,3,3],out=[];   /* ступени 1–3 лёгкие, 4–6 средние (6 = несгораемая), 7–10 сложные */
+  plan.forEach(function(l){var pool=Q.filter(function(q){return q.level===l&&!used[q.id]&&q.active!==false});
+    var fresh=pool.filter(function(q){return !m[q.id]}),cool=pool.filter(function(q){return m[q.id]&&now-m[q.id]>cd}),rest=pool.slice().sort(function(a,b){return (m[a.id]||0)-(m[b.id]||0)});
+    var src=fresh.length?fresh:cool.length?cool:rest.slice(0,Math.max(1,Math.ceil(rest.length/3)));var q=src[Math.floor(Math.random()*src.length)];if(q){used[q.id]=1;out.push(q)}});
+  return out}
+function newGame(topic){clearT();ladOpen=false;G={topic:'mix',qs:pick(),i:0,phase:'q',fifty:false,help:false,aud:false,removed:[],sel:null,helpTxt:null,res:null,startBal:st.stars};screen='game';askQ(true)}
 function safeStars(i){var s=0;for(var k=0;k<i;k++)if(SAFE[k])s=LADDER[k];return s}
 function askQ(first){var q=G.qs[G.i];G.phase='dim';G.sel=null;G.removed=[];G.helpTxt=null;G.shown=false;poll=null;render();dim(1100);snd('s_lock',.35);
   later(function(){G.phase='q';render();startMusic();
     later(function(){document.querySelectorAll('.ans').forEach(function(a,i){setTimeout(function(){a.classList.add('in')},FAST?0:i*380)});later(function(){G.shown=true},1700)},FAST?50:700);
     voice('q'+q.id,q.q+'. '+q.a.map(function(a,j){return L[j]+': '+a}).join('. '))},1000)}
-function choose(j){if(!G||G.phase!=='q'||G.removed.indexOf(j)>=0)return;var q=G.qs[G.i];G.sel=j;G.phase='lock';stopVoice();render();
+function choose(j){if(!G||G.phase!=='q'||G.removed.indexOf(j)>=0)return;var q=G.qs[G.i];markSeen(q.id);G.sel=j;G.phase='lock';stopVoice();render();
   snd('s_lock',.8);voice(Math.random()<.5?'lock1':'lock2','Это ваш окончательный ответ? Принято.');
   later(function(){reveal(j===q.correct)},3800)}   /* драматическая пауза */
 function reveal(ok){var q=G.qs[G.i];G.phase=ok?'ok':'bad';stopMusic();render();
