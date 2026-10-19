@@ -98,6 +98,7 @@
     trend: '<path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/>',
     file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
     briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+    star: '<path d="M12 2.8l2.8 5.7 6.3.9-4.6 4.4 1.1 6.3L12 17.1l-5.6 3 1.1-6.3L2.9 9.4l6.3-.9z"/>',
     gift: '<path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>',
     car: '<path d="M5 17h14M3 13l2-6a2 2 0 0 1 2-1.4h10a2 2 0 0 1 2 1.4l2 6v4a1 1 0 0 1-1 1h-1.5a1 1 0 0 1-1-1v-1H7.5v1a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><circle cx="7.5" cy="13.5" r="1"/><circle cx="16.5" cy="13.5" r="1"/>',
     paper: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'
@@ -697,10 +698,10 @@
   function explReturnedCount() { return S.data ? S.data.cases.filter(function (c) { return c.expl && c.expl.status === 'waiting' && c.expl.returned; }).length : 0; }
   function waitingCount() { return S.data ? S.data.cases.filter(function (c) { return c.expl && c.expl.status === 'waiting'; }).length : 0; }
   function returnedCount() { return S.data ? (S.data.incidents || []).filter(function (i) { return i.status === 'returned'; }).length : 0; }
-  var TABS0 = [['home', 'Главная', 'home'], ['cal', 'Календарь', 'cal'], ['ops', 'Операции', 'box'], ['ded', 'Вычеты', 'ded'], ['adv', 'Аванс', 'wallet'], ['me', 'Профиль', 'user']], TABS = TABS0;
+  var TABS0 = [['home', 'Главная', 'home'], ['cal', 'Календарь', 'cal'], ['ops', 'Операции', 'box'], ['ded', 'Вычеты', 'ded'], ['adv', 'Аванс', 'wallet'], ['stars', 'Звёзды', 'star'], ['me', 'Профиль', 'user']], TABS = TABS0;   // STARS_V1: вкладка игры
   function isForeman() { return !!(S.data && S.data.foreman); }   // FOREMAN_V1: вкладка «Бригада» только когда сервер прислал блок foreman
   function renderTabs() {
-    clear(tabbar); TABS = isForeman() ? TABS0.slice(0, 5).concat([['brig', 'Бригада', 'trend']], TABS0.slice(5)) : TABS0; tabbar.style.gridTemplateColumns = 'repeat(' + TABS.length + ', 1fr)';
+    clear(tabbar); TABS = isForeman() ? TABS0.slice(0, 5).concat([['brig', 'Бригада', 'trend']], TABS0.slice(5)) : TABS0; tabbar.style.gridTemplateColumns = 'repeat(' + TABS.length + ', 1fr)'; tabbar.classList.toggle('many', TABS.length > 6); tabbar.classList.toggle('many8', TABS.length > 7);
     TABS.forEach(function (t) {
       var n = t[0] === 'ded' ? waitingCount() + returnedCount() : 0, wn = t[0] === 'ded' ? waitingCount() : 0, rn = t[0] === 'ded' ? returnedCount() : 0;
       tabbar.appendChild(h('a', { class: 'tab', href: '#/' + t[0], 'aria-current': (S.route === t[0] || (t[0] === 'home' && (S.route === 'promo' || S.route === 'jobs')) || (t[0] === 'me' && S.route === 'mydata')) ? 'page' : null, 'data-tab': t[0], 'aria-label': t[1] + (wn ? ', ждут объяснения: ' + wn : '') + (rn ? ', возвращено на доработку: ' + rn : '') },
@@ -2090,7 +2091,7 @@
     return v;
   }
   function logout(notice) {   // notice (строка) - автовыход с сообщением на экране входа; без неё - обычный выход
-    clearTimeout(autoT); clearInterval(L.timer);
+    clearTimeout(autoT); S.stars = null; clearInterval(L.timer);
     localStorage.removeItem(SESSK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.card'); localStorage.removeItem('pr.iadd');   // сессия, кэш данных, черновики
     openStack.slice().forEach(function (c) { c.close(true); });
     S.data = null; S.calc = null; S.stale = false; S.consent = null; L = { step: 'phone', phone: '', timer: null, readyAt: 0, notice: typeof notice === 'string' ? notice : '' };
@@ -2514,8 +2515,27 @@
       f.damageShare != null ? h('li', { text: 'Качество: ' + fmPct(f.damageShare) + ' от брака и ошибок бригады вычитается из вознаграждения.' }) : null)));
     return v;
   }
-  var VIEWS = { home: viewHome, ops: viewOps, cal: viewCal, ded: viewDed, adv: viewAdv, me: viewMe, promo: viewPromo, jobs: viewJobs, mydata: viewMyData, brig: viewBrig };
-  var TITLES = { promo: 'Акции и бонусы', jobs: 'Вакансии', mydata: 'Мои данные', brig: 'Бригада' };
+  // STARS_V1: вкладка «Звёзды» — баланс, рейтинг, вход в игру (сама игра — stars/, логика и ответы на сервере)
+  function viewStars() {
+    var v = h('main', { class: 'view stack', id: 'main', 'data-testid': 'stars-view' }); v.appendChild(pageTop('Звёзды', 'Игра «Кто хочет стать звездой склада?»'));
+    if (S.stars && Date.now() - (S.starsAt || 0) > 60000) S.stars = null;
+    var I = S.stars, card = h('section', { class: 'card stars-card' });
+    if (!LIVE) card.appendChild(h('p', { class: 'note-s', text: 'Игра работает только в рабочем режиме приложения.' }));
+    else if (!I) { card.appendChild(h('p', { class: 'note-s', text: 'Загружаем…' })); if (!S.starsLoading) { S.starsLoading = true; api('starsInfo').then(function (r) { S.starsLoading = false; S.stars = r && r.ok ? r : { error: (r && r.error) || 'fail' }; S.starsAt = Date.now(); if (S.route === 'stars') render(); }, function () { S.starsLoading = false; S.stars = { error: 'net' }; S.starsAt = Date.now(); if (S.route === 'stars') render(); }); } }
+    else if (I.error) card.appendChild(h('p', { class: 'note-s', text: I.error === 'consent' ? 'Сначала примите согласие.' : 'Не удалось загрузить. Обновите страницу.' }));
+    else {
+      card.appendChild(h('div', { class: 'stars-bal', 'data-testid': 'stars-bal' }, h('span', { text: '⭐' }), h('b', { text: String(I.balance) }), h('small', { text: 'звёзд на балансе · 1 ⭐ = ' + I.cfg.rub + ' ₽ при обмене' })));
+      card.appendChild(h('p', { class: 'note-s', text: I.playedToday ? 'Сегодня вы уже сыграли — следующая игра завтра.' : I.active ? 'У вас есть незаконченная игра.' : 'Сегодняшняя игра доступна: 10 вопросов, 1 верный ответ = 1 ⭐.' }));
+    }
+    card.appendChild(h('a', { class: 'btn', href: 'stars/', 'data-testid': 'stars-play', text: I && I.playedToday ? 'Открыть игру' : '▶ Играть' }));
+    card.appendChild(h('div', { class: 'stars-links' }, h('a', { class: 'btn secondary', href: 'stars/#ex', 'data-testid': 'stars-ex', text: 'Обмен' }), h('a', { class: 'btn secondary', href: 'stars/#rate', text: 'Рейтинг' })));
+    v.appendChild(card);
+    if (I && I.rating && I.rating.length) { var l = h('section', { class: 'card' }, h('h2', { text: 'Рейтинг месяца' })); I.rating.slice(0, 5).forEach(function (r) { l.appendChild(h('div', { class: 'stars-row' + (r.me ? ' me' : '') }, h('span', { text: (['🥇', '🥈', '🥉'][r.place - 1] || r.place + '.') + ' ' + r.name + (r.me ? ' (вы)' : '') }), h('b', { text: '⭐ ' + r.stars }))); }); v.appendChild(l); }
+    v.appendChild(h('p', { class: 'note-s', text: 'Штраф за ошибку — только звёздами, из выплат деньги за игру не удерживаются. Обмен до ' + (I && I.cfg ? I.cfg.cap.toLocaleString('ru-RU') : '5 000') + ' ₽ в месяц, после одобрения админом.' }));
+    return v;
+  }
+  var VIEWS = { home: viewHome, ops: viewOps, cal: viewCal, ded: viewDed, adv: viewAdv, me: viewMe, promo: viewPromo, jobs: viewJobs, mydata: viewMyData, brig: viewBrig, stars: viewStars };
+  var TITLES = { promo: 'Акции и бонусы', jobs: 'Вакансии', mydata: 'Мои данные', brig: 'Бригада', stars: 'Звёзды' };
   function render() {
     if (!session()) return renderLogin();
     if (S.consent && !S.consent.ok) return renderConsent();
@@ -2536,7 +2556,7 @@
     if (se0) { var ck = clockState(se0); if (ck) { logout(ck === 'closed' ? closedNotice() : staleNotice()); return; } }   // запуск после LOGIN_HOUR_TO или со вчерашней сессией: сразу выход, данные не рисуем
     if (!session()) { renderLogin(); return; }
     S.blocked = false; armAuto();
-    if (!/^#\/(home|cal|ops|ded|adv|me|promo|jobs|mydata|brig)$/.test(location.hash)) location.hash = '#/home';
+    if (!/^#\/(home|cal|ops|ded|adv|me|promo|jobs|mydata|brig|stars)$/.test(location.hash)) location.hash = '#/home';
     S.data = null; render();
     fetchMe().then(function (r) { applyMe(r); render(); geoPing('open'); }, function () { if (S.blocked || !session()) return; clear(root); root.appendChild(h('div', { class: 'view', id: 'main' }, emptyState('wifioff', 'Нет данных', 'Подключитесь к интернету, чтобы загрузить данные.'), h('button', { class: 'btn', type: 'button', 'data-testid': 'retry-load', onclick: boot }, 'Повторить'))); });
   }

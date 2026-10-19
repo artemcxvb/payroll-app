@@ -662,3 +662,11 @@ button.v2-pp { width: 100%; background: none; border-left: 0; border-right: 0; b
 .ks-act { padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; } .ks-act .cap { margin: 2px 0 6px; }
 .ks-pipe { display: flex; gap: 4px; } .ks-st { flex: 1; text-align: center; font-size: 12px; padding: 4px 2px; border-radius: 8px; background: var(--card2); color: var(--muted); }
 .ks-st.on { background: var(--primary-soft); color: var(--primary-strong); font-weight: 700; }
+
+/* STARS_V1 */
+.stars-card .stars-bal{display:flex;align-items:baseline;gap:8px;margin:2px 0 6px}.stars-bal span{font-size:26px}.stars-bal b{font-size:34px;font-weight:800}.stars-bal small{color:var(--muted,#667);font-size:13px}
+.stars-links{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.stars-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line,#e5e7eb)}.stars-row.me{font-weight:700}
+.tabbar.many { padding-left: 0; padding-right: 0; } .tabbar.many .tab { min-width: 0; } .tabbar.many .tab > span:not(.cnt) { font-size: 10.5px; letter-spacing: -.3px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: clip; }
+@media (max-width: 400px) { .tabbar.many .tab > span:not(.cnt) { font-size: 9.5px; } .tabbar.many8 .tab > span:not(.cnt) { font-size: 8.6px; letter-spacing: -.35px; } }
+.stars-card a.btn { text-decoration: none; } .stars-card .note-s { text-align: left; }

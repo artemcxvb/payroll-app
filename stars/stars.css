@@ -157,3 +157,4 @@ input.inp{width:100%;padding:12px;border-radius:10px;border:1px solid #8f9ac0;ba
 .lite .emb .rays,.lite .emb .ring:before,.lite .bal.bump{animation:none}
 @media (prefers-reduced-motion: reduce){.beams,.spot,.spark{display:none}.emb .rays,.emb .ring:before,.ans.sel.pulse .lz,.ans.ok .lz{animation:none}.ans.enter{animation-duration:.01s}}
 .grid.one{grid-template-columns:1fr;gap:7px}.grid.one .ans .lz>.in{height:50px}.grid.one .ans .t{-webkit-line-clamp:2}
+.list .it.me{background:#f4c43014;border-radius:8px;padding-left:6px;padding-right:6px}

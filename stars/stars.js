@@ -1,18 +1,23 @@
 (function(){
 'use strict';
-/* КОНФИГ (предложения на согласование) */
-var CFG={STAR_RUB:10 /* курс обмена: 1 ⭐ = 10 ₽ (решение пользователя); рубли показываются ТОЛЬКО на экране обмена */,
-  LADDER_STARS:[1,2,3,4,5,6,7,8,9,10] /* 1 верный ответ = 1 ⭐ */, SAFE_STEPS:[5] /* 6-я ступень = 6 ⭐ несгораемые */, PENALTY_STARS:1 /* ошибка: −1 ⭐ с баланса, не ниже 0 */, MONTH_CAP_RUB:5000, CALL_SECONDS:30,
-  /* ПРОТОТИП: телефон бригадира задан здесь (страница noindex). В рабочей версии номер придёт с сервера (FOREMAN_PHONES) только вошедшему сотруднику. */
-  FOREMAN:{name:'Егор Ильченко', short:'Егору', tel:'+79774073549', shown:'+7 977 407-35-49'}};
-var RUB=CFG.STAR_RUB, CAP=CFG.MONTH_CAP_RUB, LADDER=CFG.LADDER_STARS, SAFE={}, L='АБВГ' /* как в озвучке; в таблице колонка «Правильный» A–D = А–Г */;CFG.SAFE_STEPS.forEach(function(i){SAFE[i]=true});
+/* STARS_V1: игра «Кто хочет стать звездой склада?» внутри «Мои выплаты». Вся логика игры и правильные ответы — на сервере (Apps Script, действия stars*).
+   Вход — тем же токеном, что и приложение (localStorage pr.session). Телефон бригадира приходит с сервера только вошедшему. */
+var APPC=window.APP_CONFIG||{}, API=APPC.backendUrl||'';
+var CFG={STAR_RUB:10, LADDER_STARS:[1,2,3,4,5,6,7,8,9,10], SAFE_STEPS:[5], PENALTY_STARS:1, MONTH_CAP_RUB:5000, CALL_SECONDS:30};   /* значения по умолчанию; сервер присылает свои (starsInfo.cfg) */
+var RUB=CFG.STAR_RUB, CAP=CFG.MONTH_CAP_RUB, LADDER=CFG.LADDER_STARS, SAFE={5:true}, L='АБВГ';
 function lr(i){return '⭐\u00a0'+LADDER[i]}
-var LS='quizDemo.v3', st=load(), Q=[], G=null, muted=false, audioOn=false, cur=null, music=null, timers=[], screen='menu', ladOpen=false, poll=null;
+var INFO=null, Q=[], G=null, muted=false, audioOn=false, timers=[], screen='menu', ladOpen=false, poll=null, MAN={}, busy=false;
 var $=function(s){return document.querySelector(s)}, app=$('#app'), fx=$('#fx');
 var P=new URLSearchParams(location.search), FAST=P.has('fast'), ROOT=document.documentElement;
-function load(){try{return JSON.parse(localStorage.getItem(LS))||null}catch(e){return null}}
-function save(){try{localStorage.setItem(LS,JSON.stringify(st))}catch(e){}}   /* приватный режим / переполнение — не падаем */
-if(!st) st={stars:12,streak:2,best:6,lastPlay:null,history:[],requests:[{id:1,stars:30,rub:300,at:'15.10.2026',status:'approved'}]};
+var st={get stars(){return INFO?INFO.balance:0}};
+function session(){try{return JSON.parse(localStorage.getItem('pr.session'))||null}catch(e){return null}}
+function api(action,body){var se=session(),b={action:action};for(var k in (body||{}))b[k]=body[k];if(se&&se.token)b.token=se.token;
+  return fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(b),redirect:'follow'}).then(function(r){return r.json()}).catch(function(){return {ok:false,error:'network'}})
+    .then(function(r){if(r&&(r.error==='auth'||r.error==='closed'||r.error==='blocked'))needLogin(r.error);return r})}
+var ERR={network:'Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.',played_today:'Сегодня вы уже сыграли. Следующая игра — завтра.',no_questions:'Вопросы пока не готовы. Попробуйте позже.',not_enough:'Недостаточно звёзд.',cap:'Превышен лимит обмена за месяц.',bad_amount:'Неверное количество звёзд.',rate_limit:'Слишком много заявок. Попробуйте позже.',no_game:'Игра закрыта. Откройте вкладку заново.',step:'Ответ уже принят.',consent:'Сначала примите согласие в приложении.',server:'Ошибка сервера. Попробуйте ещё раз.'};
+function errText(e){return ERR[e]||('Ошибка: '+(e||'неизвестно'))}
+var loginNeeded=null;function needLogin(e){loginNeeded=e;G=null;clearT();stopVoice();stopMusic();screen='login';render()}
+
 function h(tag,attrs){var e=document.createElement(tag);attrs=attrs||{};for(var k in attrs){var v=attrs[k];if(k==='class')e.className=v;else if(k==='text')e.textContent=v;else if(k==='html')e.innerHTML=v;else if(k.slice(0,2)==='on')e.addEventListener(k.slice(2),v);else if(v!=null&&v!==false)e.setAttribute(k,v)}var add=function(c){if(c==null)return;if(Array.isArray(c))return c.forEach(add);e.appendChild(typeof c==='string'?document.createTextNode(c):c)};for(var i=2;i<arguments.length;i++)add(arguments[i]);return e}
 function later(fn,ms){var t=setTimeout(fn,FAST?Math.min(ms,250):ms);timers.push(t);return t}
 function clearT(){timers.forEach(clearTimeout);timers=[]}
@@ -67,72 +72,70 @@ document.addEventListener('visibilitychange',function(){if(!AC)return;if(documen
 function confetti(n){var cols=['#f4c430','#ff9a1a','#1fae4b','#8f75ff','#fff','#4a6cff'];n=Math.min(n||60,ROOT.classList.contains('lite')?20:50);for(var i=0;i<n;i++){var c=h('i',{class:'conf'});c.style.left=Math.random()*100+'vw';c.style.background=cols[i%cols.length];c.style.animationDuration=(2+Math.random()*2.5)+'s';c.style.animationDelay=Math.random()*.8+'s';fx.appendChild(c);(function(c){setTimeout(function(){c.remove()},5500)})(c)}}
 function flyStars(n,from,minus){var b=$('.bal');if(!b)return;var r=b.getBoundingClientRect(),f=from?from.getBoundingClientRect():{left:innerWidth/2,top:innerHeight/2,width:0,height:0};for(var i=0;i<Math.min(n,12);i++){var s=h('span',{class:'flystar',text:minus?'💥':'⭐'});var x=minus?r.left+r.width/2:f.left+f.width/2+(Math.random()*60-30),y=minus?r.top+r.height/2:f.top+f.height/2;var tx=minus?f.left+f.width/2+(Math.random()*80-40):r.left+r.width/2,ty=minus?f.top+f.height/2:r.top+r.height/2;s.style.left=x+'px';s.style.top=y+'px';s.style.setProperty('--dx',(tx-x)+'px');s.style.setProperty('--dy',(ty-y)+'px');s.style.animationDelay=(i*.07)+'s';fx.appendChild(s);(function(s){setTimeout(function(){s.remove()},1800)})(s)}setTimeout(function(){b.classList.add('bump');snd('s_coin',.6);setTimeout(function(){b.classList.remove('bump')},700)},900)}
 function dim(ms){var d=$('.dim');if(!d)return;d.classList.add('on');setTimeout(function(){d.classList.remove('on')},FAST?150:ms||900)}
-/* ---------- game ---------- */
-var AUDIO='a3/';   /* новая папка: SW приложения отдаёт mp3 из кеша (stale-while-revalidate, ignoreSearch) — новое имя гарантирует свежие файлы */
-var COOLDOWN_DAYS=30;   /* прототип: история вопросов в localStorage; в рабочей версии — на сервере по сотруднику */
-function seenMap(){try{return JSON.parse(localStorage.getItem('quizDemo.seen'))||{}}catch(e){return{}}}
-function markSeen(id){var m=seenMap();m[id]=Date.now();try{localStorage.setItem('quizDemo.seen',JSON.stringify(m))}catch(e){}}
-function pick(){var m=seenMap(),now=Date.now(),cd=COOLDOWN_DAYS*864e5,used={},plan=[1,1,1,2,2,2,3,3,3,3],out=[];   /* ступени 1–3 лёгкие, 4–6 средние (6 = несгораемая), 7–10 сложные */
-  plan.forEach(function(l){var pool=Q.filter(function(q){return q.level===l&&!used[q.id]&&q.active!==false});
-    var fresh=pool.filter(function(q){return !m[q.id]}),cool=pool.filter(function(q){return m[q.id]&&now-m[q.id]>cd}),rest=pool.slice().sort(function(a,b){return (m[a.id]||0)-(m[b.id]||0)});
-    var src=fresh.length?fresh:cool.length?cool:rest.slice(0,Math.max(1,Math.ceil(rest.length/3)));var q=src[Math.floor(Math.random()*src.length)];if(q){used[q.id]=1;out.push(q)}});
-  return out}
-function newGame(topic){clearT();clearInterval(callT);stopVoice();poll=null;ladOpen=false;G={topic:'mix',qs:forceQ(pick()),i:0,phase:'q',fifty:false,help:false,aud:false,removed:[],sel:null,helpTxt:null,res:null,startBal:st.stars,call:null};screen='game';pushNav();preload(['lock1','lock2','ok1','ok2','ok3','bad','safe','ladder','fifty','help','poll','penalty','s_lock','s_correct','s_wrong','s_coin','m_suspense']);askQ(true)}
-function forceQ(a){var f=+P.get('q');if(f){var q=Q.filter(function(x){return x.id===f})[0];if(q)a[0]=q}return a}   /* отладка: ?q=ID — первым вопросом */
-function safeStars(i){var s=0;for(var k=0;k<i;k++)if(SAFE[k])s=LADDER[k];return s}
-function askQ(first){var q=G.qs[G.i],nx=G.qs[G.i+1];G.phase='dim';G.sel=null;G.removed=[];G.helpTxt=null;G.shown=false;G.enter=false;poll=null;
-  preload(['q'+q.id,'e'+q.id].concat(nx?['q'+nx.id]:[]));render();dim(1100);snd('s_lock',.35);
-  later(function(){G.phase='q';G.enter=true;render();if(FAST)app.querySelectorAll('.ans.enter').forEach(function(e){e.style.animationDelay='0s'});G.enter=false;G.shown=true;startMusic();   /* анимация появления — один раз, дальше перерисовки её не повторяют */
-    voice('q'+q.id,q.q+'. '+q.a.map(function(a,j){return L[j]+': '+a}).join('. '))},1000)}
-function choose(j){if(!G||G.phase!=='q'||G.call||G.removed.indexOf(j)>=0)return;var q=G.qs[G.i];markSeen(q.id);G.sel=j;G.phase='lock';stopVoice();render();
-  snd('s_lock',.8);var g=G,lp=voice(Math.random()<.5?'lock1':'lock2','Это ваш окончательный ответ? Принято.'),tp=new Promise(function(r){later(r,3800)});
-  Promise.all([lp,tp]).then(function(){if(G===g&&G.phase==='lock')reveal(j===q.correct)})}   /* раскрытие — после фразы ведущего, а не поверх неё */   /* драматическая пауза */
+/* ---------- игра (сервер) ---------- */
+var AUDIO='a3/';
+function hq(s){var x=5381;s=String(s||'');for(var i=0;i<s.length;i++)x=((x<<5)+x+s.charCodeAt(i))|0;return (x>>>0).toString(36)}   /* записанная озвучка — только если текст в таблице не меняли */
+function hasAud(id,kind,text){var m=MAN[id];return !!(m&&m[kind]===hq(text))}
+function qVoice(q){var txt=q.q+'. '+q.a.map(function(a,j){return L[j]+': '+a}).join('. ');return hasAud(q.id,'q',q.q)?voice('q'+q.id,txt):(stopVoice(true),duck(true),host(true),speak(txt,vTok).then(function(){host(false);duck(false)}))}
+function eVoice(q){return hasAud(q.id,'e',q.explain)?voice('e'+q.id,q.explain):speak(q.explain)}
+function loadInfo(){return api('starsInfo').then(function(r){if(r.ok){INFO=r;if(r.cfg){RUB=r.cfg.rub;CAP=r.cfg.cap;LADDER=r.cfg.ladder}}else if(!loginNeeded)INFO={error:r.error};if(screen==='menu'||screen==='ex'||screen==='rate')render();return r})}
+function fromState(s){G.gid=s.g;G.i=s.step-1;G.qs[G.i]=s.q;G.removed=(s.removed||[]).slice();if(s.life){G.fifty=s.life.fifty;G.aud=s.life.aud;G.help=s.life.help}}
+function newGame(){if(busy)return;busy=true;clearT();clearInterval(callT);stopVoice();poll=null;ladOpen=false;
+  api('starsStart').then(function(r){busy=false;if(!r.ok){screen='menu';render();if(!loginNeeded)toast(errText(r.error));return}
+    G={qs:[],i:0,phase:'q',fifty:false,help:false,aud:false,removed:[],sel:null,helpTxt:null,res:null,call:null};fromState(r.game);INFO&&(INFO.balance=r.balance);
+    screen='game';pushNav();preload(['lock1','lock2','ok1','ok2','ok3','bad','safe','ladder','fifty','help','poll','penalty','s_lock','s_correct','s_wrong','s_coin','m_suspense']);askQ(true)})}
+function safeStars(i){return i>=6?6:0}
+function askQ(first){var q=G.qs[G.i];G.phase='dim';G.sel=null;G.helpTxt=null;G.shown=false;G.enter=false;poll=null;G.ans=null;
+  if(hasAud(q.id,'q',q.q))preload(['q'+q.id]);render();dim(1100);snd('s_lock',.35);
+  later(function(){G.phase='q';G.enter=true;render();if(FAST)app.querySelectorAll('.ans.enter').forEach(function(e){e.style.animationDelay='0s'});G.enter=false;G.shown=true;startMusic();qVoice(q)},1000)}
+function choose(j){if(!G||G.phase!=='q'||G.call||G.removed.indexOf(j)>=0)return;var q=G.qs[G.i],g=G,step=G.i+1;G.sel=j;G.phase='lock';stopVoice();render();
+  snd('s_lock',.8);var lp=voice(Math.random()<.5?'lock1':'lock2','Это ваш окончательный ответ? Принято.'),tp=new Promise(function(r){later(r,3800)});
+  var ap=api('starsAnswer',{g:g.gid,k:j,step:step}).then(function(r){if(r.ok){q.correct=r.c;q.explain=r.explain;q.sourceLabel=r.src;g.ans=r;if(hasAud(q.id,'e',r.explain))preload(['e'+q.id]);if(r.next&&r.next.q&&hasAud(r.next.q.id,'q',r.next.q.q))preload(['q'+r.next.q.id])}return r});
+  Promise.all([lp,tp,ap]).then(function(v){if(G!==g||G.phase!=='lock')return;var r=v[2];
+    if(!r.ok){G.phase='q';G.sel=null;render();toast(errText(r.error));return}
+    reveal(r.correct)})}   /* раскрытие — после фразы ведущего и ответа сервера */
 function reveal(ok){var q=G.qs[G.i],g=G,step=G.i;G.phase=ok?'ok':'bad';stopMusic();render();
-  var alive=function(){return G===g&&G.i===step&&(G.phase==='ok'||G.phase==='bad')};   /* цепочка озвучки: реакция → (несгораемая) → пояснение; обрывается при «Дальше» */
+  var alive=function(){return G===g&&G.i===step&&(G.phase==='ok'||G.phase==='bad')};
   if(ok){snd('s_correct',.9);if(SAFE[step])later(function(){confetti(50)},500)}
   else{var b=$('.q');if(b)b.classList.add('shake');snd('s_wrong',.9)}
   later(function(){if(!alive())return;voice(ok?['ok1','ok2','ok3'][step%3]:'bad',ok?'Верно!':'Неверный ответ.')
     .then(function(){if(alive()&&ok&&SAFE[step]&&step<9)return voice('safe','Несгораемая сумма!')})
-    .then(function(){if(alive())return voice('e'+q.id,q.explain)})},ok?400:700)}
-function next(){if(!G||(G.phase!=='ok'&&G.phase!=='bad'))return;   /* двойное нажатие больше не завершает игру */
-  stopVoice();if(G.phase==='ok'){if(G.i===9)return finish('win');G.i++;ladOpen=true;G.phase='ladder';render();snd('s_coin',.5);var g=G,lp=voice('ladder','Лестница'),tp=new Promise(function(r){later(r,FAST?300:3200)});Promise.all([lp,tp]).then(function(){if(G===g&&G.phase==='ladder'){ladOpen=false;askQ()}})}else finish('lost')}
-function takeStars(){if(!G||G.phase!=='q'||G.call||G.i===0)return;stopVoice();finish('take')}
-function finish(how){clearT();clearInterval(callT);poll=null;stopMusic();ladOpen=false;var safe=safeStars(G.i),step=LADDER[G.i];
-  var earned=how==='win'?LADDER[9]:how==='take'?LADDER[G.i-1]:safe, penalty=0;
-  if(how==='lost'){penalty=Math.min(CFG.PENALTY_STARS,st.stars);st.stars-=penalty}   /* штраф: −PENALTY_STARS ⭐, баланс не ниже 0; только звёзды, не деньги */
-  st.stars+=earned;G.phase='end';G.res={how:how,earned:earned,penalty:penalty,answered:G.i+(how==='win'?1:0)};
-  st.streak=earned>0?st.streak+1:0;st.best=Math.max(st.best,earned);st.lastPlay=new Date().toISOString().slice(0,10);st.history.unshift({at:new Date().toLocaleDateString('ru-RU'),earned:earned,penalty:penalty});save();screen='end';render();
-  if(how==='win'){snd('s_win');confetti(180);voice('win','Поздравляю!')}else if(how==='take')voice('take','Мудрое решение.');else if(penalty)voice('penalty','За ошибку одна звезда сгорает.');
-  if(penalty)later(function(){flyStars(penalty,$('.minus'),true)},700);
-  if(earned)later(function(){flyStars(earned,$('.big'))},penalty?2000:600)}
-function fifty(){if(!G||G.phase!=='q'||G.call||G.fifty)return;var q=G.qs[G.i];G.fifty=true;G.shown=true;var w=[0,1,2,3].filter(function(k){return k!==q.correct}).sort(function(){return Math.random()-.5}).slice(0,2);G.removed=w;
-  stopVoice();snd('s_fifty');voice('fifty','Уберите два неверных ответа.');render();w.forEach(function(k){var b=document.querySelector('.ans[data-k="'+k+'"]');if(b)b.classList.add('anim')})}
+    .then(function(){if(alive())return eVoice(q)})},ok?400:700)}
+function next(){if(!G||(G.phase!=='ok'&&G.phase!=='bad'))return;stopVoice();var r=G.ans;
+  if(r&&r.end)return finish(r.end);
+  if(r&&r.next){fromState(r.next);ladOpen=true;G.phase='ladder';render();snd('s_coin',.5);var g=G,lp=voice('ladder','Лестница'),tp=new Promise(function(x){later(x,FAST?300:3200)});Promise.all([lp,tp]).then(function(){if(G===g&&G.phase==='ladder'){ladOpen=false;askQ()}})}}
+function takeStars(){if(!G||G.phase!=='q'||G.call||G.i===0||busy)return;busy=true;stopVoice();api('starsTake',{g:G.gid}).then(function(r){busy=false;if(r.ok)finish(r.end);else toast(errText(r.error))})}
+function finish(e){clearT();clearInterval(callT);poll=null;stopMusic();ladOpen=false;var how=e.how;
+  G.phase='end';G.res=e;if(INFO){INFO.balance=e.balance;INFO.playedToday=true}screen='end';render();
+  if(how==='win'){snd('s_win');confetti(60);voice('win','Поздравляю!')}else if(how==='take')voice('take','Мудрое решение.');else if(e.penalty)voice('penalty','За ошибку одна звезда сгорает.');
+  if(e.penalty)later(function(){flyStars(e.penalty,$('.minus'),true)},700);
+  if(e.earned)later(function(){flyStars(e.earned,$('.big'))},e.penalty?2000:600);loadInfo()}
+function life(kind,cb){if(!G||G.phase!=='q'||G.call||G[kind==='fifty'?'fifty':kind==='aud'?'aud':'help']||busy)return;busy=true;var g=G;
+  api('starsLife',{g:G.gid,kind:kind}).then(function(r){busy=false;if(G!==g)return;if(!r.ok){toast(errText(r.error));return}cb(r)})}
+function fifty(){life('fifty',function(r){G.fifty=true;G.shown=true;var was=G.removed.slice();G.removed=r.removed;stopVoice();snd('s_fifty');voice('fifty','Уберите два неверных ответа.');render();
+  r.removed.filter(function(k){return was.indexOf(k)<0}).forEach(function(k){var b=document.querySelector('.ans[data-k="'+k+'"]');if(b)b.classList.add('anim')})})}
 var callT=null;
-function help(){if(!G||G.phase!=='q'||G.call||G.help)return;clearInterval(callT);G.help=true;G.shown=true;stopVoice();stopMusic();snd('s_ring',.7);voice('help','Звоним бригадиру.');
-  G.call={left:CFG.CALL_SECONDS,dialed:false};render();callT=setInterval(function(){if(!G||!G.call)return clearInterval(callT);G.call.left--;var e=$('.cd b');if(e)e.textContent=G.call.left;var r=$('.cd');if(r)r.style.setProperty('--p',G.call.left/CFG.CALL_SECONDS);if(G.call.left<=5&&G.call.left>0)snd('s_coin',.3);if(G.call.left<=0)endCall()},1000)}
+function help(){life('help',function(r){clearInterval(callT);G.help=true;G.shown=true;G.foreman=r.foreman;G.hint=r.hint;stopVoice();stopMusic();snd('s_ring',.7);voice('help','Звоним бригадиру.');
+  G.call={left:CFG.CALL_SECONDS,dialed:false};render();callT=setInterval(function(){if(!G||!G.call)return clearInterval(callT);G.call.left--;var e=$('.cd b');if(e)e.textContent=G.call.left;var c=$('.cd');if(c)c.style.setProperty('--p',G.call.left/CFG.CALL_SECONDS);if(G.call.left<=5&&G.call.left>0)snd('s_coin',.3);if(G.call.left<=0)endCall()},1000)})}
 function endCall(){clearInterval(callT);if(!G||!G.call)return;G.call=null;render();startMusic()}
-function simHint(){var q=G.qs[G.i],conf={1:.95,2:.8,3:.65}[q.level],alt=[0,1,2,3].filter(function(k){return k!==q.correct&&G.removed.indexOf(k)<0}),pk=Math.random()<conf||!alt.length?q.correct:alt[0];
-  G.helpTxt='(симуляция, демо) '+(conf>.9?'Тут без вариантов — ':conf>.7?'Почти уверен: ':'Не на сто процентов, но я бы сказал ')+'«'+L[pk]+': '+q.a[pk]+'».';endCall()}
+function simHint(){var q=G.qs[G.i],hn=G.hint||{k:0,conf:.8},pk=hn.k;G.helpTxt='(подсказка-симуляция) '+(hn.conf>.9?'Тут без вариантов — ':hn.conf>.7?'Почти уверен: ':'Не на сто процентов, но я бы сказал ')+'«'+L[pk]+': '+q.a[pk]+'».';endCall()}
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&G&&G.call&&G.call.dialed)endCall()});   /* вернулись после звонка tel: */
 window.addEventListener('pageshow',function(e){if(e.persisted&&G&&G.call&&G.call.dialed)endCall()});
-function callCard(){var c=G.call,F=CFG.FOREMAN;return h('div',{class:'overlay','data-testid':'call'},h('div',{class:'poll callcard'},
-  h('h3',{text:'ПОМОЩЬ БРИГАДИРА'}),h('div',{class:'muted',style:'text-align:center',text:'Звоним бригадиру '+F.short+'…'}),
+function callCard(){var c=G.call,F=G.foreman;return h('div',{class:'overlay','data-testid':'call'},h('div',{class:'poll callcard'},
+  h('h3',{text:'ПОМОЩЬ БРИГАДИРА'}),h('div',{class:'muted',style:'text-align:center',text:F?'Звоним бригадиру '+F.short+'…':'Номер бригадира не задан'}),
   h('div',{class:'sm',style:'margin:8px 0 2px;color:#fff;font-size:13px','data-testid':'call-q',text:G.qs[G.i].q+' '+G.qs[G.i].a.map(function(x,k){return G.removed.indexOf(k)<0?L[k]+': '+x:''}).filter(Boolean).join(' · ')}),h('div',{class:'cd',style:'--p:'+(c.left/CFG.CALL_SECONDS)},h('b',{text:String(c.left)})),
   h('div',{class:'sm',style:'text-align:center;margin-bottom:8px',text:'Игра на паузе. У вас '+CFG.CALL_SECONDS+' секунд — прочитайте вопрос и варианты.'}),
-  h('a',{class:'callbtn',href:'tel:'+F.tel,'data-testid':'call-btn',onclick:function(){c.dialed=true}},'📞 Позвонить · '+F.name),
-  h('div',{class:'sm',style:'text-align:center;margin:4px 0 10px',text:F.shown}),
+  F?h('a',{class:'callbtn',href:'tel:'+F.tel,'data-testid':'call-btn',onclick:function(){c.dialed=true}},'📞 Позвонить · '+F.name):null,
+  F?h('div',{class:'sm',style:'text-align:center;margin:4px 0 10px',text:F.shown}):null,
   h('button',{class:'mini',style:'width:100%;padding:10px','data-testid':'call-done',onclick:endCall},'Я поговорил — выбрать ответ'),
-  h('button',{class:'mini g',style:'width:100%;padding:9px;margin-top:8px','data-testid':'call-sim',onclick:simHint},'Нет телефона? Подсказка-симуляция (демо)'),
+  h('button',{class:'mini g',style:'width:100%;padding:9px;margin-top:8px','data-testid':'call-sim',onclick:simHint},'Нет связи? Подсказка-симуляция'),
   h('div',{class:'sm',style:'text-align:center;margin-top:8px;opacity:.8',text:'Разговор не записывается.'})))}
-function audience(){if(!G||G.phase!=='q'||G.call||G.aud)return;var q=G.qs[G.i];G.aud=true;G.shown=true;stopVoice();
-  var live=[0,1,2,3].filter(function(k){return G.removed.indexOf(k)<0}),wc={1:62,2:48,3:36}[q.level]+Math.random()*12,v=[0,0,0,0],rest=100-wc;
-  live.forEach(function(k){if(k!==q.correct){var x=Math.random();v[k]=x}});var sum=v.reduce(function(a,b){return a+b},0)||1;live.forEach(function(k){if(k!==q.correct)v[k]=Math.round(v[k]/sum*rest)});v[q.correct]=100-v.reduce(function(a,b,i){return i===q.correct?a:a+b},0);
-  poll=v;render();voice('poll','Помощь зала.');later(function(){document.querySelectorAll('.bar i').forEach(function(b,i){b.style.height=v[i]+'%'})},120)}
+function audience(){life('aud',function(r){G.aud=true;G.shown=true;stopVoice();poll=r.poll;render();voice('poll','Помощь зала.');later(function(){document.querySelectorAll('.bar i').forEach(function(b,i){b.style.height=poll[i]+'%'})},120)})}
 /* ---------- views ---------- */
 var ICON_PHONE='<svg viewBox="0 0 24 24"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>';
 var ICON_AUD='<svg viewBox="0 0 24 24"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="6" width="4" height="15"/><rect x="17" y="9" width="4" height="12"/></svg>';
 function hdr(){return h('div',{class:'hdr'},h('button',{class:'ico','aria-label':'Меню',text:'☰',onclick:function(){if(G&&(G.phase==='q'||G.phase==='lock'))return;G=null;clearT();clearInterval(callT);poll=null;stopVoice();stopMusic();screen='menu';render()}}),
-  h('div',{class:'bal','data-testid':'bal'},'⭐ ',h('span',{text:String(st.stars)})),
+  h('div',{class:'bal','data-testid':'bal'},'⭐ ',h('span',{text:INFO&&INFO.balance!=null?String(INFO.balance):'…'})),
   h('button',{class:'ico','aria-label':muted?'Включить звук':'Выключить звук',text:muted?'🔇':'🔊',onclick:function(){setMuted(!muted)}}))}
 function lifes(){if(!G)return null;var dis=G.phase!=='q';return h('div',{class:'lifes'},
   h('button',{class:'life'+(G.fifty?' used':''),'data-testid':'fifty','aria-label':'50 на 50',onclick:fifty,disabled:dis||G.fifty?'':null},'50:50'),
@@ -146,17 +149,6 @@ function decor(){var f=document.createElement('div');f.id='bg';f.setAttribute('a
   for(var i=0;i<10;i++){var s=h('i',{class:'spark'});s.style.left=(i*53%100)+'vw';s.style.top=(i*37%100)+'vh';s.style.animationDelay=(i*.37%3)+'s';f.appendChild(s)}return f}
 document.body.insertBefore(decor(),app);document.body.appendChild(h('div',{class:'dim'}));
 function emblem(){return h('div',{class:'emb'},h('div',{class:'rays'}),h('div',{class:'ring'},h('div',{class:'disc'},h('small',{text:'КТО ХОЧЕТ СТАТЬ'}),h('b',{html:'ЗВЕЗДОЙ<br>СКЛАДА'}),h('i',{text:'⭐'}))))}
-function viewMenu(){var played=st.lastPlay===new Date().toISOString().slice(0,10)&&!P.has('again');
-  return h('div',{class:'menu'},emblem(),
-    h('div',{class:'sub',text:'Баланс: ⭐ '+st.stars+' · серия 🔥 '+st.streak}),
-    lz('Играть',null,{'data-testid':'play',onclick:function(){audioOn=true;unlock();stopWelcome();screen='intro';pushNav();render();startTopic('mix')}}),
-    lz('Мои звёзды / Обмен',null,{'data-testid':'m-ex',onclick:function(){audioOn=true;go('ex')}}),
-    lz('Рейтинг',null,{'data-testid':'m-rate',onclick:function(){go('rate')}}),
-    lz('Правила',null,{'data-testid':'m-rules',onclick:function(){go('rules')}}),
-    h('a',{href:'#',class:'sm',style:'color:#8f9ac0;margin-top:6px','data-testid':'m-admin',onclick:function(e){e.preventDefault();go('admin')},text:'Кабинет админа (макет)'}),
-    played?h('div',{class:'sm',text:'Сегодня уже сыграно (в прототипе можно ещё раз).'}):null,
-    welcomed?null:h('div',{class:'sm hint',text:'🔊 Коснитесь экрана — включится звук'}))}
-function startTopic(t){preload(['intro','s_lock','m_suspense']);if(Date.now()-welcomeAt>12000)snd('s_intro',.55);   /* мелодия не повторяется, если только что звучала в меню */voice('intro','Добро пожаловать в игру «Звезда склада»!').then(function(){if(screen==='intro')newGame(t)});later(function(){if(screen==='intro')newGame(t)},FAST?300:40000)}   /* вопрос 1 ждёт конца вступления (раньше таймер 10 с обрывал 17-секундное интро); 40 с — только страховка */
 function viewGame(){var q=G.qs[G.i],ph=G.phase,stage=h('div',{class:'stage'}),main=h('div',null);
   main.appendChild(h('div',{class:'hdr',style:'margin:6px 0'},h('div',{class:'sm',text:'Вопрос '+(G.i+1)+' из 10 · '+lr(G.i)+(SAFE[G.i]?' · несгораемая':'')}),h('button',{class:'ladtoggle','data-testid':'lad-toggle',onclick:function(){ladOpen=!ladOpen;render()}},'≡ Лестница')));
   main.appendChild(lifes());main.appendChild(h('div',{class:'host'},h('i',{class:'mic'}),'Ведущий говорит…'));
@@ -180,54 +172,67 @@ function viewGame(){var q=G.qs[G.i],ph=G.phase,stage=h('div',{class:'stage'}),ma
     h('div',{class:'bars'},poll.map(function(v,i){return h('div',{class:'bar'},h('span',{text:v+'%'}),h('i',{style:document.querySelector('.bar')?'height:'+v+'%':''}))})),
     h('div',{class:'lbls'},L.split('').map(function(x){return h('span',{text:x})})),h('div',{class:'sm',style:'text-align:center;margin-top:8px',text:'Нажмите, чтобы закрыть'}))));
   return stage}
+function viewMenu(){var I=INFO,played=I&&I.playedToday;
+  return h('div',{class:'menu'},emblem(),
+    h('div',{class:'sub','data-testid':'menu-sub',text:!I?'Загружаем…':I.error?errText(I.error):'Баланс: ⭐ '+I.balance+(I.myPlace?' · место в рейтинге: '+I.myPlace:'')}),
+    lz(played?'Сегодня вы уже сыграли':(I&&I.active?'Продолжить игру':'Играть'),null,{'data-testid':'play',disabled:!I||I.error||played?'':null,style:played?'opacity:.55':'',onclick:function(){if(!I||played)return;audioOn=true;unlock();stopWelcome();
+      if(I.active){newGame();return}screen='intro';pushNav();render();startTopic()}}),
+    lz('Мои звёзды / Обмен',null,{'data-testid':'m-ex',onclick:function(){audioOn=true;go('ex')}}),
+    lz('Рейтинг',null,{'data-testid':'m-rate',onclick:function(){go('rate')}}),
+    lz('Правила',null,{'data-testid':'m-rules',onclick:function(){go('rules')}}),
+    played?h('div',{class:'sm',text:'Следующая игра — завтра. Звёзды можно обменять уже сейчас.'}):null,
+    welcomed?null:h('div',{class:'sm hint',text:'🔊 Коснитесь экрана — включится звук'}),
+    h('a',{href:'../#/home',class:'sm',style:'color:#8f9ac0;margin-top:6px','data-testid':'to-app',text:'← В приложение «Мои выплаты»'}))}
+function startTopic(){preload(['intro','s_lock','m_suspense']);if(Date.now()-welcomeAt>12000)snd('s_intro',.55);
+  voice('intro','Добро пожаловать в игру «Звезда склада»!').then(function(){if(screen==='intro')newGame()});later(function(){if(screen==='intro')newGame()},FAST?300:40000)}
 function viewEnd(){var r=G.res,t={win:'🏆 Главный приз!',take:'Вы забрали звёзды',lost:'Игра окончена'}[r.how];
   return h('div',{class:'menu',style:'justify-content:flex-start'},emblem(),h('div',{class:'panel','data-testid':'result'},h('h2',{text:t}),
     r.penalty?h('div',{class:'big minus',style:'background:linear-gradient(180deg,#ffb3b3,#ff3b3b);-webkit-background-clip:text;background-clip:text;font-size:40px','data-testid':'penalty',text:'−'+r.penalty+' ⭐'}):null,
     h('div',{class:'big',text:'+'+r.earned+' ⭐'}),h('div',{class:'muted',style:'text-align:center',text:starsTxt(r.earned)+' за игру'}),
-    h('div',{class:'muted',style:'text-align:center',text:(r.penalty?'Штраф за ошибку: −'+starsTxt(r.penalty)+' (только звёзды, не деньги). ':'')+(r.earned?'Начислено: +'+starsTxt(r.earned)+'. ':'')+'Верных ответов: '+r.answered+' из 10'}),
-    h('div',{class:'stat',style:'margin-top:8px'},h('span',{text:'Баланс'}),h('b',{text:'⭐ '+st.stars})),
-    h('div',{class:'stat'},h('span',{text:'Серия'}),h('b',{text:'🔥 '+st.streak}))),
+    h('div',{class:'muted',style:'text-align:center',text:(r.penalty?'Штраф за ошибку: −'+starsTxt(r.penalty)+' (только звёзды, не деньги). ':'')+'Верных ответов: '+r.answered+' из 10'}),
+    h('div',{class:'stat',style:'margin-top:8px'},h('span',{text:'Баланс'}),h('b',{text:'⭐ '+r.balance}))),
     lz('Мои звёзды / Обмен','gold',{'data-testid':'to-exchange',onclick:function(){G=null;go('ex')}}),
     lz('В главное меню',null,{onclick:function(){G=null;screen='menu';render()}}))}
-function monthRub(){return st.requests.filter(function(r){return r.status!=='rejected'}).reduce(function(s,r){return s+r.rub},0)}
 function backBtn(){return h('div',{class:'back'},lz('← В меню',null,{onclick:function(){if(history.state&&history.state.qd)history.back();else{screen='menu';render()}}}))}
-function viewEx(){var left=Math.max(0,CAP-monthRub()),maxS=Math.min(st.stars,Math.floor(left/RUB)),val=maxS;
-  var inp=h('input',{class:'inp',type:'number',min:1,max:maxS,value:val,'data-testid':'ex-n',oninput:function(){var n=+inp.value||0;out.textContent='= '+rub(n*RUB);btn.firstChild.style.opacity=(n>=1&&n<=maxS)?1:.45}});
+function viewEx(){var I=INFO||{},bal=I.balance||0,left=I.capLeft!=null?I.capLeft:CAP,maxS=Math.max(0,Math.min(bal,Math.floor(left/RUB),500)),val=maxS;
+  var inp=h('input',{class:'inp',type:'number',inputmode:'numeric',min:1,max:maxS,value:val,'data-testid':'ex-n',oninput:function(){var n=+inp.value||0;out.textContent='= '+rub(n*RUB);btn.firstChild.style.opacity=(n>=1&&n<=maxS)?1:.45}});
   var out=h('div',{class:'big',style:'font-size:32px;margin:6px 0',text:'= '+rub(val*RUB)});
-  var btn=lz('Отправить заявку админу','gold',{'data-testid':'ex-send',onclick:function(){var n=+inp.value;if(!(n>=1&&n<=maxS))return;st.stars-=n;st.requests.unshift({id:Date.now(),stars:n,rub:n*RUB,at:new Date().toLocaleDateString('ru-RU'),status:'pending'});save();snd('s_coin');render()}});
-  var list=h('div',{class:'list'});st.requests.forEach(function(r){list.appendChild(h('div',{class:'it'},h('div',null,h('b',{text:rub(r.rub)}),h('div',{class:'sm',text:r.at+' · '+starsTxt(r.stars)})),h('span',{class:'chip '+({pending:'p',approved:'y',rejected:'n'})[r.status],text:{pending:'⏳ ждёт одобрения',approved:'✅ одобрено · в выплате',rejected:'отклонено'}[r.status]})))});
-  return h('div',null,h('div',{class:'panel'},h('h2',{text:'МОИ ЗВЁЗДЫ · ОБМЕН'}),h('div',{class:'stat'},h('span',{text:'Доступно'}),h('b',{text:starsTxt(st.stars)})),h('div',{class:'stat'},h('span',{text:'Курс обмена'}),h('b',{text:'1 ⭐ = '+RUB+' ₽'})),h('div',{class:'stat'},h('span',{text:'Лимит месяца'}),h('b',{text:'осталось '+rub(left)+' из '+rub(CAP)})),
-    h('div',{class:'muted',style:'margin:10px 0 6px',text:'Сколько звёзд обменять'}),inp,out,btn,h('div',{class:'prop',text:'После одобрения админом сумма добавится в ближайшую выплату как премия. При отклонении звёзды вернутся.'})),
+  var btn=lz('Отправить заявку админу','gold',{'data-testid':'ex-send',onclick:function(){var n=+inp.value;if(!(n>=1&&n<=maxS)||busy)return;busy=true;
+    api('starsExchange',{n:n,rid:'x'+Date.now()+Math.random().toString(36).slice(2,8)}).then(function(r){busy=false;if(!r.ok){toast(errText(r.error));return}snd('s_coin');toast('Заявка отправлена админу');loadInfo()})}});
+  var list=h('div',{class:'list'});(I.requests||[]).forEach(function(r){list.appendChild(h('div',{class:'it'},h('div',null,h('b',{text:rub(r.rub)}),h('div',{class:'sm',text:String(r.at||'').slice(0,10).split('-').reverse().join('.')+' · '+starsTxt(r.stars)})),h('span',{class:'chip '+({pending:'p',approved:'y',rejected:'n'})[r.status],text:{pending:'⏳ ждёт одобрения',approved:'✅ одобрено',rejected:'отклонено'+(r.note?': '+r.note:'')}[r.status]})))});
+  if(!(I.requests||[]).length)list.appendChild(h('div',{class:'sm',text:'Заявок пока нет.'}));
+  return h('div',null,h('div',{class:'panel','data-testid':'ex'},h('h2',{text:'МОИ ЗВЁЗДЫ · ОБМЕН'}),h('div',{class:'stat'},h('span',{text:'Доступно'}),h('b',{text:starsTxt(bal)})),h('div',{class:'stat'},h('span',{text:'Курс обмена'}),h('b',{text:'1 ⭐ = '+RUB+' ₽'})),h('div',{class:'stat'},h('span',{text:'Лимит месяца'}),h('b',{text:'осталось '+rub(left)+' из '+rub(CAP)})),
+    maxS>=1?[h('div',{class:'muted',style:'margin:10px 0 6px',text:'Сколько звёзд обменять'}),inp,out,btn]:h('div',{class:'muted',style:'margin:10px 0',text:bal?'Лимит месяца исчерпан.':'Пока нет звёзд для обмена — сыграйте!'}),
+    h('div',{class:'prop',text:'После одобрения админом сумма будет выплачена как бонус (отдельно от ведомости). При отклонении звёзды вернутся.'})),
     h('div',{class:'panel'},h('h2',{text:'МОИ ЗАЯВКИ'}),list),backBtn())}
-var RATING=[['Ахметов М.',148,9],['Зотов В.',121,6],['Витров И.',96,4],['Ушаков А.',74,3],['Землянов П.',52,1]];
-function viewRate(){var rl=h('div',{class:'list'});RATING.forEach(function(r,i){rl.appendChild(h('div',{class:'it'},h('div',null,h('b',{text:(['🥇','🥈','🥉'][i]||(i+1)+'.')+' '+r[0]}),h('div',{class:'sm',text:'🔥 '+r[2]+' дней подряд'})),h('b',{style:'color:var(--gold2)',text:'⭐ '+r[1]})))});
-  return h('div',null,h('div',{class:'panel'},h('h2',{text:'РЕЙТИНГ ЗА ОКТЯБРЬ'}),h('div',{class:'prop',text:'ДЕМО: вымышленные цифры.'}),rl),backBtn())}
+function viewRate(){var I=INFO||{},rl=h('div',{class:'list'});(I.rating||[]).forEach(function(r){rl.appendChild(h('div',{class:'it'+(r.me?' me':'')},h('div',null,h('b',{text:(['🥇','🥈','🥉'][r.place-1]||(r.place+'.'))+' '+r.name+(r.me?' (вы)':'')}),h('div',{class:'sm',text:'игр: '+r.games})),h('b',{style:'color:var(--gold2)',text:'⭐ '+r.stars})))});
+  if(!(I.rating||[]).length)rl.appendChild(h('div',{class:'sm',text:'В этом месяце ещё никто не играл — будьте первым!'}));
+  return h('div',null,h('div',{class:'panel','data-testid':'rate'},h('h2',{text:'РЕЙТИНГ МЕСЯЦА'}),h('div',{class:'sm',style:'text-align:center;margin-bottom:6px',text:'Звёзды, заработанные в играх за '+(I.month||'месяц')+(I.myPlace&&I.myPlace>10?' · ваше место: '+I.myPlace:'')}),rl),backBtn())}
 function viewRules(){var li=function(t){return h('li',{style:'margin:6px 0',html:t})};
-  return h('div',null,h('div',{class:'panel','data-testid':'rules'},h('h2',{text:'ПРАВИЛА'}),h('div',{class:'prop',text:'Все цифры — предложение на согласование.'}),h('ul',{style:'padding-left:18px;font-size:14px'},
-    li('Вопросы о складе и о наших приложениях выпадают <b>случайно из общего пула</b>: ступени 1–3 — лёгкие, 4–6 — средние, 7–10 — сложные. Недавние вопросы не повторяются ~30 дней. 1 игра в день.'),
-    li('10 вопросов, <b>1 верный ответ = 1 ⭐</b>. Лестница: '+LADDER.map(function(r,i){return SAFE[i]?'<b>⭐ '+r+'</b>':'⭐ '+r}).join(' · ')+'. <b>Несгораемая сумма — ⭐ '+LADDER[CFG.SAFE_STEPS[0]]+'</b>.'),
-    li('Подсказки по одному разу: <b>50:50</b>, <b>Помощь бригадира</b>, <b>Помощь зала</b>.'),
+  return h('div',null,h('div',{class:'panel','data-testid':'rules'},h('h2',{text:'ПРАВИЛА'}),h('ul',{style:'padding-left:18px;font-size:14px'},
+    li('Вопросы о складе и о наших приложениях: ступени 1–3 — лёгкие, 4–6 — средние, 7–10 — сложные. Недавние вопросы не повторяются ~30 дней. <b>Одна игра в день.</b>'),
+    li('10 вопросов, <b>1 верный ответ = 1 ⭐</b>. <b>Несгораемая сумма — ⭐ 6</b>.'),
+    li('Подсказки по одному разу: <b>50:50</b>, <b>Помощь бригадира</b> (звонок, 30 секунд), <b>Помощь зала</b>.'),
     li('Можно в любой момент забрать выигранное и уйти.'),
-    li('<b>Ошибка:</b> игра заканчивается; если дошли до несгораемой суммы — ⭐ '+LADDER[CFG.SAFE_STEPS[0]]+' ваши, иначе 0. Кроме того, с баланса списывается <b>'+starsTxt(CFG.PENALTY_STARS)+'</b>. Баланс не уходит ниже 0.'),
-    li('<b>Штраф — только звёздами.</b> Из выплат деньги за игру никогда не удерживаются.'),
-    li('Звёзды можно обменять в разделе «Мои звёзды / Обмен» (там указан курс и лимит месяца); после одобрения админом — премия в ближайшую выплату.'))),backBtn())}
-function viewAdmin(){var reqs=[['Зотов В.',50],['Витров И.',30],['Антонов А.',20]],ql=h('div',{class:'list'});
-  reqs.forEach(function(r){var row=h('div',{class:'it'},h('div',null,h('b',{text:r[0]}),h('div',{class:'sm',text:r[1]+' ⭐ → '+rub(r[1]*RUB)+' (обмен)'})),h('div',{style:'display:flex;gap:6px'},h('button',{class:'mini','data-testid':'adm-ok',onclick:function(){row.lastChild.replaceWith(h('span',{class:'chip y',text:'✅ в выплату'}))}},'Одобрить'),h('button',{class:'mini g',onclick:function(){row.lastChild.replaceWith(h('span',{class:'chip n',text:'отклонено'}))}},'✕')));ql.appendChild(row)});
-  return h('div',null,h('div',{class:'panel'},h('h2',{text:'КАБИНЕТ АДМИНА · ВИКТОРИНА'}),h('div',{class:'prop',text:'ДЕМО: макет, вымышленные цифры.'}),h('div',{class:'stat'},h('span',{text:'Сыграли сегодня'}),h('b',{text:'41'})),h('div',{class:'stat'},h('span',{text:'Верных ответов'}),h('b',{text:'68%'})),h('div',{class:'stat'},h('span',{text:'Сгорело звёзд (штрафы)'}),h('b',{text:'23 ⭐'}))),
-    h('div',{class:'panel'},h('h2',{text:'ЗАЯВКИ НА ОБМЕН · 3'}),ql),backBtn())}
+    li('<b>Ошибка:</b> игра заканчивается; если дошли до несгораемой суммы — ⭐ 6 ваши, иначе 0. С баланса списывается <b>1 звезда</b> (не ниже 0). Штраф — только звёздами, из выплат деньги за игру не удерживаются.'),
+    li('Если игра прервалась (закрыли приложение), начисляется уже отвеченное.'),
+    li('Обмен: 1 ⭐ = '+RUB+' ₽, до '+rub(CAP)+' в месяц; после одобрения админом — бонус к выплате.'))),backBtn())}
+function viewLogin(){return h('div',{class:'menu'},emblem(),h('div',{class:'panel','data-testid':'login'},h('h2',{text:'НУЖЕН ВХОД'}),
+  h('div',{class:'muted',style:'text-align:center',text:loginNeeded==='closed'?'Приложение сейчас закрыто (работает днём). Зайдите позже.':loginNeeded==='blocked'?'Доступ закрыт. Обратитесь к администратору.':'Игра доступна только сотрудникам. Войдите в приложение «Мои выплаты» по номеру телефона и коду, затем откройте вкладку «Звёзды».'})),
+  lz('Открыть «Мои выплаты»','gold',{onclick:function(){location.href='../#/home'}}))}
 var ladShown=false;
 function go(sc){screen=sc;pushNav();render()}
 function pushNav(){try{if(!(history.state&&history.state.qd))history.pushState({qd:1},'')}catch(e){}}
 window.addEventListener('popstate',function(){   /* кнопка «Назад»: во время вопроса не выходим (иначе можно уйти от штрафа) */
   if(screen==='game'&&G&&(G.phase==='q'||G.phase==='lock'||G.phase==='dim'||G.phase==='ladder')){pushNav();toast('Чтобы выйти, нажмите «Забрать и уйти»');return}
-  if(G&&G.call)endCall();G=null;clearT();clearInterval(callT);poll=null;stopVoice();stopMusic();screen='menu';render()});
+  if(G&&G.call)endCall();if(G&&G.phase!=='end'&&G.phase!=='ok'&&G.phase!=='bad'){pushNav();return}G=null;clearT();clearInterval(callT);poll=null;stopVoice();stopMusic();screen='menu';render()});
 function toast(t){var e=h('div',{class:'toast',text:t});document.body.appendChild(e);setTimeout(function(){e.remove()},2200)}
 var welcomed=false,welcomeAt=0;function welcome(){if(welcomed||screen!=='menu')return;welcomed=true;welcomeAt=Date.now();audioOn=true;unlock();snd('s_intro',.6);var e=$('.hint');if(e)e.style.visibility='hidden'}
 function stopWelcome(){welcomed=true}
 document.addEventListener('pointerdown',function(e){if(screen==='menu'&&!e.target.closest('button,a'))welcome()},{passive:true});
-function render(){var y=window.scrollY;app.textContent='';app.appendChild(h('div',{class:'demo-tag',text:'ПРОТОТИП · не в приложении'}));app.appendChild(hdr());
-  app.appendChild(screen==='game'&&G?viewGame():screen==='end'&&G?viewEnd():screen==='intro'?h('div',{class:'menu'},emblem(),h('div',{class:'sub',text:'Ведущий представляет игру…'})):screen==='ex'?viewEx():screen==='rate'?viewRate():screen==='rules'?viewRules():screen==='admin'?viewAdmin():viewMenu());
-  var lp=app.querySelector('.ladpanel');if(lp&&ladOpen!==ladShown){lp.classList.toggle('open',ladShown);void lp.offsetWidth;lp.classList.toggle('open',ladOpen)}ladShown=ladOpen;   /* плавный выезд лестницы */
+function render(){var y=window.scrollY;app.textContent='';app.appendChild(hdr());
+  app.appendChild(screen==='login'?viewLogin():screen==='game'&&G?viewGame():screen==='end'&&G?viewEnd():screen==='intro'?h('div',{class:'menu'},emblem(),h('div',{class:'sub',text:'Ведущий представляет игру…'})):screen==='ex'?viewEx():screen==='rate'?viewRate():screen==='rules'?viewRules():viewMenu());
+  var lp=app.querySelector('.ladpanel');if(lp&&ladOpen!==ladShown){lp.classList.toggle('open',ladShown);void lp.offsetWidth;lp.classList.toggle('open',ladOpen)}ladShown=ladOpen;
   if(screen==='game'){fit();window.scrollTo(0,y)}}
 function fit(){if(P.has('nofit'))return;var els=app.querySelectorAll('.q .in,.ans .t'),key=G&&G.qs[G.i].id+'|'+(app.querySelector('.grid.one')?1:0)+'|'+innerWidth;
   if(G&&G.fitKey===key){els.forEach(function(e,i){if(G.fit[i])e.style.fontSize=G.fit[i]});return}   /* уже подобрано для этого вопроса — без замеров */
@@ -239,6 +244,8 @@ function fit(){if(P.has('nofit'))return;var els=app.querySelectorAll('.q .in,.an
     if(!any)break;arr.forEach(function(e,i){if(out[i])e.style.fontSize=out[i]})}
   if(G&&app.querySelector('.qbody:not(.hid)')){G.fitKey=key;G.fit=out}}   /* длинный текст: уменьшаем шрифт, а не растим плашку */
 function lenCls(t,a,b,c){var n=t.length;return n>c?'l3':n>b?'l2':n>a?'l1':''}
-window.QD={get screen(){return screen},get G(){return G},newGame:newGame,choose:choose,next:next,fifty:fifty,help:help,audience:audience,set audio(v){audioOn=v},get stars(){return st.stars}};
-fetch('questions.json').then(function(r){return r.json()}).then(function(j){Q=j;render()}).catch(function(){app.textContent='Не удалось загрузить вопросы. Обновите страницу.'});
+window.QD={get screen(){return screen},get G(){return G},get info(){return INFO},newGame:newGame,choose:choose,next:next,fifty:fifty,help:help,audience:audience,take:takeStars,set audio(v){audioOn=v}};
+var h0=location.hash.replace('#','');if(h0==='ex'||h0==='rate'||h0==='rules')screen=h0;
+if(!API||!session()){loginNeeded='auth';screen='login';render()}
+else{render();fetch(AUDIO+'manifest.json').then(function(r){return r.json()}).then(function(m){MAN=m}).catch(function(){MAN={}});loadInfo()}
 })();

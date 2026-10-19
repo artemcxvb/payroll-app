@@ -284,6 +284,7 @@
   }
   function withGeo(d) { return geoGet().then(function (g) { if (g) { d.lat = g.lat; d.lon = g.lon; if (g.accuracy !== undefined) d.accuracy = g.accuracy; } return d; }); }
   var ERR = { network: 'Нет связи с сервером. Проверьте интернет и повторите.', server: 'Сервер ответил ошибкой. Повторите через минуту.', busy: 'Таблица занята другим действием. Повторите через несколько секунд.', disabled: 'Кабинет админа выключен (ADMIN_ENABLED=0).', unknown_action: 'Сервер не знает этого действия: обновите Code.gs (см. DEPLOY.md).', not_found: 'Запись не найдена — возможно, строку удалили в таблице.', bad_phone: 'Нужен мобильный номер РФ, например +7 900 123-45-67.', reason_required: 'Укажите причину (не короче 3 символов).', req_limit: 'Лимит запросов кода исчерпан.', bad_amount: 'Сумма должна быть целым числом больше нуля.', over_requested: 'Нельзя одобрить больше, чем заказал сотрудник.', bad_step: 'Сумма должна быть кратна ' + ADV_STEP + ' ₽ и не меньше ' + ADV_MIN + ' ₽.', over_limit: 'Сумма больше лимита аванса на неделю (' + PAID_MAX + ' ₽).', reason_long: 'Причина слишком длинная (до 300 символов).', unavailable: 'Файл сейчас недоступен на Яндекс Диске.', demo: 'В демо файлы не открываются.' };
+  ERR.reason_required = 'Укажите причину отказа.'; ERR.already = 'Заявка уже решена — обновите список.'; ERR.not_approved = 'Сначала одобрите заявку.'; ERR.not_found = 'Заявка не найдена — обновите список.';   // STARS_V1
   function errText(r) { return ERR[r && r.error] || 'Не получилось выполнить действие. Повторите.'; }
   function mskHm(ms) { return new Date(ms + 3 * 3600000).toISOString().slice(11, 16); }
   function notifyErr(r) {   // человеческие тексты отказов рассылки
@@ -737,6 +738,40 @@
   /* ---------- сводка ---------- */
   /* V2_IMPROVEMENTS_V1: очередь споров по штрафам. «Снять» = «Учитывать» 0 в одной строке «Штрафов» ведомости (после подтверждения, с записью в журнал); сотрудник получает ответ в Telegram */
   /* PROMO_OCT_V1: «Акция: кто участвует» — счётчики, участники с актуальными условиями; рассылка только по кнопке с подтверждением */
+  // STARS_V1: «Звёзды: заявки и рейтинг» — обмен звёзд (отдельный учёт «Бонусы за звёзды», в «Ведомость» не пишется)
+  function starsCard() {
+    var p = S.starsAdm, c = h('section', { class: 'card stack', 'aria-labelledby': 'st-h', 'data-testid': 'stars-adm' }, h('h2', { id: 'st-h', text: 'Звёзды: заявки и рейтинг' }));
+    if (!p) { c.appendChild(h('p', { class: 'cap', text: LIVE ? 'Нет данных (обновите сводку).' : 'Игра «Звёзды» работает только в рабочем режиме.' })); return c; }
+    var st = p.stats, ST = { pending: ['warn', 'ждёт решения'], approved: ['ok', 'одобрена'], rejected: ['bad', 'отклонена'] };
+    c.appendChild(h('div', { class: 'sumgrid po-cnt', 'data-testid': 'stars-stats' }, [['Игр сегодня', st.today], ['Игр за месяц', st.month], ['Игроков', st.players], ['Начислено ⭐', st.earned], ['Сгорело ⭐', st.burned], ['Вопросов', st.questions]].map(function (x) { return h('div', { class: 'po-c' }, h('b', { text: String(x[1]) }), h('span', { class: 'cap', text: x[0] })); })));
+    c.appendChild(h('p', { class: 'cap', text: '1 ⭐ = ' + p.cfg.rub + ' ₽, не больше ' + money(p.cfg.cap) + ' на человека в месяц. Одобренные заявки попадают на вкладку «Бонусы за звёзды» (таблица настроек приложения) с итогом по месяцам; в «Ведомость» ничего не пишется.' }));
+    function decide(x, to) {
+      var o = to === 'approve' ? { title: 'Одобрить обмен?', who: x.name, text: x.stars + ' ⭐ → ' + money(x.rub) + '. Строка появится в «Бонусы за звёзды», выплата — вручную.', yes: 'Одобрить' }
+        : to === 'reject' ? { title: 'Отклонить заявку?', who: x.name, text: 'Звёзды (' + x.stars + ' ⭐) вернутся на баланс.', reason: true, reasonLabel: 'Причина отказа', yes: 'Отклонить', danger: true }
+        : { title: 'Отметить «выплачено»?', who: x.name, text: money(x.rub) + ' — отметка в «Бонусы за звёзды».', yes: 'Выплачено' };
+      confirmAct(o).then(function (y) { if (!y || !requireOnline()) return; call('adminStarsDecide', { id: x.id, to: to, note: y.reason || '' }).then(function (r) { if (!r.ok) return toast(errText(r), 'bad'); toast(to === 'approve' ? 'Одобрено' : to === 'reject' ? 'Отклонено, звёзды возвращены' : 'Отмечено: выплачено'); loadStars(); }); });
+    }
+    c.appendChild(h('h3', { text: 'Заявки на обмен' }));
+    if (!p.items.length) c.appendChild(h('p', { class: 'cap', text: 'Заявок пока нет.' }));
+    p.items.slice(0, 40).forEach(function (x) {
+      var s = ST[x.status], btns = null;
+      if (x.status === 'pending') btns = h('div', { class: 'btnrow' }, h('button', { class: 'btn ghost sm', type: 'button', 'data-testid': 'st-reject', onclick: function () { decide(x, 'reject'); } }, 'Отклонить'), h('button', { class: 'btn sm', type: 'button', 'data-testid': 'st-approve', onclick: function () { decide(x, 'approve'); } }, 'Одобрить'));
+      else if (x.status === 'approved' && !x.paid) btns = h('div', { class: 'btnrow' }, h('button', { class: 'btn secondary sm', type: 'button', 'data-testid': 'st-paid', onclick: function () { decide(x, 'paid'); } }, 'Выплачено'));
+      c.appendChild(h('div', { class: 'dsp-it', 'data-testid': 'st-item' }, h('div', { class: 'row between' }, h('b', { text: x.name }), h('span', { class: 'chip ' + s[0], text: s[1] + (x.status === 'approved' ? (x.paid ? ' · выплачено' : ' · не выплачено') : '') })),
+        h('div', { class: 'cap', text: dmyT(x.at) + ' · ' + x.phone + ' · ' + x.stars + ' ⭐ = ' + money(x.rub) + (x.note ? ' · ' + x.note : '') + (x.by ? ' · ' + x.by : '') }), btns));
+    });
+    c.appendChild(h('h3', { text: 'Рейтинг за месяц' }));
+    if (!p.rating.length) c.appendChild(h('p', { class: 'cap', text: 'В этом месяце ещё никто не играл.' }));
+    p.rating.forEach(function (x) { c.appendChild(h('div', { class: 'row between', 'data-testid': 'st-rate' }, h('span', { text: x.place + '. ' + x.name }), h('span', { class: 'cap', text: '⭐ ' + x.stars + ' · игр: ' + x.games }))); });
+    var dryB = h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'st-dry', onclick: function () { call('adminStarsBroadcast', { dry: true }).then(function (r) { if (!r.ok) return toast(errText(r), 'bad');
+      confirmAct({ title: 'Кому уйдёт рассылка', quote: r.text, text: 'Получат: ' + r.todo + ' (уже получили: ' + r.alreadySent + ').\n' + r.names.join(', '), yes: 'Понятно' }); }); } }, 'Проверить получателей');
+    var sendB = h('button', { class: 'btn', type: 'button', 'data-testid': 'st-send', onclick: function () {
+      confirmAct({ title: 'Разослать приглашение в игру?', text: 'Сообщение с кнопкой «▶ Играть» уйдёт всем привязанным сотрудникам, которые его ещё не получали. Отменить отправку нельзя.', yes: 'Разослать' }).then(function (y) {
+        if (!y) return; call('adminStarsBroadcast', { confirm: 'РАЗОСЛАТЬ' }).then(function (r) { if (!r.ok) return toast(errText(r), 'bad'); toast(r.tgDryRun ? 'TG_DRY_RUN: ничего не отправлено' : 'Отправлено: ' + r.sent + (r.failed ? ', ошибок: ' + r.failed : '')); }); }); } }, 'Разослать приглашение');
+    c.appendChild(h('div', { class: 'btnrow' }, dryB, sendB));
+    return c;
+  }
+  function loadStars() { if (!LIVE || !session()) return Promise.resolve(); return call('adminStars').then(function (r) { if (r && r.ok) { S.starsAdm = r; render(); } }); }
   function promoOctCard() {
     var p = S.promoOct, c = h('section', { class: 'card stack', 'aria-labelledby': 'po-h', 'data-testid': 'promo-oct' }, h('h2', { id: 'po-h', text: 'Акция: кто участвует' }));
     if (!p) { c.appendChild(h('p', { class: 'cap', text: 'Нет данных (обновите сводку).' })); return c; }
@@ -796,6 +831,7 @@
     g.appendChild(tile('acc', s.blocked, 'Заблокировано', s.blocked ? 'доступ закрыт' : 'никто не заблокирован', 'sum-acc'));
     v.appendChild(g);
     v.appendChild(promoOctCard());   // PROMO_OCT_V1
+    v.appendChild(starsCard());   // STARS_V1
     v.appendChild(dspCard());   // V2_IMPROVEMENTS_V1: споры по штрафам
     v.appendChild(notifyCard(s));
     v.appendChild(promoCard(s));
@@ -970,7 +1006,7 @@
     return Promise.all([call('adminSummary'), call('adminLog'), call('adminPromos'), call('adminDisputes'), call('adminPromoOct')]).then(function (rs) {
       if (!session()) return;
       if (rs[3] && rs[3].ok) S.dsp = rs[3].items;
-      if (rs[4] && rs[4].ok) S.promoOct = rs[4];
+      if (rs[4] && rs[4].ok) S.promoOct = rs[4]; loadStars();
       if (rs[2].ok) S.promoItems = promoItemsFrom(rs[2].items);
       if (rs[0].ok) { S.sum = rs[0]; delete S.err.sum; S.log = rs[1].ok ? rs[1].items : S.log; } else if (rs[0].error !== 'auth') S.err.sum = errText(rs[0]);
       render();
