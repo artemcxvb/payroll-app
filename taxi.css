@@ -156,3 +156,20 @@ body.taxipage .app { max-width: 520px; }
 .sumcard.tone-green{background:rgba(22,163,74,.10);border-color:rgba(22,163,74,.25)}.sumcard.tone-green .n{color:#15803d}
 .sumcard.tone-orange{background:rgba(234,138,22,.12);border-color:rgba(234,138,22,.3)}.sumcard.tone-orange .n{color:#b45309}
 [data-theme=dark] .sumcard.tone-blue .n{color:#8fa8ff}[data-theme=dark] .sumcard.tone-green .n{color:#6ee7a0}[data-theme=dark] .sumcard.tone-orange .n{color:#fbbf6a}
+/* TAXI_ADVANCE_V1: подотчёт */
+.sumcard.tone-red{background:rgba(220,38,38,.09);border-color:rgba(220,38,38,.3)}.sumcard.tone-red .n{color:#b91c1c}[data-theme=dark] .sumcard.tone-red .n{color:#fca5a5}
+.tx-adv{display:flex;flex-direction:column;gap:12px}
+.tx-advgrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.tx-advgrid .sumcard .n{font-size:20px}
+.tx-advnote{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:12px;font-size:14px}
+.tx-advnote.warn{background:rgba(234,138,22,.12);color:#92400e}.tx-advnote.bad{background:rgba(220,38,38,.09);color:#991b1b}
+[data-theme=dark] .tx-advnote.warn{color:#fbbf6a}[data-theme=dark] .tx-advnote.bad{color:#fca5a5}
+.tx-advrow{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:12px;border:1px solid var(--line,rgba(0,0,0,.08))}
+.tx-advtop{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.tx-advrow .dd{font-weight:600}.tx-advleft{color:#15803d}
+.tx-advrow.low{border-color:rgba(220,38,38,.35);background:rgba(220,38,38,.06)}.tx-advrow.low .tx-advleft{color:#b91c1c}
+[data-theme=dark] .tx-advleft{color:#6ee7a0}[data-theme=dark] .tx-advrow.low .tx-advleft{color:#fca5a5}
+.tx-advrow .tx-acts{display:flex;gap:8px;flex-wrap:wrap}
+.tx-advgrid{grid-template-columns:1fr 1fr}.tx-advgrid>.sumcard:last-child{grid-column:1/-1}
+.tx-advgrid>.sumcard:last-child .n{font-size:28px}
+.tx-advrow .tx-acts{flex-direction:row}.tx-advrow .tx-acts .btn{flex:1 1 0;width:auto;min-height:44px}
