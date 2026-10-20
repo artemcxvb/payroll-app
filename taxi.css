@@ -173,3 +173,4 @@ body.taxipage .app { max-width: 520px; }
 .tx-advgrid{grid-template-columns:1fr 1fr}.tx-advgrid>.sumcard:last-child{grid-column:1/-1}
 .tx-advgrid>.sumcard:last-child .n{font-size:28px}
 .tx-advrow .tx-acts{flex-direction:row}.tx-advrow .tx-acts .btn{flex:1 1 0;width:auto;min-height:44px}
+.tx-advissues{align-self:flex-start;min-height:40px}

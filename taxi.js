@@ -320,7 +320,7 @@
     function advAcc(ph) {
       var mine = s.adv.filter(function (r) { return r.phone === ph; }); if (!mine.length) return null;
       var start = '', carry = 0, iss = 0, name = '', site = '', pend = null, last = null, ret = null, issues = [];
-      mine.forEach(function (r) { name = r.name || name; if (r.type === 'issue') { if (!start) start = r.at; iss += r.amount; site = r.site || site; issues.push({ id: r.id, at: r.at, amount: r.amount, site: r.site || '', comment: r.comment || '' }); return; }
+      mine.forEach(function (r) { if (r.deleted) return; name = r.name || name; if (r.type === 'issue') { if (!start) start = r.at; iss += r.amount; site = r.site || site; issues.push({ id: r.id, at: r.at, amount: r.amount, site: r.site || '', comment: r.comment || '' }); return; }
         if (r.status === 'accepted') { carry = Math.max(0, r2(r.snap.left)); iss = 0; issues = []; start = carry > 0 ? r.at : ''; last = { at: r.at, left: r.snap.left, decidedAt: r.dec || r.at }; pend = null; ret = null; } else if (r.status === 'pending') pend = { id: r.id, at: r.at }; else { ret = { at: r.at, reason: r.reason || '' }; if (pend && pend.id === r.id) pend = null; } });
       var sp = 0, ids = []; if (start) s.trips.forEach(function (x) { if (x.status === 'active' && (x.byPhone || '') === ph && x.created >= start) { sp += x.amount; ids.push(x.id); } });
       var av = r2(carry + iss), left = r2(av - sp);
@@ -337,6 +337,16 @@
       if (!hit) return demoRes({ ok: false, error: 'adv_no_emp' });
       s.seq++; s.adv.push({ id: 'PD' + (s.seq + 100), at: nowMskStr(), type: 'issue', phone: hit.phone, name: hit.name, amount: aa, site: d.site || '', comment: d.comment || '' }); store(DEMOK, s);
       return demoRes({ ok: true, id: 'PD' + (s.seq + 100), name: hit.name, notified: true, acc: advPub(advAcc(hit.phone), true) });
+    }
+    if (action === 'taxiAdvEdit' || action === 'taxiAdvDelete') {   // TAXI_ADVANCE_EDIT_V1 (демо)
+      if (isEmp) return demoRes({ ok: false, error: 'forbidden' });
+      var er = s.adv.filter(function (r) { return r.id === d.id && r.type === 'issue' && !r.deleted; })[0]; if (!er) return demoRes({ ok: false, error: 'not_found' });
+      var ea = advAcc(er.phone); if (!ea || !ea.issues.some(function (z) { return z.id === er.id; })) return demoRes({ ok: false, error: 'adv_closed' });
+      if (action === 'taxiAdvDelete') { er.deleted = true; store(DEMOK, s); return demoRes({ ok: true, id: er.id, notified: true }); }
+      var ev = r2(parseAmount(String(d.amount))); if (!(ev > 0)) return demoRes({ ok: false, error: 'bad_amount' });
+      var tgt = null; if (String(d.phone || '').trim()) { var q2 = String(d.phone).trim(), qd2 = q2.replace(/\D/g, '').replace(/^8(?=\d{10}$)/, '7'), kn = advPeople().filter(Boolean).concat([{ phone: '79000000002', name: 'Петрова Анна Ивановна' }, { phone: '79000000003', name: 'Сидоров Сергей Петрович' }]); tgt = kn.filter(function (p0) { return qd2.length === 11 ? p0.phone === qd2 : lowE(p0.name).indexOf(lowE(q2)) === 0; })[0] || (qd2.length === 11 ? { phone: qd2, name: 'Демо Сотрудник ' + qd2.slice(-2) } : null); if (!tgt) return demoRes({ ok: false, error: 'adv_no_emp' }); }
+      if (tgt && tgt.phone !== er.phone) { er.deleted = true; s.seq++; var nr = { id: 'PD' + (s.seq + 100), at: er.at, type: 'issue', phone: tgt.phone, name: tgt.name, amount: ev, site: d.site || '', comment: d.comment || '' }; s.adv.push(nr); store(DEMOK, s); return demoRes({ ok: true, id: nr.id, moved: true, notified: true, notifiedOld: true, acc: advPub(advAcc(tgt.phone), true) }); }
+      er.amount = ev; er.site = d.site || ''; er.comment = d.comment || ''; store(DEMOK, s); return demoRes({ ok: true, id: er.id, moved: false, notified: true, acc: advPub(advAcc(er.phone), true) });
     }
     if (action === 'taxiAdvReport') {
       if (!isEmp) return demoRes({ ok: false, error: 'forbidden' });
@@ -370,7 +380,7 @@
       var out = JSON.parse(JSON.stringify(items)), bp = null;
       out.forEach(function (x) { x.comp = s.comps[x.id] ? JSON.parse(JSON.stringify(s.comps[x.id])) : null; });
       var advIds = {}; (isEmp ? [advAcc(empPhone)] : advPeople()).forEach(function (a) { if (a && a.open) a.tripIds.forEach(function (t) { advIds[t] = 1; }); }); out.forEach(function (x) { x.adv = !!advIds[x.id]; });
-      var advance = isEmp ? { me: advPub(advAcc(empPhone), false), low: 500 } : { people: advPeople().map(function (a) { return advPub(a, true); }), low: 500 };
+      var advance = isEmp ? { me: advPub(advAcc(empPhone), false), low: 500 } : { people: advPeople().filter(Boolean).map(function (a) { return advPub(a, true); }), low: 500, edit: true };
       var bspent = 0; s.trips.forEach(function (x) { if (x.status === 'active' && x.date >= s.budget.since) bspent += x.amount; });
       var bdd = {}; s.trips.forEach(function (x) { if (x.status === 'active' && x.date >= s.budget.since) bdd[x.date] = (bdd[x.date] || 0) + x.amount; });
       var brun = s.budget.allocated, bdays = Math.max(1, Math.round((Date.parse(today() + 'T00:00:00Z') - Date.parse(s.budget.since + 'T00:00:00Z')) / 86400000) + 1);
@@ -909,7 +919,7 @@
     var hit = b.byDay.filter(function (x) { return x.date === date; })[0]; return hit ? hit.left : null;
   }
   /* ---------- TAXI_ADVANCE_V1: подотчёт на такси (выдано / потрачено / остаток, «Отчитаться», список у админа) ---------- */
-  (function () { var add = { adv_none: 'Подотчёт вам не выдавали или период уже закрыт.', adv_pending: 'Отчёт уже на проверке у администратора.', adv_covered: 'Эта поездка оплачена из подотчёта. Компенсировать можно только перерасход сверх остатка.', adv_no_emp: 'Сотрудник не найден. Укажите телефон, как в CRM.', adv_many: 'Нашлось несколько человек. Укажите телефон.' }; Object.keys(add).forEach(function (k) { if (!ERR[k]) ERR[k] = add[k]; }); })();
+  (function () { var add = { adv_none: 'Подотчёт вам не выдавали или период уже закрыт.', adv_pending: 'Отчёт уже на проверке у администратора.', adv_covered: 'Эта поездка оплачена из подотчёта. Компенсировать можно только перерасход сверх остатка.', adv_no_emp: 'Сотрудник не найден. Укажите телефон, как в CRM.', adv_many: 'Нашлось несколько человек. Укажите телефон.', adv_closed: 'Период уже закрыт принятым отчётом — эту выдачу не исправить.' }; Object.keys(add).forEach(function (k) { if (!ERR[k]) ERR[k] = add[k]; }); })();
   function sMoney(n) { return n < 0 ? '−' + money(-n) : money(n); }
   function advMine() { var a = S.data && S.data.advance; return a && a.me ? a.me : null; }
   function advCard(a) {   // карточка сотрудника «Мои подотчётные»
@@ -944,7 +954,8 @@
       rows.appendChild(h('div', { class: 'tx-advrow' + (a.left < 0 || a.low ? ' low' : ''), 'data-testid': 'adv-row', 'data-low': a.left < 0 || a.low ? '1' : '0' },
         h('div', { class: 'tx-advtop' }, h('span', { class: 'dd', text: a.name }), h('b', { class: 'num tx-advleft', 'data-testid': 'adv-row-left', text: sMoney(a.left) })),
         h('div', { class: 'dn', text: 'выдано ' + money(a.available) + ' · потрачено ' + money(a.spent) + ' · ' + a.count + ' ' + plural(a.count, ['поездка', 'поездки', 'поездок']) + (a.site ? ' · ' + a.site : '') }),
-        a.pending ? h('span', { class: 'chip warn', 'data-testid': 'adv-row-pending', text: 'Отчёт ждёт проверки' }) : null, acts));
+        a.pending ? h('span', { class: 'chip warn', 'data-testid': 'adv-row-pending', text: 'Отчёт ждёт проверки' }) : null, acts,
+        adv.edit && (a.issues || []).length ? h('button', { class: 'btn ghost tx-advissues', type: 'button', 'data-testid': 'adv-open', onclick: function () { advIssues(a, people); } }, ico('edit', 'sm'), 'Выдачи: исправить / удалить') : null));
     });
     var give = h('button', { class: 'btn', type: 'button', 'data-testid': 'adv-give', onclick: function () { advGive(people); } }, ico('plus', 'sm'), 'Выдать на такси');
     return h('section', { class: 'card tx-adv', 'data-testid': 'adv-admin', 'aria-label': 'Подотчёт на такси' },
@@ -952,6 +963,49 @@
       list.length ? h('div', { class: 'sumgrid tx-sum tx-advgrid' }, sumCard('Выдано', money(tot.a), 'на руках у людей', 'adv-t-issued', 'blue'), sumCard('Потрачено', money(tot.s), 'по чекам', 'adv-t-spent', 'orange'), sumCard('Осталось', sMoney(r2(tot.l)), 'у всех', 'adv-t-left', tot.l < 0 ? 'red' : 'green')) : h('p', { class: 'help', text: 'Пока никому не выдано. Нажмите «Выдать на такси» или отправьте боту @tableworks_bot: /vydat 79001234567 3000.' }),
       list.length ? rows : null,
       h('div', { class: 'tx-actions' }, give), h('p', { class: 'help', text: 'Из бота: /vydat <телефон или ФИО> <сумма> [комментарий], список — /podotchet. Красным — остаток меньше ' + money(adv.low || 500) + ' или перерасход.' }));
+  }
+  /* TAXI_ADVANCE_EDIT_V1: выдачи человека → «Исправить» (главное — переназначить другому) / «Удалить» */
+  function advIssues(a, people) {
+    var box = h('div', { class: 'gap12', 'data-testid': 'adv-issues' });
+    (a.issues || []).slice().reverse().forEach(function (x) {
+      box.appendChild(h('div', { class: 'tx-advrow', 'data-testid': 'adv-issue', 'data-id': x.id },
+        h('div', { class: 'tx-advtop' }, h('span', { class: 'dd', text: dmy(x.at).slice(0, 5) + ' ' + String(x.at).slice(11, 16) }), h('b', { class: 'num', text: money(x.amount) })),
+        x.site || x.comment ? h('div', { class: 'dn', text: [x.site, x.comment].filter(Boolean).join(' · ') }) : null,
+        h('div', { class: 'tx-acts' }, h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'adv-edit', onclick: function () { ctl.close(true); advEdit(a, x, people); } }, ico('edit', 'sm'), 'Исправить'),
+          h('button', { class: 'btn danger', type: 'button', 'data-testid': 'adv-del', onclick: function () { ctl.close(true); advDel(a, x); } }, ico('trash', 'sm'), 'Удалить'))));
+    });
+    if (!(a.issues || []).length) box.appendChild(h('p', { class: 'help', text: 'В текущем периоде выдач нет (остаток перенесён из прошлого периода).' }));
+    var ctl = openDialog({ title: a.name, body: h('div', { class: 'gap12' }, h('p', { class: 'cap', text: 'Выдачи текущего периода. Ошиблись человеком или суммой — нажмите «Исправить».' }), box) });
+  }
+  function advEdit(a, x, people) {
+    var dl = 'advpe' + Math.random().toString(36).slice(2, 7), errs = {};
+    var who = h('input', { class: 'inp', type: 'text', list: dl, autocomplete: 'off', value: phoneFmt(a.phone), 'data-testid': 'adv-e-who', 'aria-label': 'Кому' });
+    var list = h('datalist', { id: dl }); (people || []).forEach(function (p) { if (p.phone) list.appendChild(h('option', { value: phoneFmt(p.phone), label: p.name })); });
+    var amt = h('input', { class: 'inp', type: 'text', inputmode: 'decimal', value: String(x.amount).replace('.', ','), 'data-testid': 'adv-e-amount', 'aria-label': 'Сумма' });
+    var site = h('select', { class: 'inp', 'data-testid': 'adv-e-site', 'aria-label': 'Площадка' }); site.appendChild(h('option', { value: '', text: 'Не указана' })); S.sites.forEach(function (s0) { site.appendChild(h('option', { value: s0, text: s0 })); }); site.value = x.site || '';
+    var note = h('input', { class: 'inp', type: 'text', maxlength: '200', value: x.comment || '', 'data-testid': 'adv-e-note', 'aria-label': 'Комментарий' });
+    var err = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'adv-e-err' });
+    var yes = h('button', { class: 'btn', type: 'button', 'data-testid': 'adv-e-save', onclick: function () {
+      var v = parseAmount(amt.value); err.hidden = true; if (!(v > 0)) { err.textContent = ERR.bad_amount; err.hidden = false; return; }
+      var ph = who.value.trim(), same = ph.replace(/\D/g, '').replace(/^8(?=\d{10}$)/, '7') === a.phone;
+      if (ph.length < 3) { err.textContent = 'Укажите телефон или ФИО.'; err.hidden = false; return; }
+      if (!requireOnline()) return; yes.disabled = true;
+      call('taxiAdvEdit', { id: x.id, phone: same ? '' : ph, amount: v, site: site.value, comment: note.value.trim() }).then(function (r) {
+        yes.disabled = false; if (!r.ok) { err.textContent = ERR[r.error] || errText(r); err.hidden = false; return; }
+        ctl.close(true); toast(r.same ? 'Без изменений' : r.moved ? 'Переназначено: ' + money(v) + ' → ' + (r.acc && r.acc.name || 'другому') : 'Выдача исправлена'); loadList(true);
+      });
+    } }, 'Сохранить');
+    var ctl = openDialog({ title: 'Исправить выдачу', focus: function () { who.focus(); },
+      body: h('div', { class: 'gap12' }, h('p', { class: 'cap', 'data-testid': 'adv-e-from', text: 'Сейчас: ' + a.name + ', ' + money(x.amount) + ' от ' + dmy(x.at).slice(0, 5) }),
+        fieldBox('Кому (переназначить другому)', who, errs, 'ewho', 'Выберите или впишите телефон / ФИО нужного сотрудника. Остатки обоих пересчитаются, обоим придёт сообщение.'), list,
+        fieldBox('Сумма, ₽', amt, errs, 'eamt'), fieldBox('Площадка', site, errs, 'esite'), fieldBox('Комментарий', note, errs, 'enote'), err),
+      footer: h('div', { class: 'btnrow' }, h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(true); } }, 'Отмена'), yes) });
+  }
+  function advDel(a, x) {
+    if (!requireOnline()) return;
+    confirmAct({ title: 'Удалить выдачу?', who: a.name, text: money(x.amount) + ' от ' + dmy(x.at).slice(0, 5) + '. Остаток пересчитается, сотруднику придёт сообщение.', danger: true, yes: 'Удалить' }).then(function (c) {
+      if (!c) return; call('taxiAdvDelete', { id: x.id }).then(function (r) { if (r.ok) { toast('Выдача удалена'); loadList(true); } else toast(ERR[r.error] || errText(r), 'bad'); });
+    });
   }
   function advDecide(a, to, btn) {
     if (!requireOnline()) return;
