@@ -670,3 +670,22 @@ button.v2-pp { width: 100%; background: none; border-left: 0; border-right: 0; b
 .tabbar.many { padding-left: 0; padding-right: 0; } .tabbar.many .tab { min-width: 0; } .tabbar.many .tab > span:not(.cnt) { font-size: 10.5px; letter-spacing: -.3px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: clip; }
 @media (max-width: 400px) { .tabbar.many .tab > span:not(.cnt) { font-size: 9.5px; } .tabbar.many8 .tab > span:not(.cnt) { font-size: 8.6px; letter-spacing: -.35px; } }
 .stars-card a.btn { text-decoration: none; } .stars-card .note-s { text-align: left; }
+/* HOUSING_RULE_V1 */
+.hs p{margin:0}
+.hs-tier{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line,#e3e6ee);border-radius:14px}
+.hs-tier small{display:block;opacity:.7;font-size:13px}
+.hs-tier .hs-v{font-size:22px;font-weight:700}
+.hs-tier.on{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,transparent)}
+.hs-prog{padding:12px 14px;border-radius:14px;background:color-mix(in srgb,currentColor 5%,transparent)}
+.hs-pt b{font-size:18px}
+.hs-bar{height:10px;border-radius:6px;background:color-mix(in srgb,currentColor 12%,transparent);margin:8px 0;overflow:hidden}
+.hs-bar i{display:block;height:100%;background:var(--primary);border-radius:6px}
+.hs-bar.done i{background:var(--ok)}
+.hs-ex{padding:12px 14px;border-radius:14px;border:1px dashed var(--line,#d5d9e3)}
+.hs-ex p{font-size:14px;margin-top:4px}
+.hs-i{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin:0 6px;border-radius:50%;border:1.5px solid currentColor;background:none;color:var(--primary);font:700 11px/1 serif;font-style:italic;cursor:pointer;vertical-align:middle;padding:0}
+.hs-note{padding:8px 12px;border-radius:10px;background:var(--ok-bg);color:var(--ok);font-weight:600;font-size:14px;line-height:1.35}
+.hs.gap12{gap:10px}
+.hs-tier{padding:10px 14px}
+.hs-tier .hs-v{white-space:nowrap}
+.hs-warn{padding:8px 12px;border-radius:10px;border:1px solid var(--warn,#e0a100);background:color-mix(in srgb,var(--warn,#e0a100) 10%,transparent);font-weight:600;font-size:14px;line-height:1.35}
