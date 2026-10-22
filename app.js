@@ -2429,7 +2429,7 @@
     return s;
   }
   /* HOUSING_RULE_V1: попап «Стоимость проживания с октября». Параметры — из S.data.housingRule (бэкенд, Настройки!G21:G24), иначе значения по умолчанию */
-  function hsRule() { var r = (S.data && S.data.housingRule) || {}; return { lo: +r.rateLow || 550, hi: +r.rateHigh || 333, thr: +r.threshold || 28, from: r.from || '2026-10-01', ver: r.ver || 'hs-2026-10' }; }
+  function hsRule() { var r = (S.data && S.data.housingRule) || {}; return { lo: +r.rateLow || 550, hi: +r.rateHigh || 333, thr: +r.threshold || 26, from: r.from || '2026-10-01', ver: r.ver || 'hs-2026-10' }; }
   var HS_MON = ['январе', 'феврале', 'марте', 'апреле', 'мае', 'июне', 'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре'];
   function hsCount() {
     if (S.data && S.data.housingRule && S.data.housingRule.monthShifts != null) return +S.data.housingRule.monthShifts;
@@ -2454,8 +2454,8 @@
       h('p', { text: 'С 1 октября 2026 года стоимость проживания зависит от того, сколько смен вы отработали за календарный месяц. Чем больше смен, тем дешевле проживание.' }),
       tier(!over, 'До ' + r.thr + ' смен в месяц включительно', r.lo + ' ₽', 'за каждую смену'),
       tier(over, 'Больше ' + r.thr + ' смен в месяц', r.hi + ' ₽', 'за все смены этого месяца'),
-      h('p', { class: 'hs-warn', 'data-testid': 'hs-warn', text: 'Ставка 550 ₽ за смену применяется, если вы прервёте период оказания услуг, указанный в задании в приложении «Консоль».' }),
-      h('p', { class: 'cap hs-arr', 'data-testid': 'hs-arr', text: 'Если вы приехали не с начала месяца, порог считается пропорционально дням. Например, приехали 16-го — если отработаете больше 14 смен, всё проживание за месяц будет по 333 ₽ за смену.' }),
+      h('p', { class: 'hs-warn', 'data-testid': 'hs-warn', text: 'Ставка ' + r.lo + ' ₽ за смену применяется, если вы прервёте период оказания услуг, указанный в задании в приложении «Консоль».' }),
+      h('p', { class: 'cap hs-arr', 'data-testid': 'hs-arr', text: 'Если вы приехали не с начала месяца, порог считается пропорционально дням. Например, приехали 16-го — если отработаете больше ' + Math.round(r.thr * 16 / 31) + ' ' + plural(Math.round(r.thr * 16 / 31), ['смены', 'смен', 'смен']) + ', всё проживание за месяц будет по ' + r.hi + ' ₽ за смену.' }),
       h('p', { class: 'hs-note', 'data-testid': 'hs-note', text: 'В дни выходных и больничного проживание не удерживается — оно считается только за отработанные смены.' }),
       h('div', { class: 'hs-prog', 'data-testid': 'hs-prog' },
         h('div', { class: 'hs-pt' }, h('b', { class: 'num', text: n + ' из ' + pthr }), h('span', { text: ' смен в ' + mon })),
@@ -2464,12 +2464,12 @@
       h('div', { class: 'hs-ex' }, h('b', { text: 'Пример' }),
         h('p', { text: '20 смен за месяц: 20 × ' + r.lo + ' ₽ = ' + money(ex) + '.' }),
         h('p', { text: '30 смен за месяц: 30 × ' + r.hi + ' ₽ = ' + money(ex2) + ' — смен больше, а за проживание вы платите меньше.' })),
-      h('p', { class: 'cap', text: 'Смены считаются отдельно за каждый календарный месяц. Сумма за проживание вычитается из выплаты, как и раньше. До октября действует прежняя цена — 333 ₽ за смену.' }));
+      h('p', { class: 'cap', text: 'Смены считаются отдельно за каждый календарный месяц. Сумма за проживание вычитается из выплаты, как и раньше. До октября действует прежняя цена — ' + r.hi + ' ₽ за смену.' }));
     var sh = openSheet({ title: 'Стоимость проживания с октября', dialog: true, body: body,
       footer: h('button', { class: 'btn', type: 'button', 'data-testid': 'hs-ok', onclick: function () { sh.close(); } }, 'Понятно'),
       onClose: function () { try { localStorage.setItem(hsKey(), '1'); } catch (e) {} } });
   }
-  function hsKey() { var u = (S.data && S.data.user) || {}; return 'pr_seen_' + hsRule().ver + '_' + String(u.name || '').replace(/\s+/g, '_'); }
+  function hsKey() { var u = (S.data && S.data.user) || {}; var r = hsRule(); return 'pr_seen_' + r.ver + '-t' + r.thr + '_' + String(u.name || '').replace(/\s+/g, '_'); }
   function hsMaybe() { try { if (localStorage.getItem(hsKey())) return; } catch (e) { return; } if (openStack.length) return; setTimeout(hsOpen, 400); }
   function hsInfoBtn() { return h('button', { class: 'hs-i', type: 'button', 'aria-label': 'Как считается проживание', 'data-testid': 'hs-info', onclick: function (e) { e.stopPropagation(); hsOpen(); } }, 'i'); }
   function v2HomeCards(v, c) { var a = v2Forecast(c), b = v2EmpSlider(c); if (a) v.appendChild(a); if (b) v.appendChild(b); hsMaybe(); }
