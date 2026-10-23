@@ -2535,6 +2535,7 @@
     return s;
   }
   /* ---------- SKUD_V1: заявка «Прошивка СКУД» (только бригадир) ---------- */
+  function skHid(v) { v = String(v || '').trim().replace(/[.\/\s;:\-]+/g, ',').replace(/,+/g, ',').replace(/^,|,$/g, ''); if (/^\d{4,9}$/.test(v)) v = v.slice(0, 3) + ',' + v.slice(3); return v; }
   var SKUD_F = [['last', 'Фамилия'], ['first', 'Имя'], ['middle', 'Отчество'], ['cit', 'Гражданство'], ['hid', 'HID (номер карты)'], ['birth', 'Дата рождения'], ['start', 'Дата выхода']];
   var SKUD_P = [['pass', 'Паспорт — главный разворот'], ['reg', 'Паспорт — прописка'], ['face', 'Фото на бейдж']];
   var SKUD_SUP = 'Персональное Решение';
@@ -2617,7 +2618,7 @@
       var err = errs[i] || {}, box = h('div', { class: 'sk-pb' });
       SKUD_F.forEach(function (f) {
         var k = f[0], t = (k === 'birth' || k === 'start') ? 'date' : 'text';
-        var inp = h('input', { class: 'inp', type: t, 'data-testid': 'sk-' + i + '-' + k, value: d[k] || '', autocomplete: 'off', inputmode: k === 'hid' ? 'decimal' : 'text', placeholder: k === 'hid' ? '112,36865' : (k === 'middle' ? 'если есть' : ''), oninput: function () { d[k] = inp.value.trim(); if (k === 'last' || k === 'first') { var t = body.querySelector('[data-testid=sk-pt-' + i + ']'); if (t) t.textContent = skFio(d); } if (err[k]) { clearErr(i, k); inp.removeAttribute('aria-invalid'); var n = inp.nextSibling; if (n) n.remove(); } } });
+        var inp = h('input', { class: 'inp', type: t, 'data-testid': 'sk-' + i + '-' + k, value: d[k] || '', autocomplete: 'off', inputmode: 'text', autocapitalize: k === 'hid' ? 'off' : null, spellcheck: k === 'hid' ? 'false' : null, placeholder: k === 'hid' ? '112,36865' : (k === 'middle' ? 'если есть' : ''), onblur: k === 'hid' ? function () { d.hid = skHid(inp.value); inp.value = d.hid; } : null, oninput: function () { d[k] = k === 'hid' ? skHid(inp.value) : inp.value.trim(); if (k === 'last' || k === 'first') { var t = body.querySelector('[data-testid=sk-pt-' + i + ']'); if (t) t.textContent = skFio(d); } if (err[k]) { clearErr(i, k); inp.removeAttribute('aria-invalid'); var n = inp.nextSibling; if (n) n.remove(); } } });
         if (err[k]) inp.setAttribute('aria-invalid', 'true');
         box.appendChild(h('label', { class: 'field sk-f' }, h('div', { class: 'l' }, f[1], k === 'middle' ? h('span', { text: 'необязательно' }) : null), inp, err[k] ? h('p', { class: 'sk-err', text: err[k] }) : null));
       });

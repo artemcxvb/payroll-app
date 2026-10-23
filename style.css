@@ -722,3 +722,9 @@ button.v2-pp { width: 100%; background: none; border-left: 0; border-right: 0; b
 .sk-x{border:0;background:var(--card2);border-radius:50%;width:32px;height:32px;font-size:14px;color:var(--muted)}.sk-chev{color:var(--muted)}
 .sk-pb{padding:0 12px 12px}.sk-add{width:100%;margin:2px 0 6px}
 .sk-grp{margin:0 0 14px}.sk-grp-h{display:flex;gap:8px;align-items:center;margin:0 0 6px;font-size:14px}
+
+/* iOS: date/text inputs in СКУД form must not overflow */
+.sk .inp, .sk input[type=date] { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; display: block; }
+.sk input[type=date] { -webkit-appearance: none; appearance: none; min-height: 48px; text-align: left; }
+.sk input[type=date]::-webkit-date-and-time-value { text-align: left; }
+.sk .sk-f { min-width: 0; max-width: 100%; }
