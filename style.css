@@ -710,3 +710,7 @@ button.v2-pp { width: 100%; background: none; border-left: 0; border-right: 0; b
 .sk-oval { position: absolute; left: 20%; top: 10%; width: 60%; height: 55%; border: 2px dashed rgba(255,255,255,.85); border-radius: 50%; box-shadow: 0 0 0 999px rgba(0,0,0,.35); pointer-events: none; }
 .sk-zr { display: flex; gap: 10px; align-items: center; } .sk-zr .sk-zoom { flex: 1; } .sk-zr span { font-size: 22px; font-weight: 700; color: var(--muted); }
 .sk-tile.face img { object-position: center top; }
+/* YAVKA_GONE_V1 (макет) */
+.v2-gone{margin-top:12px;border-top:1px solid var(--line,#e5e5e5);padding-top:8px}
+.v2-gone summary{cursor:pointer;font-weight:600;color:var(--muted,#666);padding:6px 0}
+.row-btns{display:flex;gap:8px}.row-btns .btn{flex:1}

@@ -2309,8 +2309,13 @@
   /* ---------- V2_IMPROVEMENTS_V1: «Где вырасти», брак по людям, явка, ползунок и прогноз сотрудника, «Оспорить штраф», акты Консоли ---------- */
   var V2_ERR = { forbidden: 'Нет доступа.', rate_limit: 'Слишком часто. Попробуйте позже.', bad_date: 'Дата вне периода или в будущем.', bad_shift: 'Выберите смену.', bad_employee: 'Сотрудник не найден.', bad_reason: 'Укажите причину.',
     bad_comment: 'Напишите, почему вы не согласны (от 3 символов).', bad_case: 'Этот штраф нельзя оспорить.', already: 'Спор по этому штрафу уже на рассмотрении.', busy: 'Сервер занят, попробуйте ещё раз.', not_configured: 'Связь с Консолью не настроена.', unavailable: 'Консоль сейчас недоступна.' };
-  var V2D = { att: [], disputes: [] };   // демо: записи в памяти
+  var V2D = { att: [], disputes: [], gone: [] };   // демо: записи в памяти
   function v2Demo(action, b) {
+    if (action === 'fmGone') {   // YAVKA_GONE_V1 (макет): «Не работает» / «Вернуть»
+      V2D.gone = (V2D.gone || []).filter(function (x) { return x.name !== b.name || x.by === 'блок'; });
+      if (!b.back) V2D.gone.push({ name: b.name, from: b.from, by: 'бригадир', at: new Date().toISOString().slice(0, 16).replace('T', ' ') });
+      return { ok: true, att: { ok: true, reasons: ['болен', 'отгул', 'прогул', 'другое'], items: V2D.att.slice(), gone: V2D.gone.slice() } };
+    }
     if (action === 'fmAtt') { V2D.att = V2D.att.filter(function (x) { return !(x.date === b.date && x.shift === b.shift && x.name === b.name); }); V2D.att.unshift({ date: b.date, shift: b.shift, name: b.name, present: b.present, reason: b.present ? '' : b.reason, comment: b.comment || '' }); return { ok: true, att: { ok: true, reasons: ['болен', 'отгул', 'прогул', 'другое'], items: V2D.att.slice() } }; }
     if (action === 'disputeAdd') { if (V2D.disputes.some(function (x) { return x.caseId === b.caseId && x.status === 'open'; })) return { ok: false, error: 'already' }; V2D.disputes.push({ id: 'dsp-demo' + V2D.disputes.length, caseId: b.caseId, comment: b.comment, status: 'open', at: new Date().toISOString().slice(0, 16).replace('T', ' ') }); return { ok: true, disputes: V2D.disputes.slice() }; }
     if (action === 'konsol') return { ok: true, acts: (window.MOCK && MOCK.konsol) || [], fetchedAt: '' };
@@ -2363,19 +2368,39 @@
     var seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Смена' });
     ['День', 'Ночь'].forEach(function (x) { seg.appendChild(h('button', { type: 'button', 'aria-pressed': st.shift === x ? 'true' : 'false', 'data-testid': 'v2-att-shift', onclick: function () { st.shift = x; render(); } }, x)); });
     s.appendChild(h('div', { class: 'v2-att-top' }, di, seg));
+    var gone = {}; (a.gone || []).forEach(function (x) { if (!x.from || x.from <= st.date) gone[x.name] = x; });   // YAVKA_GONE_V1: «Не работает» с даты; блок в «Доступ» тоже
+    var goneList = names.filter(function (n) { return gone[n]; }); names = names.filter(function (n) { return !gone[n]; });
     var mark = {}; (a.items || []).forEach(function (x) { if (x.date === st.date && x.shift === st.shift && !mark[x.name]) mark[x.name] = x; });
     var cnt = Object.keys(mark).filter(function (k) { return mark[k].present; }).length;
     s.appendChild(h('div', { class: 'cap', 'data-testid': 'v2-att-sum', text: 'Отмечено: ' + Object.keys(mark).length + ' из ' + names.length + ' · вышли ' + cnt }));
     function save(nm, present, reason) {
       v2Send('fmAtt', { date: st.date, shift: st.shift, name: nm, present: present, reason: reason || '' }).then(function (r) { if (r) { f.v2 = f.v2 || {}; f.v2.att = r.att; toast(nm + ': ' + (present ? 'вышел' : 'не вышел — ' + reason)); render(); } });
     }
+    function goneSend(nm, back) {
+      v2Send('fmGone', { name: nm, from: st.date, back: !!back }).then(function (r) { if (r) { f.v2 = f.v2 || {}; f.v2.att = r.att; toast(nm + (back ? ' снова в списке' : ': не работает — скрыт из списка')); render(); } });
+    }
+    function goneAsk(nm) {
+      var sh = openSheet({ title: 'Не работает', dialog: true, body: h('div', { 'data-testid': 'v2-gone-ask' }, h('p', null, h('b', { text: nm })),
+        h('p', { class: 'cap', text: 'Сотрудник больше не работает в бригаде. С ' + fmtD(st.date) + ' он пропадёт из списка явки. Отметки до этой даты сохранятся. Вернуть можно в разделе «Не работают» внизу.' })),
+        footer: h('div', { class: 'row-btns' }, h('button', { class: 'btn secondary', type: 'button', onclick: function () { sh.close(); } }, 'Отмена'),
+          h('button', { class: 'btn', type: 'button', 'data-testid': 'v2-gone-ok', onclick: function () { sh.close(); goneSend(nm, false); } }, 'Не работает')) });
+    }
+    function fmtD(x) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(x || ''); return m ? m[3] + '.' + m[2] + '.' + m[1] : x; }
     names.forEach(function (nm) {
       var m = mark[nm], sel = h('select', { class: 'inp v2-rs', 'aria-label': 'Причина: ' + nm, 'data-testid': 'v2-att-reason' }, h('option', { value: '', text: 'причина…' }), reasons.map(function (r) { return h('option', { value: r, text: r, selected: m && !m.present && m.reason === r ? true : null }); }));
-      sel.addEventListener('change', function () { if (sel.value) save(nm, false, sel.value); });
+      sel.appendChild(h('option', { value: '__gone', text: '🚫 не работает' }));
+      sel.addEventListener('change', function () { if (sel.value === '__gone') { sel.value = ''; goneAsk(nm); } else if (sel.value) save(nm, false, sel.value); });
       s.appendChild(h('div', { class: 'fo-it v2-ar', 'data-testid': 'v2-att-row' }, h('div', null, nm, m ? h('div', { class: 's', text: m.present ? 'вышел' : 'не вышел · ' + m.reason }) : null),
         h('div', { class: 'v2-ab' }, h('button', { class: 'fo-a' + (m && m.present ? ' on' : ''), type: 'button', 'data-testid': 'v2-att-yes', 'aria-pressed': m && m.present ? 'true' : 'false', onclick: function () { save(nm, true); } }, 'Вышел'),
           m && !m.present ? sel : h('button', { class: 'fo-a', type: 'button', 'data-testid': 'v2-att-no', onclick: function (e) { var b = e.currentTarget; b.replaceWith(sel); sel.focus(); } }, 'Не вышел'))));
     });
+    if (goneList.length) {
+      var det = h('details', { class: 'v2-gone', 'data-testid': 'v2-gone' }, h('summary', { text: 'Не работают (' + goneList.length + ')' }));
+      goneList.forEach(function (nm) { var g = gone[nm], blk = g.by === 'блок';
+        det.appendChild(h('div', { class: 'fo-it v2-ar', 'data-testid': 'v2-gone-row' }, h('div', null, nm, h('div', { class: 's', text: blk ? 'доступ закрыт админом' + (g.reason ? ' · ' + g.reason : '') : 'с ' + fmtD(g.from) + ' · отметил бригадир' })),
+          blk ? h('span', { class: 'cap', text: 'только админ' }) : h('button', { class: 'fo-a', type: 'button', 'data-testid': 'v2-gone-back', onclick: function () { goneSend(nm, true); } }, 'Вернуть'))); });
+      s.appendChild(det);
+    }
     return s;
   }
   function v2BrigCards(v, f) {
