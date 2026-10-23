@@ -715,3 +715,10 @@ button.v2-pp { width: 100%; background: none; border-left: 0; border-right: 0; b
 .v2-gone summary{cursor:pointer;font-weight:600;color:var(--muted,#666);padding:6px 0}
 .row-btns{display:flex;gap:8px}.row-btns .btn{flex:1}
 .sk-th figcaption.sk-fn{white-space:normal;overflow:visible;text-overflow:clip;word-break:break-word;overflow-wrap:anywhere;font-size:12px;line-height:1.3}
+/* SKUD_MULTI_V1 */
+.sk-pc{border:1.5px solid var(--line);border-radius:14px;margin:0 0 10px;background:var(--card)}.sk-pc.bad{border-color:var(--bad)}
+.sk-pc-h{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer}.sk-pc-t{flex:1;min-width:0;display:flex;flex-direction:column}.sk-pc-t b{overflow-wrap:anywhere}
+.sk-num{flex:none;width:26px;height:26px;border-radius:50%;background:var(--primary);color:#fff;font-weight:800;font-size:13px;display:inline-flex;align-items:center;justify-content:center}
+.sk-x{border:0;background:var(--card2);border-radius:50%;width:32px;height:32px;font-size:14px;color:var(--muted)}.sk-chev{color:var(--muted)}
+.sk-pb{padding:0 12px 12px}.sk-add{width:100%;margin:2px 0 6px}
+.sk-grp{margin:0 0 14px}.sk-grp-h{display:flex;gap:8px;align-items:center;margin:0 0 6px;font-size:14px}

@@ -2596,65 +2596,106 @@
       h('p', { class: 'cap', text: 'Заявка на пропуск нового исполнителя на склад Лемана ПРО. Письмо уйдёт службе безопасности склада с вашими данными и тремя фото.' }),
       h('button', { class: 'btn', type: 'button', 'data-testid': 'skud-open', onclick: function () { skudOpen(); } }, 'Новая заявка'));
   }
+  /* SKUD_MULTI_V1 (макет): несколько сотрудников в одной заявке */
+  var SK_MAX = 5, SK_PHOTO_MAX = 1200000, SK_TOTAL_MAX = 18000000;   // до 5 человек; фото ≤ 1,2 МБ; все вложения ≤ 18 МБ (лимит почты 25 МБ)
+  function skBytes(u) { var b = String(u || '').split(',')[1] || ''; return Math.floor(b.length * 3 / 4); }
+  function skTotal(ps) { return ps.reduce(function (a, d) { return a + SKUD_P.reduce(function (s, p) { return s + skBytes(d.photos[p[0]]); }, 0); }, 0); }
+  function skFit(u) {   // дожимаем фото паспорта, если > 1,2 МБ: качество 0.7 → 0.6, затем 1280 px
+    return new Promise(function (ok) {
+      if (skBytes(u) <= SK_PHOTO_MAX) return ok(u);
+      var im = new Image(); im.onload = function () {
+        var steps = [[1600, .7], [1600, .6], [1280, .6], [1024, .6]], i = 0, out = u;
+        while (i < steps.length && skBytes(out) > SK_PHOTO_MAX) { var k = Math.min(1, steps[i][0] / Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); out = c.toDataURL('image/jpeg', steps[i][1]); i++; }
+        ok(out); }; im.src = u; });
+  }
+  function skFio(d) { return ((d.last || '') + ' ' + (d.first || '')).trim() || 'Новый сотрудник'; }
   function skudOpen(pre) {
-    var d = pre || { cit: 'РФ', photos: {} }, err = {}, sh;
+    var ps = pre || [{ cit: 'РФ', photos: {} }], errs = [], open = ps.length - 1, sh;
     var body = h('div', { class: 'sk' });
-    function draw() {
-      clear(body);
-      body.appendChild(h('div', { class: 'sk-sup' }, h('span', { text: 'Поставщик' }), h('b', { text: SKUD_SUP })));
+    function clearErr(i, k) { if (errs[i]) delete errs[i][k]; }
+    function personBody(d, i) {
+      var err = errs[i] || {}, box = h('div', { class: 'sk-pb' });
       SKUD_F.forEach(function (f) {
         var k = f[0], t = (k === 'birth' || k === 'start') ? 'date' : 'text';
-        var inp = h('input', { class: 'inp', type: t, 'data-testid': 'sk-' + k, value: d[k] || '', autocomplete: 'off', inputmode: k === 'hid' ? 'decimal' : 'text', placeholder: k === 'hid' ? '112,36865' : (k === 'middle' ? 'если есть' : ''), oninput: function () { d[k] = inp.value.trim(); if (err[k]) { delete err[k]; inp.removeAttribute('aria-invalid'); var n = inp.nextSibling; if (n) n.remove(); if (!Object.keys(err).length) { var eb = body.querySelector('.sk-errbox'); if (eb) eb.remove(); } } } });
+        var inp = h('input', { class: 'inp', type: t, 'data-testid': 'sk-' + i + '-' + k, value: d[k] || '', autocomplete: 'off', inputmode: k === 'hid' ? 'decimal' : 'text', placeholder: k === 'hid' ? '112,36865' : (k === 'middle' ? 'если есть' : ''), oninput: function () { d[k] = inp.value.trim(); if (k === 'last' || k === 'first') { var t = body.querySelector('[data-testid=sk-pt-' + i + ']'); if (t) t.textContent = skFio(d); } if (err[k]) { clearErr(i, k); inp.removeAttribute('aria-invalid'); var n = inp.nextSibling; if (n) n.remove(); } } });
         if (err[k]) inp.setAttribute('aria-invalid', 'true');
-        body.appendChild(h('label', { class: 'field sk-f' }, h('div', { class: 'l' }, f[1], k === 'middle' ? h('span', { text: 'необязательно' }) : null), inp, err[k] ? h('p', { class: 'sk-err', text: err[k] }) : null));
+        box.appendChild(h('label', { class: 'field sk-f' }, h('div', { class: 'l' }, f[1], k === 'middle' ? h('span', { text: 'необязательно' }) : null), inp, err[k] ? h('p', { class: 'sk-err', text: err[k] }) : null));
       });
-      body.appendChild(h('h3', { class: 'sk-h', text: 'Фото' }));
+      box.appendChild(h('h3', { class: 'sk-h', text: 'Фото' }));
       var grid = h('div', { class: 'sk-ph' });
       SKUD_P.forEach(function (p) {
-        var k = p[0], fi = h('input', { type: 'file', accept: 'image/*', class: 'sk-file', 'data-testid': 'sk-file-' + k, onchange: function () {
+        var k = p[0], fi = h('input', { type: 'file', accept: 'image/*', class: 'sk-file', 'data-testid': 'sk-' + i + '-file-' + k, onchange: function () {
           var f = fi.files && fi.files[0]; if (!f) return;
-          if (k === 'face') { skCrop(f, function (u) { d.photos[k] = u; delete err[k]; draw(); }); fi.value = ''; return; } skCompress(f).then(function (u) { d.photos[k] = u; delete err[k]; draw(); }, function () { toast('Не удалось открыть фото', 'warn'); }); } });
+          if (k === 'face') { skCrop(f, function (u) { d.photos[k] = u; clearErr(i, k); draw(); }); fi.value = ''; return; }
+          skCompress(f).then(skFit).then(function (u) { d.photos[k] = u; clearErr(i, k); draw(); }, function () { toast('Не удалось открыть фото', 'warn'); }); } });
         if (k === 'face') fi.setAttribute('capture', 'user');
-        var tile = h('label', { class: 'sk-tile' + (d.photos[k] ? ' has' : '') + (err[k] ? ' bad' : ''), 'data-testid': 'sk-tile-' + k }, fi,
+        grid.appendChild(h('label', { class: 'sk-tile' + (k === 'face' ? ' face' : '') + (d.photos[k] ? ' has' : '') + (err[k] ? ' bad' : ''), 'data-testid': 'sk-' + i + '-tile-' + k }, fi,
           d.photos[k] ? (function () { var im = h('img', { alt: p[1] }); im.src = d.photos[k]; return im; })() : h('span', { class: 'sk-plus', text: '+' }),
-          h('span', { class: 'sk-tl', text: p[1] }), h('span', { class: 'sk-ts', text: d.photos[k] ? 'Заменить' : 'Камера или галерея' }));
-        grid.appendChild(tile);
+          h('span', { class: 'sk-tl', text: p[1] }), h('span', { class: 'sk-ts', text: d.photos[k] ? 'Заменить' : 'Камера или галерея' })));
       });
-      body.appendChild(grid);
+      box.appendChild(grid);
+      return box;
+    }
+    function draw() {
+      clear(body);
+      var bad = errs.filter(function (e) { return e && Object.keys(e).length; }).length;
+      if (bad) body.appendChild(h('p', { class: 'sk-errbox', 'data-testid': 'sk-errbox', text: bad === 1 && ps.length === 1 ? 'Проверьте отмеченные поля' : 'Проверьте отмеченные поля у ' + bad + ' из ' + ps.length + ' сотрудников' }));
+      body.appendChild(h('div', { class: 'sk-sup' }, h('span', { text: 'Поставщик' }), h('b', { text: SKUD_SUP })));
+      ps.forEach(function (d, i) {
+        var e = errs[i] || {}, ne = Object.keys(e).length, nph = SKUD_P.filter(function (p) { return d.photos[p[0]]; }).length, isOpen = i === open || ne;
+        var head = h('div', { class: 'sk-pc-h', 'data-testid': 'sk-ph-' + i, role: 'button', tabindex: '0', onclick: function () { open = isOpen && i === open ? -1 : i; draw(); } },
+          h('span', { class: 'sk-num', text: String(i + 1) }),
+          h('div', { class: 'sk-pc-t' }, h('b', { 'data-testid': 'sk-pt-' + i, text: skFio(d) }), h('span', { class: 'cap', text: ne ? 'Ошибок: ' + ne : (d.hid ? 'HID ' + d.hid + ' · ' : '') + 'фото ' + nph + ' из 3' })),
+          ps.length > 1 ? h('button', { class: 'sk-x', type: 'button', 'aria-label': 'Убрать сотрудника', 'data-testid': 'sk-rm-' + i, onclick: function (ev) { ev.stopPropagation();
+            confirmSheet('Убрать «' + skFio(d) + '» из заявки?', function () { ps.splice(i, 1); errs.splice(i, 1); open = Math.min(open, ps.length - 1); draw(); }); } }, '✕') : null,
+          h('span', { class: 'sk-chev', text: isOpen ? '▴' : '▾' }));
+        body.appendChild(h('div', { class: 'sk-pc' + (ne ? ' bad' : '') + (isOpen ? ' open' : ''), 'data-testid': 'sk-person-' + i }, head, isOpen ? personBody(d, i) : null));
+      });
+      body.appendChild(ps.length < SK_MAX
+        ? h('button', { class: 'btn secondary sk-add', type: 'button', 'data-testid': 'sk-add', onclick: function () { ps.push({ cit: 'РФ', photos: {} }); open = ps.length - 1; draw(); setTimeout(function () { var c = body.querySelector('[data-testid=sk-person-' + open + ']'); if (c) c.scrollIntoView({ block: 'start' }); }, 30); } }, '+ Добавить сотрудника')
+        : h('p', { class: 'sk-hint', 'data-testid': 'sk-max', text: 'В одной заявке не больше ' + SK_MAX + ' человек. Остальных отправьте следующей заявкой.' }));
       body.appendChild(h('p', { class: 'sk-hint', 'data-testid': 'sk-face-hint' }, h('b', { text: 'Фото на бейдж: ' }), 'анфас, светлый однотонный фон, без очков и головного убора, лицо и плечи в кадре.'));
-      if (Object.keys(err).length) body.insertBefore(h('p', { class: 'sk-errbox', 'data-testid': 'sk-errbox', text: 'Проверьте отмеченные поля' }), body.firstChild);
     }
     draw();
     sh = openSheet({ title: 'Прошивка СКУД', body: body, footer: h('button', { class: 'btn', type: 'button', 'data-testid': 'sk-next', onclick: function () {
-      err = skValidate(d); if (Object.keys(err).length) { draw(); body.scrollIntoView(); return; }
-      sh.close(); skudPreview(d); } }, 'Проверить заявку') });
+      errs = ps.map(skValidate);
+      var seen = {}; ps.forEach(function (d, i) { if (d.hid && seen[d.hid] != null) errs[i].hid = 'Этот HID уже у сотрудника №' + (seen[d.hid] + 1); else if (d.hid) seen[d.hid] = i; });
+      var first = errs.findIndex(function (e) { return Object.keys(e).length; });
+      if (first >= 0) { open = first; draw(); body.scrollIntoView(); return; }
+      if (skTotal(ps) > SK_TOTAL_MAX) { toast('Фото слишком тяжёлые для одного письма — разделите заявку на две', 'warn'); return; }
+      errs = []; sh.close(); skudPreview(ps); } }, 'Проверить заявку') });
   }
-  function skudTable(d) {   // та же таблица, что уйдёт в письме
+  function confirmSheet(q, yes) { var s = openSheet({ title: q, dialog: true, body: h('div'), footer: h('div', { class: 'sk-btns' }, h('button', { class: 'btn secondary', type: 'button', onclick: function () { s.close(); } }, 'Отмена'), h('button', { class: 'btn', type: 'button', 'data-testid': 'sk-rm-ok', onclick: function () { s.close(); yes(); } }, 'Убрать')) }); }
+  function skudTable(ps) {   // та же таблица, что уйдёт в письме: строка на человека
     var th = ['Поставщик', 'Фамилия', 'Имя', 'Отчество', 'Гражданство', 'HID', 'Дата рождения', 'Дата выхода'];
-    var td = [SKUD_SUP, d.last, d.first, d.middle || '', d.cit, d.hid, skDate(d.birth), skDate(d.start)];
-    return h('div', { class: 'sk-tw' }, h('table', { class: 'sk-tbl' }, h('tr', null, th.map(function (x) { return h('th', { text: x }); })), h('tr', null, td.map(function (x) { return h('td', { text: x }); }))));
+    return h('div', { class: 'sk-tw' }, h('table', { class: 'sk-tbl', 'data-testid': 'sk-tbl' }, h('tr', null, th.map(function (x) { return h('th', { text: x }); })),
+      ps.map(function (d) { return h('tr', null, [SKUD_SUP, d.last, d.first, d.middle || '', d.cit, d.hid, skDate(d.birth), skDate(d.start)].map(function (x) { return h('td', { text: x }); })); })));
   }
-  function skudPreview(d) {
-    var rc = (S.data.foreman.skud && S.data.foreman.skud.recipients) || 8, sh;
-    var thumbs = h('div', { class: 'sk-th' }, SKUD_P.map(function (p) { var im = h('img', { alt: p[1] }); im.src = d.photos[p[0]]; return h('figure', null, im, h('figcaption', { class: 'sk-fn', 'data-testid': 'sk-fn-' + p[0], text: skFileName(p[0], d, d.photos[p[0]]) })); }));
+  function skMb(b) { return (b / 1048576).toFixed(1).replace('.', ',') + ' МБ'; }
+  function skudPreview(ps) {
+    var rc = (S.data.foreman.skud && S.data.foreman.skud.recipients) || 8, sh, n = ps.length;
+    var groups = ps.map(function (d, i) {
+      return h('div', { class: 'sk-grp', 'data-testid': 'sk-grp-' + i }, h('div', { class: 'sk-grp-h' }, h('span', { class: 'sk-num', text: String(i + 1) }), h('b', { text: [d.last, d.first, d.middle].filter(Boolean).join(' ') })),
+        h('div', { class: 'sk-th' }, SKUD_P.map(function (p) { var im = h('img', { alt: p[1] }); im.src = d.photos[p[0]]; return h('figure', null, im, h('figcaption', { class: 'sk-fn', 'data-testid': 'sk-fn-' + i + '-' + p[0], text: skFileName(p[0], d, d.photos[p[0]]) })); })));
+    });
     var body = h('div', { class: 'sk' },
-      h('p', { class: 'cap', text: 'Так увидит письмо служба безопасности. Тема: «Прошивка скуд Персональное решение».' }),
-      skudTable(d), h('p', { class: 'cap', text: 'Таблицу можно пролистать вбок →' }), h('h3', { class: 'sk-h', text: 'Вложения — 3 фото' }), thumbs,
+      h('p', { class: 'cap', text: 'Так увидит письмо служба безопасности. Тема: «Прошивка скуд Персональное решение». Одно письмо на ' + n + ' ' + (n === 1 ? 'человека' : 'человек') + '.' }),
+      skudTable(ps), h('p', { class: 'cap', text: 'Таблицу можно пролистать вбок →' }),
+      h('h3', { class: 'sk-h', text: 'Вложения — ' + (3 * n) + ' фото · ' + skMb(skTotal(ps)) }), groups,
       h('p', { class: 'cap', text: 'Получателей: ' + rc + '. Письмо уйдёт с почты руководителя.' }));
     var send = h('button', { class: 'btn', type: 'button', 'data-testid': 'sk-send', onclick: function () {
       send.disabled = true; send.textContent = 'Отправляем…';
-      var p = LIVE ? api('skudRequest', { last: d.last, first: d.first, middle: d.middle || '', cit: d.cit, hid: d.hid, birth: d.birth, start: d.start, photos: d.photos })
-                   : new Promise(function (ok) { setTimeout(function () { ok({ ok: true, id: 'SK-0001', sentAt: new Date().toISOString() }); }, 700); });
-      p.then(function (r) { if (!r || !r.ok) { send.disabled = false; send.textContent = 'Отправить'; toast((r && r.message) || 'Не удалось отправить. Попробуйте ещё раз', 'warn'); return; } sh.close(); skudDone(d, r); },
+      var p = api('skudRequest', { people: ps.map(function (d) { return { last: d.last, first: d.first, middle: d.middle || '', cit: d.cit, hid: d.hid, birth: d.birth, start: d.start, photos: d.photos }; }) });
+      p.then(function (r) { if (!r || !r.ok) { send.disabled = false; send.textContent = 'Отправить'; toast((r && r.message) || 'Не удалось отправить. Попробуйте ещё раз', 'warn'); return; } sh.close(); skudDone(ps, r); },
              function () { send.disabled = false; send.textContent = 'Отправить'; toast('Нет связи — заявка не отправлена', 'warn'); }); } }, 'Отправить');
     sh = openSheet({ title: 'Проверьте заявку', body: body, footer: h('div', { class: 'sk-btns' },
-      h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'sk-edit', onclick: function () { sh.close(); skudOpen(d); } }, 'Исправить'), send) });
+      h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'sk-edit', onclick: function () { sh.close(); skudOpen(ps); } }, 'Исправить'), send) });
   }
-  function skudDone(d, r) {
+  function skudDone(ps, r) {
     var sh = openSheet({ title: 'Заявка отправлена', dialog: true, body: h('div', { class: 'sk sk-done', 'data-testid': 'sk-done' },
       h('div', { class: 'sk-ok', text: '✓' }),
-      h('p', null, h('b', { text: d.last + ' ' + d.first + ' ' + (d.middle || '') }), h('br'), 'HID ' + d.hid + ' · выход ' + skDate(d.start)),
-      h('p', { class: 'cap', text: 'Письмо «Прошивка скуд Персональное решение» отправлено службе безопасности Лемана ПРО. Заявка №' + (r.id || '—') + ' записана в журнал «СКУД заявки».' })),
+      h('p', null, ps.map(function (d, i) { return h('span', null, h('b', { text: (i + 1) + '. ' + d.last + ' ' + d.first }), ' · HID ' + d.hid + ' · выход ' + skDate(d.start), h('br')); })),
+      h('p', { class: 'cap', text: 'Одно письмо «Прошивка скуд Персональное решение» на ' + ps.length + ' чел. отправлено службе безопасности Лемана ПРО. Заявка №' + (r.id || '—') + ' — ' + ps.length + ' строк(и) в журнале «СКУД заявки».' })),
       footer: h('button', { class: 'btn', type: 'button', onclick: function () { sh.close(); } }, 'Готово') });
   }
   function viewBrig() {
