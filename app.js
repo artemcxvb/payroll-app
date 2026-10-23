@@ -451,7 +451,7 @@
   }
   if (LIVE) {
     setInterval(autoCheck, 30000);
-    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { autoCheck(); armAuto(); geoPing('resume'); } });
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { autoCheck(); armAuto(); geoPing('resume'); try { navigator.serviceWorker && navigator.serviceWorker.getRegistration().then(function (r) { if (r) r.update(); }).catch(function () {}); } catch (e) {} } /* SW_RESUME_UPDATE */ });
     window.addEventListener('pageshow', function () { autoCheck(); armAuto(); });
   }
   function api(action, body) {
