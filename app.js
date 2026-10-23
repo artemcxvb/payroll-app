@@ -2538,6 +2538,13 @@
   var SKUD_F = [['last', 'Фамилия'], ['first', 'Имя'], ['middle', 'Отчество'], ['cit', 'Гражданство'], ['hid', 'HID (номер карты)'], ['birth', 'Дата рождения'], ['start', 'Дата выхода']];
   var SKUD_P = [['pass', 'Паспорт — главный разворот'], ['reg', 'Паспорт — прописка'], ['face', 'Фото на бейдж']];
   var SKUD_SUP = 'Персональное Решение';
+  // SKUD_FILENAME_V1: то же правило, что skudFileName_ в Skud.js — имя вложения = префикс + « — » + Фамилия Имя + расширение по типу
+  var SKUD_FN = { pass: 'Паспорт — разворот', reg: 'Паспорт — прописка', face: 'Фото на бейдж' };
+  function skFileName(kind, d, dataUrl) {
+    var m = /^data:image\/(jpeg|png|webp);/.exec(String(dataUrl || '')), ext = m ? (m[1] === 'jpeg' ? 'jpg' : m[1]) : 'jpg';
+    var fi = (String(d.last || '').trim() + ' ' + String(d.first || '').trim()).replace(/\s+/g, ' ').trim();
+    return SKUD_FN[kind] + ' — ' + fi + '.' + ext;
+  }
   function skDate(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? m[3] + '.' + m[2] + '.' + m[1] : s; }
   function skCompress(file) {   // сжатие на телефоне: длинная сторона ≤ 1600 px, JPEG 0.8
     return new Promise(function (ok, bad) {
@@ -2629,7 +2636,7 @@
   }
   function skudPreview(d) {
     var rc = (S.data.foreman.skud && S.data.foreman.skud.recipients) || 8, sh;
-    var thumbs = h('div', { class: 'sk-th' }, SKUD_P.map(function (p) { var im = h('img', { alt: p[1] }); im.src = d.photos[p[0]]; return h('figure', null, im, h('figcaption', { text: p[1] })); }));
+    var thumbs = h('div', { class: 'sk-th' }, SKUD_P.map(function (p) { var im = h('img', { alt: p[1] }); im.src = d.photos[p[0]]; return h('figure', null, im, h('figcaption', { class: 'sk-fn', 'data-testid': 'sk-fn-' + p[0], text: skFileName(p[0], d, d.photos[p[0]]) })); }));
     var body = h('div', { class: 'sk' },
       h('p', { class: 'cap', text: 'Так увидит письмо служба безопасности. Тема: «Прошивка скуд Персональное решение».' }),
       skudTable(d), h('p', { class: 'cap', text: 'Таблицу можно пролистать вбок →' }), h('h3', { class: 'sk-h', text: 'Вложения — 3 фото' }), thumbs,

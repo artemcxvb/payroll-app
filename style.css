@@ -714,3 +714,4 @@ button.v2-pp { width: 100%; background: none; border-left: 0; border-right: 0; b
 .v2-gone{margin-top:12px;border-top:1px solid var(--line,#e5e5e5);padding-top:8px}
 .v2-gone summary{cursor:pointer;font-weight:600;color:var(--muted,#666);padding:6px 0}
 .row-btns{display:flex;gap:8px}.row-btns .btn{flex:1}
+.sk-th figcaption.sk-fn{white-space:normal;overflow:visible;text-overflow:clip;word-break:break-word;overflow-wrap:anywhere;font-size:12px;line-height:1.3}
