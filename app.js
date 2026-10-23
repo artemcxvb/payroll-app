@@ -2509,6 +2509,122 @@
     s.appendChild(out); s.appendChild(btn); if (S.ks) { draw(S.ks); btn.textContent = 'Обновить'; }
     return s;
   }
+  /* ---------- SKUD_V1: заявка «Прошивка СКУД» (только бригадир) ---------- */
+  var SKUD_F = [['last', 'Фамилия'], ['first', 'Имя'], ['middle', 'Отчество'], ['cit', 'Гражданство'], ['hid', 'HID (номер карты)'], ['birth', 'Дата рождения'], ['start', 'Дата выхода']];
+  var SKUD_P = [['pass', 'Паспорт — главный разворот'], ['reg', 'Паспорт — прописка'], ['face', 'Фото на бейдж']];
+  var SKUD_SUP = 'Персональное Решение';
+  function skDate(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? m[3] + '.' + m[2] + '.' + m[1] : s; }
+  function skCompress(file) {   // сжатие на телефоне: длинная сторона ≤ 1600 px, JPEG 0.8
+    return new Promise(function (ok, bad) {
+      var fr = new FileReader(); fr.onerror = bad; fr.onload = function () {
+        var im = new Image(); im.onerror = function () { bad(new Error('img')); }; im.onload = function () {
+          var k = Math.min(1, 1600 / Math.max(im.width, im.height)), c = document.createElement('canvas');
+          c.width = Math.round(im.width * k); c.height = Math.round(im.height * k); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+          ok(c.toDataURL('image/jpeg', 0.8)); };
+        im.src = fr.result; };
+      fr.readAsDataURL(file); });
+  }
+  function skCrop(file, done) {   // SKUD_V1: кадрирование фото на бейдж 3:4, перетаскивание + масштаб
+    var fr = new FileReader(); fr.onload = function () { var im = new Image(); im.onload = function () { open(im); }; im.src = fr.result; }; fr.readAsDataURL(file);
+    function open(im) {
+      var W = 300, H = 400, base = Math.max(W / im.width, H / im.height), z = 1, x = 0, y = 0, sh;
+      var img = h('img', { class: 'sk-cimg', alt: '' }); img.src = im.src; img.draggable = false;
+      var frame = h('div', { class: 'sk-cf', 'data-testid': 'sk-crop' }, img, h('div', { class: 'sk-oval' }));
+      function clamp() { var s = base * z, w = im.width * s, hh = im.height * s; x = Math.min(0, Math.max(W - w, x)); y = Math.min(0, Math.max(H - hh, y)); }
+      function paint() { clamp(); var s = base * z; img.style.width = im.width * s + 'px'; img.style.height = im.height * s + 'px'; img.style.transform = 'translate(' + x + 'px,' + y + 'px)'; }
+      var s0 = base; x = (W - im.width * s0) / 2; y = (H - im.height * s0) / 2; paint();
+      var pd = null; frame.addEventListener('pointerdown', function (e) { pd = { px: e.clientX, py: e.clientY, x: x, y: y }; frame.setPointerCapture(e.pointerId); });
+      frame.addEventListener('pointermove', function (e) { if (!pd) return; x = pd.x + e.clientX - pd.px; y = pd.y + e.clientY - pd.py; paint(); });
+      frame.addEventListener('pointerup', function () { pd = null; });
+      var zr = h('input', { type: 'range', min: '1', max: '3', step: '0.01', value: '1', class: 'sk-zoom', 'data-testid': 'sk-zoom', 'aria-label': 'Масштаб', oninput: function () {
+        var cx = (W / 2 - x) / (base * z), cy = (H / 2 - y) / (base * z); z = +zr.value; x = W / 2 - cx * base * z; y = H / 2 - cy * base * z; paint(); } });
+      var body = h('div', { class: 'sk sk-cropw' }, h('p', { class: 'cap', text: 'Передвиньте фото пальцем и приблизьте так, чтобы лицо было по центру овала, а плечи — в кадре.' }), frame, h('div', { class: 'sk-zr' }, h('span', { text: '−' }), zr, h('span', { text: '+' })));
+      sh = openSheet({ title: 'Фото на бейдж', body: body, footer: h('div', { class: 'sk-btns' },
+        h('button', { class: 'btn secondary', type: 'button', onclick: function () { sh.close(); } }, 'Отмена'),
+        h('button', { class: 'btn', type: 'button', 'data-testid': 'sk-crop-ok', onclick: function () {
+          var s = base * z, sx = -x / s, sy = -y / s, sw = W / s, shh = H / s;
+          var ow = Math.max(600, Math.min(1200, Math.round(sw))), oh = Math.round(ow * 4 / 3), c = document.createElement('canvas'); c.width = ow; c.height = oh;
+          var g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(im, sx, sy, sw, shh, 0, 0, ow, oh);
+          sh.close(); done(c.toDataURL('image/jpeg', 0.9)); } }, 'Готово')) });
+    }
+  }
+  function skValidate(d) {
+    var e = {}, today = new Date().toISOString().slice(0, 10);
+    ['last', 'first', 'cit'].forEach(function (k) { if (!/^[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё\- ]{0,40}$/.test(d[k] || '')) e[k] = 'Заполните буквами'; });
+    if (d.middle && !/^[A-Za-zА-Яа-яЁё\- ]{1,40}$/.test(d.middle)) e.middle = 'Только буквы';
+    if (!/^\d{1,3},\d{1,6}$/.test(d.hid || '')) e.hid = 'Формат: 112,36865';
+    if (!d.birth) e.birth = 'Укажите дату'; else { var y = (new Date(today) - new Date(d.birth)) / 31557600000; if (y < 18 || y > 75) e.birth = 'Возраст должен быть от 18 лет'; }
+    if (!d.start) e.start = 'Укажите дату'; else if (d.start < today) e.start = 'Дата выхода не может быть в прошлом';
+    SKUD_P.forEach(function (p) { if (!d.photos[p[0]]) e[p[0]] = 'Добавьте фото'; });
+    return e;
+  }
+  function skudCard() {
+    return h('div', { class: 'card fm-sec sk-card', 'data-testid': 'skud-card' },
+      h('h2', { text: 'Прошивка СКУД' }),
+      h('p', { class: 'cap', text: 'Заявка на пропуск нового исполнителя на склад Лемана ПРО. Письмо уйдёт службе безопасности склада с вашими данными и тремя фото.' }),
+      h('button', { class: 'btn', type: 'button', 'data-testid': 'skud-open', onclick: function () { skudOpen(); } }, 'Новая заявка'));
+  }
+  function skudOpen(pre) {
+    var d = pre || { cit: 'РФ', photos: {} }, err = {}, sh;
+    var body = h('div', { class: 'sk' });
+    function draw() {
+      clear(body);
+      body.appendChild(h('div', { class: 'sk-sup' }, h('span', { text: 'Поставщик' }), h('b', { text: SKUD_SUP })));
+      SKUD_F.forEach(function (f) {
+        var k = f[0], t = (k === 'birth' || k === 'start') ? 'date' : 'text';
+        var inp = h('input', { class: 'inp', type: t, 'data-testid': 'sk-' + k, value: d[k] || '', autocomplete: 'off', inputmode: k === 'hid' ? 'decimal' : 'text', placeholder: k === 'hid' ? '112,36865' : (k === 'middle' ? 'если есть' : ''), oninput: function () { d[k] = inp.value.trim(); if (err[k]) { delete err[k]; inp.removeAttribute('aria-invalid'); var n = inp.nextSibling; if (n) n.remove(); if (!Object.keys(err).length) { var eb = body.querySelector('.sk-errbox'); if (eb) eb.remove(); } } } });
+        if (err[k]) inp.setAttribute('aria-invalid', 'true');
+        body.appendChild(h('label', { class: 'field sk-f' }, h('div', { class: 'l' }, f[1], k === 'middle' ? h('span', { text: 'необязательно' }) : null), inp, err[k] ? h('p', { class: 'sk-err', text: err[k] }) : null));
+      });
+      body.appendChild(h('h3', { class: 'sk-h', text: 'Фото' }));
+      var grid = h('div', { class: 'sk-ph' });
+      SKUD_P.forEach(function (p) {
+        var k = p[0], fi = h('input', { type: 'file', accept: 'image/*', class: 'sk-file', 'data-testid': 'sk-file-' + k, onchange: function () {
+          var f = fi.files && fi.files[0]; if (!f) return;
+          if (k === 'face') { skCrop(f, function (u) { d.photos[k] = u; delete err[k]; draw(); }); fi.value = ''; return; } skCompress(f).then(function (u) { d.photos[k] = u; delete err[k]; draw(); }, function () { toast('Не удалось открыть фото', 'warn'); }); } });
+        if (k === 'face') fi.setAttribute('capture', 'user');
+        var tile = h('label', { class: 'sk-tile' + (d.photos[k] ? ' has' : '') + (err[k] ? ' bad' : ''), 'data-testid': 'sk-tile-' + k }, fi,
+          d.photos[k] ? (function () { var im = h('img', { alt: p[1] }); im.src = d.photos[k]; return im; })() : h('span', { class: 'sk-plus', text: '+' }),
+          h('span', { class: 'sk-tl', text: p[1] }), h('span', { class: 'sk-ts', text: d.photos[k] ? 'Заменить' : 'Камера или галерея' }));
+        grid.appendChild(tile);
+      });
+      body.appendChild(grid);
+      body.appendChild(h('p', { class: 'sk-hint', 'data-testid': 'sk-face-hint' }, h('b', { text: 'Фото на бейдж: ' }), 'анфас, светлый однотонный фон, без очков и головного убора, лицо и плечи в кадре.'));
+      if (Object.keys(err).length) body.insertBefore(h('p', { class: 'sk-errbox', 'data-testid': 'sk-errbox', text: 'Проверьте отмеченные поля' }), body.firstChild);
+    }
+    draw();
+    sh = openSheet({ title: 'Прошивка СКУД', body: body, footer: h('button', { class: 'btn', type: 'button', 'data-testid': 'sk-next', onclick: function () {
+      err = skValidate(d); if (Object.keys(err).length) { draw(); body.scrollIntoView(); return; }
+      sh.close(); skudPreview(d); } }, 'Проверить заявку') });
+  }
+  function skudTable(d) {   // та же таблица, что уйдёт в письме
+    var th = ['Поставщик', 'Фамилия', 'Имя', 'Отчество', 'Гражданство', 'HID', 'Дата рождения', 'Дата выхода'];
+    var td = [SKUD_SUP, d.last, d.first, d.middle || '', d.cit, d.hid, skDate(d.birth), skDate(d.start)];
+    return h('div', { class: 'sk-tw' }, h('table', { class: 'sk-tbl' }, h('tr', null, th.map(function (x) { return h('th', { text: x }); })), h('tr', null, td.map(function (x) { return h('td', { text: x }); }))));
+  }
+  function skudPreview(d) {
+    var rc = (S.data.foreman.skud && S.data.foreman.skud.recipients) || 8, sh;
+    var thumbs = h('div', { class: 'sk-th' }, SKUD_P.map(function (p) { var im = h('img', { alt: p[1] }); im.src = d.photos[p[0]]; return h('figure', null, im, h('figcaption', { text: p[1] })); }));
+    var body = h('div', { class: 'sk' },
+      h('p', { class: 'cap', text: 'Так увидит письмо служба безопасности. Тема: «Прошивка скуд Персональное решение».' }),
+      skudTable(d), h('p', { class: 'cap', text: 'Таблицу можно пролистать вбок →' }), h('h3', { class: 'sk-h', text: 'Вложения — 3 фото' }), thumbs,
+      h('p', { class: 'cap', text: 'Получателей: ' + rc + '. Письмо уйдёт с почты руководителя.' }));
+    var send = h('button', { class: 'btn', type: 'button', 'data-testid': 'sk-send', onclick: function () {
+      send.disabled = true; send.textContent = 'Отправляем…';
+      var p = LIVE ? api('skudRequest', { last: d.last, first: d.first, middle: d.middle || '', cit: d.cit, hid: d.hid, birth: d.birth, start: d.start, photos: d.photos })
+                   : new Promise(function (ok) { setTimeout(function () { ok({ ok: true, id: 'SK-0001', sentAt: new Date().toISOString() }); }, 700); });
+      p.then(function (r) { if (!r || !r.ok) { send.disabled = false; send.textContent = 'Отправить'; toast((r && r.message) || 'Не удалось отправить. Попробуйте ещё раз', 'warn'); return; } sh.close(); skudDone(d, r); },
+             function () { send.disabled = false; send.textContent = 'Отправить'; toast('Нет связи — заявка не отправлена', 'warn'); }); } }, 'Отправить');
+    sh = openSheet({ title: 'Проверьте заявку', body: body, footer: h('div', { class: 'sk-btns' },
+      h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'sk-edit', onclick: function () { sh.close(); skudOpen(d); } }, 'Исправить'), send) });
+  }
+  function skudDone(d, r) {
+    var sh = openSheet({ title: 'Заявка отправлена', dialog: true, body: h('div', { class: 'sk sk-done', 'data-testid': 'sk-done' },
+      h('div', { class: 'sk-ok', text: '✓' }),
+      h('p', null, h('b', { text: d.last + ' ' + d.first + ' ' + (d.middle || '') }), h('br'), 'HID ' + d.hid + ' · выход ' + skDate(d.start)),
+      h('p', { class: 'cap', text: 'Письмо «Прошивка скуд Персональное решение» отправлено службе безопасности Лемана ПРО. Заявка №' + (r.id || '—') + ' записана в журнал «СКУД заявки».' })),
+      footer: h('button', { class: 'btn', type: 'button', onclick: function () { sh.close(); } }, 'Готово') });
+  }
   function viewBrig() {
     var f = S.data && S.data.foreman, v = h('div', { class: 'view fm', id: 'main', 'data-testid': 'brig' });
     v.appendChild(pageTop('Бригада', f && f.period ? 'Период ' + f.period : ''));
@@ -2517,6 +2633,7 @@
     v.appendChild(h('div', { class: 'hero', 'data-testid': 'fm-pay' }, h('div', { class: 'lbl', text: 'Ваше вознаграждение сейчас' }), h('div', { class: 'big', text: fmM(f.pay) }),
       h('div', { class: 'note', text: (f.gross != null ? 'до вычета брака ' + fmM(f.gross) : '') + (f.lost ? ' · вычет за брак −' + fmM(f.lost).replace('−', '') : '') })));
     if (f.avg != null && f.rate != null) v.appendChild(fmSlider(f));   // FOREMAN_SLIDER_V1
+    if (f.skud && f.skud.ok) v.appendChild(skudCard());   // SKUD_V1: сервер присылает skud только бригадиру
     v2BrigCards(v, f);   // V2_IMPROVEMENTS_V1
     if (f.ops && f.ops.ok) foBlocks(v, f.ops);   // FOREMAN_OPS_V1
     function pos(x) { return Math.max(0, Math.min(100, x / top * 100)) + '%'; }
