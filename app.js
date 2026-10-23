@@ -398,7 +398,7 @@
   /* GEO_FRESH_V1: при каждом открытии/входе и возврате в приложение - свежая геопозиция на сервер (перезаписывает прежнюю). Отказ/ошибка - молча, работа не блокируется */
   var geoLast = 0;
   function geoPing(reason) {
-    if (!LIVE || !session() || geoPing.busy || Date.now() - geoLast < 60000) return Promise.resolve(null);
+    if (!LIVE || !session() || isForeman() || geoPing.busy || Date.now() - geoLast < 60000) return Promise.resolve(null);
     geoPing.busy = true;
     return geoGet().then(function (g) {
       if (!g.ok) { geoPing.busy = false; return g; }
@@ -472,9 +472,13 @@
   function filesB64(a) { return Promise.all((a || []).map(function (f) { return blobB64(f.blob).then(function (b) { return { b64: b }; }); })); }
   var backend = LIVE ? {
     requestCode: function (phone) {
-      return geoGet().then(function (g) {
-        if (!g.ok) return { ok: false, error: 'geo', reason: g.reason };
-        return post(APPC.backendUrl, { action: 'codeRequest', phone: phone, rid: rid(), lat: g.lat, lon: g.lon, accuracy: g.accuracy });
+      // NOGEO_FOREMAN_V1: сначала без геопозиции — бригадиру/админу сервер выдаёт код сразу (геолокация не запрашивается); исполнителю сервер отвечает bad_geo → как раньше запрашиваем геопозицию
+      return post(APPC.backendUrl, { action: 'codeRequest', phone: phone, rid: rid() }).then(function (r0) {
+        if (!r0 || r0.error !== 'bad_geo') return r0;
+        return geoGet().then(function (g) {
+          if (!g.ok) return { ok: false, error: 'geo', reason: g.reason };
+          return post(APPC.backendUrl, { action: 'codeRequest', phone: phone, rid: rid(), lat: g.lat, lon: g.lon, accuracy: g.accuracy });
+        });
       });
     },
     verify: function (phone, code) { return post(APPC.backendUrl, { action: 'codeVerify', phone: phone, code: code }).then(function (r) { if (r.ok && r.token) { store(SESSK, { phone: phone, token: r.token, at: Date.now() }); if (r.loginHours) rememberHours(r.loginHours); } return r; }); },
@@ -764,7 +768,7 @@
     function doReq(retry) {
       var d = digits(); if (d.length !== 10 || (btn.disabled && !retry)) return; L.notice = ''; L.reqUntil = 0;
       if (navigator.onLine === false) { err.textContent = 'Нет сети. Подключитесь к интернету и повторите.'; err.hidden = false; return; }
-      btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(LIVE ? ' Определяем местоположение…' : ' Отправляем…'));
+      btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…'));
       var phone = '7' + d;
       delay(LAT).then(function () { return backend.requestCode(phone); }).then(function (r) {
         if (r.error === 'geo' || r.error === 'bad_geo') { L.phone = phone; L.step = 'phone'; L.geoErr = r.reason || 'unavailable'; return renderLogin(); }   // без геопозиции код не запрашивается: показываем инструкцию и «Повторить»

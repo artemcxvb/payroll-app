@@ -282,7 +282,8 @@
       } catch (e) { fin(null); }
     });
   }
-  function withGeo(d) { return geoGet().then(function (g) { if (g) { d.lat = g.lat; d.lon = g.lon; if (g.accuracy !== undefined) d.accuracy = g.accuracy; } return d; }); }
+  function withGeo(d) { return Promise.resolve(d); }   // NOGEO_FOREMAN_V1: админу геолокация не запрашивается
+  function withGeoOld(d) { return geoGet().then(function (g) { if (g) { d.lat = g.lat; d.lon = g.lon; if (g.accuracy !== undefined) d.accuracy = g.accuracy; } return d; }); }
   var ERR = { network: 'Нет связи с сервером. Проверьте интернет и повторите.', server: 'Сервер ответил ошибкой. Повторите через минуту.', busy: 'Таблица занята другим действием. Повторите через несколько секунд.', disabled: 'Кабинет админа выключен (ADMIN_ENABLED=0).', unknown_action: 'Сервер не знает этого действия: обновите Code.gs (см. DEPLOY.md).', not_found: 'Запись не найдена — возможно, строку удалили в таблице.', bad_phone: 'Нужен мобильный номер РФ, например +7 900 123-45-67.', reason_required: 'Укажите причину (не короче 3 символов).', req_limit: 'Лимит запросов кода исчерпан.', bad_amount: 'Сумма должна быть целым числом больше нуля.', over_requested: 'Нельзя одобрить больше, чем заказал сотрудник.', bad_step: 'Сумма должна быть кратна ' + ADV_STEP + ' ₽ и не меньше ' + ADV_MIN + ' ₽.', over_limit: 'Сумма больше лимита аванса на неделю (' + PAID_MAX + ' ₽).', reason_long: 'Причина слишком длинная (до 300 символов).', unavailable: 'Файл сейчас недоступен на Яндекс Диске.', demo: 'В демо файлы не открываются.' };
   ERR.reason_required = 'Укажите причину отказа.'; ERR.already = 'Заявка уже решена — обновите список.'; ERR.not_approved = 'Сначала одобрите заявку.'; ERR.not_found = 'Заявка не найдена — обновите список.';   // STARS_V1
   function errText(r) { return ERR[r && r.error] || 'Не получилось выполнить действие. Повторите.'; }
@@ -394,7 +395,7 @@
       if (navigator.onLine === false) { err.textContent = ERR.network; err.hidden = false; return; }
       var dg = ph.value.replace(/\D/g, ''); if (dg.length < 10 || dg.length > 12) { err.textContent = ERR.bad_phone; err.hidden = false; ph.focus(); return; }
       L.phone = ph.value.trim(); L.name = nm.value.trim(); store(WHOK, { phone: L.phone, name: L.name });
-      btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(LIVE ? ' Определяем местоположение…' : ' Отправляем…')); geoHint.hidden = !LIVE; err.hidden = true;
+      btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…')); geoHint.hidden = true; err.hidden = true;
       withGeo({ phone: L.phone, name: L.name }).then(function (d) { clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…')); geoHint.hidden = true; return call('adminCodeRequest', d); }).then(function (r) {
         if (r.error === 'locked') { L.step = 'code'; L.lockUntil = r.until; return renderLogin(); }
         if (!r.ok) return fail(errText(r));
