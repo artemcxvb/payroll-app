@@ -2171,13 +2171,19 @@
   /* ---------- FOREMAN_OPS_V1: несистемные операции бригадира → «Часовые услуги (табель)» ---------- */
   var FO_ERR = { bad_employee: 'Выберите сотрудника из списка.', bad_date: 'Дата должна быть в текущем периоде и не позже сегодня.', bad_shift: 'Выберите смену.', bad_service: 'Выберите услугу из списка.',
     bad_hours: 'Часы: от 0,5 до 24 с шагом 0,5.', day_cap: 'У сотрудника за этот день уже 24 ч — больше нельзя.', period_closed: 'Период закрыт — изменения недоступны.', changed: 'Строку уже изменили в таблице. Обновите страницу.',
-    not_found: 'Запись не найдена.', not_unassigned: 'Эти часы уже назначены. Обновите страницу.', no_room: 'В табеле нет свободных строк.', rate_limit: 'Слишком много действий. Попробуйте через час.', forbidden: 'Доступно только бригадиру.', busy: 'Сервер занят, попробуйте ещё раз.' };
+    not_found: 'Запись не найдена.', not_unassigned: 'Эти часы уже назначены. Обновите страницу.', no_room: 'В табеле нет свободных строк.', rate_limit: 'Слишком много действий. Попробуйте через час.', forbidden: 'Доступно только бригадиру.', busy: 'Сервер занят, попробуйте ещё раз.',
+    write_failed: 'Не удалось записать в табель. Проверьте строку в таблице и попробуйте ещё раз.', server: 'Ошибка сервера. Попробуйте ещё раз.' };
   function foHrs(n) { return String(n).replace('.', ','); }
   function foSend(body) {
     if (!requireOnline()) return Promise.resolve(null);
     var p = LIVE ? api('fmOp', body) : Promise.resolve(foDemo(body));
     return p.then(function (r) {
-      if (r && r.ok) { if (r.ops) S.data.foreman.ops = r.ops; try { var se = session(); if (LIVE && se) store(CK, { phone: se.phone, data: S.data }); } catch (e) { /* кэш необязателен */ } return r; }
+      if (r && r.ok) {
+        // FO_OPS_SAFE_V1: не затираем ops объектом без entries/unassigned (иначе render падает и «ничего не происходит»)
+        if (r.ops && r.ops.ok !== false && Array.isArray(r.ops.entries) && Array.isArray(r.ops.unassigned) && S.data && S.data.foreman) S.data.foreman.ops = r.ops;
+        try { var se = session(); if (LIVE && se) store(CK, { phone: se.phone, data: S.data }); } catch (e) { /* кэш необязателен */ }
+        return r;
+      }
       toast((r && FO_ERR[r.error]) || 'Не удалось сохранить. Попробуйте ещё раз.', 'bad'); return null;
     }, function () { toast('Нет связи с сервером.', 'bad'); return null; });
   }
@@ -2245,9 +2251,10 @@
     ctl = openSheet({ title: title, body: f.el, footer: btn });
   }
   function foBlocks(v, o) {
+    if (!o || !Array.isArray(o.entries) || !Array.isArray(o.unassigned)) { v.appendChild(h('section', { class: 'card fm-sec fo' }, h('p', { class: 'cap', text: 'Не удалось загрузить записи бригадира. Полностью закройте приложение и откройте снова.' }))); return; }
     var ro = !o.canEdit;
     var f = foForm(o, {}, 'add'), save = h('button', { class: 'btn', type: 'button', 'data-testid': 'fo-add', disabled: ro || null,
-      onclick: function () { save.disabled = true; foSend(Object.assign({ op: 'add' }, f.get())).then(function (r) { save.disabled = false; if (r) { toast('Добавлено в табель: ' + foHrs(r.ops && r.ops.entries[0] ? r.ops.entries[0].hours : '') + ' ч'); render(); } }); } }, 'Добавить в табель');
+      onclick: function () { save.disabled = true; foSend(Object.assign({ op: 'add' }, f.get())).then(function (r) { save.disabled = false; if (r) { var eh = r.ops && r.ops.entries && r.ops.entries[0] ? r.ops.entries[0].hours : (f.get().hours || ''); toast('Добавлено в табель: ' + foHrs(eh) + ' ч'); render(); } }); } }, 'Добавить в табель');
     v.appendChild(h('section', { class: 'card fm-sec fo', 'data-testid': 'fo-form' }, h('h2', { text: 'Добавить несистемную операцию' }),
       h('p', { class: 'cap', text: ro ? 'Период закрыт — добавлять и править записи нельзя.' : 'Часовые работы, которых нет в системе заказчика. Запись сразу попадает в «Часовые услуги (табель)» и в выплату сотрудника; админ видит её в журнале.' }),
       ro ? null : f.el, ro ? null : save));
