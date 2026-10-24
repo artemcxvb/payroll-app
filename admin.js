@@ -489,11 +489,12 @@
       var btns = card.querySelectorAll('.acts .btn'); [].forEach.call(btns, function (b) { b.disabled = true; b.classList.add('sending'); });
       call(KINDS[kind].action, { id: it.id, to: a.to, reason: ans.reason, from: it.statusText }).then(function (r) {
         if (r.ok) {
-          if (kind === 'adv' && a.to === 'issued') {   // ADV_ISSUE_NOTIFY_V1
+          if (kind === 'adv' && a.to === 'issued') {   // ADV_ISSUE_NOTIFY_V1 + ADV_VED_SYNC_V1
             var msg = 'Выдан', tone;
             if (r.notified) msg += ' · уведомление отправлено';
             else if (r.notifySkip === 'Telegram не привязан') { msg += ' · Telegram не привязан'; tone = 'warn'; }
             else if (r.notifySkip) { msg += ' · уведомление не доставлено'; tone = 'warn'; }
+            if (r.vedSync === false) { msg += ' · ведомость не обновлена'; tone = 'warn'; }   // ADV_VED_SYNC_V1
             toast(msg, tone);
           } else toast(a.label + ': готово');
           reloadAfter(kind); return;
