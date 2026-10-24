@@ -113,3 +113,29 @@ body.adminpage .app { max-width: 520px; }
 .dsp-it { border-top: 1px solid var(--line); padding: 10px 0; } .dsp-c { margin: 6px 0; font-style: italic; }
 /* PROMO_OCT_V1 */
 .po-cnt { grid-template-columns: repeat(2, 1fr); } .po-c { display: flex; flex-direction: column; padding: 8px 10px; border-radius: 12px; background: var(--card2, rgba(0,0,0,.04)); } .po-c b { font-size: 20px; }
+
+/* ADV_ISSUE_SUMMARY_V1: блок «к выдаче» на сводке и полоска на вкладке «Авансы» */
+.adv-issue { cursor: pointer; display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; background: linear-gradient(135deg, var(--ok-bg), var(--card)); border: 1px solid var(--line); }
+.adv-issue:active { transform: scale(.995); }
+.adv-issue-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.adv-issue-k { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.adv-issue-sum { font-size: 32px; font-weight: 800; line-height: 1.1; letter-spacing: -.02em; color: var(--ok); }
+.adv-issue-n { text-align: right; flex: none; }
+.adv-issue-n b { display: block; font-size: 28px; font-weight: 800; line-height: 1; }
+.adv-issue-n span { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.adv-issue-sub { margin: 0; font-size: 13.5px; color: var(--muted); }
+.adv-issue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.adv-issue-list li { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; font-size: 14.5px; padding: 6px 0; border-top: 1px solid var(--line); }
+.adv-issue-list li:first-child { border-top: 0; padding-top: 0; }
+.adv-issue-list .nm { font-weight: 700; overflow-wrap: anywhere; min-width: 0; }
+.adv-issue-list .amt { font-weight: 800; white-space: nowrap; }
+.adv-issue-list .more { color: var(--muted); font-size: 13px; border: 0; padding-top: 2px; }
+.adv-issue-go { font-size: 14px; font-weight: 700; color: var(--primary); }
+
+.adv-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 12px; }
+.adv-bar-cell { background: var(--card2); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.adv-bar-cell.hot { background: var(--ok-bg); }
+.adv-bar-cell .k { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.adv-bar-cell .v { font-size: 22px; font-weight: 800; letter-spacing: -.01em; }
+.adv-bar-cell.hot .v { color: var(--ok); }
+.adv-bar-cell .s { font-size: 12.5px; color: var(--muted); }

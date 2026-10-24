@@ -129,9 +129,13 @@
   function demoSeed() {
     var n = nowMsk();
     return { adv: [
-        { id: 'A1', created: n, week: '2026-09-28', payDate: '2026-10-03', phone: '79000000001', name: 'Тестов Иван Петрович', amount: 3000, comment: 'На проезд и продукты', status: 'pending', statusText: 'Новая', answer: '', available: 5500, reserve: 1500, bank: 'Сбербанк', card: '4276000000000009', last4: '0009' },
-        { id: 'A2', created: n, week: '2026-09-28', payDate: '2026-10-03', phone: '79000000002', name: 'Образцова Мария Сергеевна', amount: 5000, comment: '', status: 'approved', statusText: 'Одобрен', answer: '', available: 7000, reserve: 0, bank: 'Т-Банк', card: '5213240000000004', last4: '0004' },
-        { id: 'A3', created: n, week: '2026-09-21', payDate: '2026-09-26', phone: '79000000003', name: 'Демов Олег Викторович', amount: 2000, comment: '', status: 'issued', statusText: 'Выдан', answer: '', available: 4000, reserve: 0, bank: '', card: '', last4: '', paid: 2000 } ],
+        /* ADV_ISSUE_SUMMARY_V1: форма текущей недели (выдача сб 24.10), имена как в «Заявки на аванс» */
+        { id: 'A6e107d0f0e', created: '2026-10-22 19:08', week: '2026-10-19', payDate: '2026-10-24', phone: '79192944970', name: 'Суденков Александр Владимирович', amount: 4000, comment: 'На нужды.', status: 'approved', statusText: 'Одобрен', answer: '', available: 4000, reserve: 0, bank: 'ВТБ', card: '2200247977346825', last4: '6825' },
+        { id: 'A04c64fa27e', created: '2026-10-23 9:12', week: '2026-10-19', payDate: '2026-10-24', phone: '79243576870', name: 'Чимбеев Самбу Булатович', amount: 1500, comment: 'На еду', status: 'approved', statusText: 'Одобрен', answer: '', available: 1500, reserve: 0, bank: 'Ozon Банк', card: '2204321181148990', last4: '8990' },
+        { id: 'A3445e0cb3c', created: '2026-10-23 9:17', week: '2026-10-19', payDate: '2026-10-24', phone: '79601612827', name: 'Зотов Вадим Романович', amount: 3000, comment: '', status: 'approved', statusText: 'Одобрен', answer: '', available: 6000, reserve: 0, bank: 'Т-Банк (Тинькофф)', card: '2200702176978232', last4: '8232', requested: 6000 },
+        { id: 'A2715921f79', created: '2026-10-23 9:30', week: '2026-10-19', payDate: '2026-10-24', phone: '79936351602', name: 'Ахметов Муслим Сергеевич', amount: 2000, comment: '', status: 'approved', statusText: 'Одобрен', answer: '', available: 2000, reserve: 0, bank: 'Wildberries Банк', card: '2204230453356878', last4: '6878' },
+        { id: 'Apend1', created: n, week: '2026-10-19', payDate: '2026-10-24', phone: '79001234567', name: 'Новиков Пётр Алексеевич', amount: 2500, comment: 'На проезд', status: 'pending', statusText: 'Новая', answer: '', available: 5000, reserve: 0, bank: 'Сбербанк', card: '4276123456789012', last4: '9012' },
+        { id: 'Aissued1', created: '2026-10-18 9:49', week: '2026-10-12', payDate: '2026-10-18', phone: '79161550308', name: 'Перхов Владислав Юрьевич', amount: 3500, comment: '', status: 'issued', statusText: 'Выдан', answer: '', available: 3500, reserve: 0, bank: 'Т-Банк (Тинькофф)', card: '2200702121828839', last4: '8839', paid: 3500 } ],
       expl: [ { id: 'X1', created: n, phone: '79000000001', name: 'Тестов Иван Петрович', caseId: 's7', kind: 'брак', caseDate: '2026-09-17', amount: 3000, text: 'Задел стеллаж погрузчиком при развороте, сразу сообщил бригадиру и сфотографировал повреждения.', files: ['app:/Объяснения/2026-09/E1/s7_1.jpg', 'app:/Объяснения/2026-09/E1/s7_2.jpg'], status: 'sent', statusText: 'Отправлено', answer: '' } ],
       inc: [ { id: 'I1', created: n, date: '2026-09-29', phone: '79000000002', name: 'Образцова Мария Сергеевна', type: 'Порча имущества', desc: 'Разбит защитный борт стеллажа', text: 'При разгрузке паллеты погрузчик задел борт. Сообщила бригадиру, борт заменён.', scene: ['app:/Происшествия/2026-09/E2/I1/scene_1.jpg'], damage: ['app:/Происшествия/2026-09/E2/I1/damage_1.jpg'], acts: ['app:/Происшествия/2026-09/E2/I1/act_1.pdf'], status: 'review', statusText: 'Отправлено, ждёт проверки', answer: '', addendum: '[2026-09-30 10:15] Дополнение: акт подписан начальником смены.' } ],
       apps: [ { id: 'J1', created: n, jobId: 'j1', title: 'Бригадир смены', phone: '79000000003', name: 'Демов Олег Викторович', tab: '', comment: 'Есть опыт 3 года', status: 'sent', statusText: 'Отправлен', answer: '' } ],
@@ -178,8 +182,8 @@
     if (action === 'adminSummary') {
       var pe = s.adv.filter(function (a) { return a.status === 'pending'; }), ap = s.adv.filter(function (a) { return a.status === 'approved'; });
       function sm(l) { return l.reduce(function (t, x) { return t + x.amount; }, 0); }
-      var iss = s.adv.filter(function (a) { return a.status === 'issued' && a.payDate === '2026-10-03'; });
-      return demoRes({ ok: true, today: nowMsk().slice(0, 10), payDate: '2026-10-03', advances: { pending: pe.length, pendingSum: sm(pe), approved: ap.length, approvedSum: sm(ap), approvedForPay: ap.length, approvedForPaySum: sm(ap), issued: iss.length, issuedSum: iss.reduce(function (t, x) { return t + x.paid; }, 0), issuedChanged: iss.filter(function (x) { return x.paid !== x.amount; }).length, issuedPayDate: '2026-10-03' },
+      var pay0 = '2026-10-24', iss = s.adv.filter(function (a) { return a.status === 'issued' && a.payDate === pay0; });
+      return demoRes({ ok: true, today: nowMsk().slice(0, 10), payDate: pay0, advances: { pending: pe.length, pendingSum: sm(pe), approved: ap.length, approvedSum: sm(ap), approvedForPay: ap.length, approvedForPaySum: sm(ap), issued: iss.length, issuedSum: iss.reduce(function (t, x) { return t + (x.paid > 0 ? x.paid : x.amount); }, 0), issuedChanged: iss.filter(function (x) { return x.paid != null && x.paid !== x.amount; }).length, issuedPayDate: pay0 },
         explanations: { sent: counts(s.expl, 'sent') }, incidents: { review: counts(s.inc, 'review') }, applications: { sent: counts(s.apps, 'sent') }, blocked: counts(s.acc, 'blocked'),
         notify: { recipients: 12, queue: 0, nextAt: s.notifyAt && s.notifyAt + 1800000 > Date.now() ? s.notifyAt + 1800000 : 0, quiet: false, from: 9, to: 20 },
         promo: promoDemoInfo(s) });
@@ -677,6 +681,7 @@
       seg.appendChild(h('button', { type: 'button', 'aria-pressed': f === k ? 'true' : 'false', 'data-testid': 'flt-' + k, onclick: function () { S.filter[tab] = k; render(); } }, names[k] + (n != null ? ' · ' + n : '')));
     });
     v.appendChild(seg);
+    if (tab === 'adv' && items) { var bar = advListBar(items); if (bar) v.appendChild(bar); }   // ADV_ISSUE_SUMMARY_V1
     var si = h('input', { class: 'inp', type: 'search', 'data-testid': 'search', 'aria-label': 'Поиск по ФИО или телефону', placeholder: 'Поиск по ФИО или телефону', value: q, autocomplete: 'off', maxlength: '60' });
     si.addEventListener('input', function () { S.q[tab] = si.value; var pos = si.selectionStart; fillList(); si.focus(); try { si.setSelectionRange(pos, pos); } catch (e) { /* ignore */ } });
     v.appendChild(h('div', { class: 'adm-search' }, ico('search', 'sm'), si));
@@ -815,12 +820,51 @@
     done.forEach(function (x) { c.appendChild(h('div', { class: 'logrow' }, h('b', { text: x.status === 'removed' ? 'Снят' : 'Отклонён' }), h('span', { text: x.name + ' · ' + money(x.amount) + (x.reply ? ' · ' + x.reply : '') }))); });
     return c;
   }
+  /* ADV_ISSUE_SUMMARY_V1: блок «сколько человек / какая сумма к выдаче» на сводке */
+  function peopleWord(n) { return n + '\u00a0' + plural(n, ['человек', 'человека', 'человек']); }
+  function advIssueCard(s) {
+    var a = s.advances || {}, ap = a.approved || 0, apSum = a.approvedSum || 0, pe = a.pending || 0, peSum = a.pendingSum || 0;
+    var toIssue = ap, toSum = apSum, pay = s.payDate;
+    var sec = h('section', { class: 'card adv-issue', 'data-testid': 'adv-issue', role: 'button', tabindex: '0', onclick: function () { go('adv'); }, onkeydown: function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go('adv'); } } });
+    sec.appendChild(h('div', { class: 'adv-issue-top' },
+      h('div', { class: 'grow' }, h('div', { class: 'adv-issue-k', text: 'Авансы к выдаче' }), h('div', { class: 'adv-issue-sum num', 'data-testid': 'adv-issue-sum', text: toIssue ? money(toSum) : '0\u00a0₽' })),
+      h('div', { class: 'adv-issue-n', 'data-testid': 'adv-issue-n' }, h('b', { class: 'num', text: String(toIssue) }), h('span', { text: peopleWord(toIssue).replace(/^\d+\s*/, '') }))));
+    var sub = [];
+    if (pay) sub.push('выдача ' + dmy(pay));
+    if (pe) sub.push('ещё ' + peopleWord(pe) + ' на рассмотрении · ' + money(peSum));
+    else if (!toIssue) sub.push('одобренных заявок нет');
+    sec.appendChild(h('p', { class: 'adv-issue-sub', 'data-testid': 'adv-issue-sub', text: sub.join(' · ') }));
+    /* краткий список одобренных — из уже загруженной вкладки, если есть; иначе плейсхолдер */
+    var items = (S.data.adv || []).filter(function (x) { return x.status === 'approved'; });
+    if (items.length) {
+      var ul = h('ul', { class: 'adv-issue-list', 'data-testid': 'adv-issue-list' });
+      items.slice(0, 6).forEach(function (it) {
+        ul.appendChild(h('li', null, h('span', { class: 'nm', text: it.name }), h('span', { class: 'amt num', text: money(it.amount) })));
+      });
+      if (items.length > 6) ul.appendChild(h('li', { class: 'more', text: 'и ещё ' + (items.length - 6) + '…' }));
+      sec.appendChild(ul);
+    } else if (toIssue) {
+      sec.appendChild(h('p', { class: 'cap', text: 'Откройте вкладку «Авансы», чтобы увидеть список и выдать.' }));
+    }
+    sec.appendChild(h('div', { class: 'adv-issue-go' }, 'Открыть заявки →'));
+    return sec;
+  }
+  function advListBar(items) {
+    if (!items) return null;
+    var pe = items.filter(function (x) { return x.status === 'pending'; }), ap = items.filter(function (x) { return x.status === 'approved'; });
+    function sm(l) { return l.reduce(function (t, x) { return t + (x.amount || 0); }, 0); }
+    var bar = h('div', { class: 'adv-bar', 'data-testid': 'adv-bar' });
+    bar.appendChild(h('div', { class: 'adv-bar-cell hot' }, h('div', { class: 'k', text: 'К выдаче' }), h('div', { class: 'v num', 'data-testid': 'adv-bar-issue', text: money(sm(ap)) }), h('div', { class: 's', text: peopleWord(ap.length) + ' · одобрено' })));
+    bar.appendChild(h('div', { class: 'adv-bar-cell' }, h('div', { class: 'k', text: 'На рассмотрении' }), h('div', { class: 'v num', 'data-testid': 'adv-bar-pend', text: money(sm(pe)) }), h('div', { class: 's', text: peopleWord(pe.length) })));
+    return bar;
+  }
   function viewSum() {
     var v = h('main', { class: 'view adm-tabs-pad', id: 'main' }), s = S.sum;
     v.appendChild(pageHead('Сводка'));
     if (S.err.sum && !s) { v.appendChild(errBox(S.err.sum, function () { loadSummary(); })); return v; }
     if (!s) { v.appendChild(skeleton()); return v; }
     if (S.err.sum) v.appendChild(errBox(S.err.sum + ' Показаны ранее загруженные данные.', function () { loadSummary(); }));
+    v.appendChild(advIssueCard(s));   // ADV_ISSUE_SUMMARY_V1
     var g = h('div', { class: 'sumgrid', 'data-testid': 'sum-grid' });
     function tile(tab, n, label, sub, id) { return h('button', { class: 'card sumcard', type: 'button', 'data-testid': id, onclick: function () { go(tab); } }, h('span', { class: 'n num' + (n > 0 && tab !== 'acc' ? ' hot' : ''), text: String(n) }), h('span', { class: 'l', text: label }), sub ? h('span', { class: 's', text: sub }) : null); }
     g.appendChild(tile('adv', s.advances.pending, 'Авансы на рассмотрении', s.advances.pending ? 'на ' + money(s.advances.pendingSum) : 'новых нет', 'sum-adv'));
@@ -984,7 +1028,7 @@
         h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Сменить тему', 'data-testid': 'theme', onclick: toggleTheme }, ico(document.documentElement.getAttribute('data-theme') === 'dark' ? 'sun' : 'moon')),
         h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Выйти', 'data-testid': 'adm-logout', onclick: function () { confirmAct({ title: 'Выйти из кабинета?', text: 'Чтобы войти снова, понадобится новый код из Telegram.', yes: 'Выйти', danger: true }).then(function (a) { if (a) endSession(); }); } }, ico('logout'))));
   }
-  function counts() { var s = S.sum; return s ? { adv: s.advances.pending, expl: s.explanations.sent, inc: s.incidents.review, apps: s.applications.sent } : {}; }
+  function counts() { var s = S.sum; return s ? { adv: (s.advances.pending || 0) + (s.advances.approved || 0), expl: s.explanations.sent, inc: s.incidents.review, apps: s.applications.sent } : {}; }   // ADV_ISSUE_SUMMARY_V1: бейдж = на рассмотрении + к выдаче
   function renderTabs() {
     clear(tabbar); var c = counts();
     TABS.forEach(function (t) {
@@ -1004,11 +1048,12 @@
   }
   function loadSummary() {
     if (!session()) return Promise.resolve();
-    return Promise.all([call('adminSummary'), call('adminLog'), call('adminPromos'), call('adminDisputes'), call('adminPromoOct')]).then(function (rs) {
+    return Promise.all([call('adminSummary'), call('adminLog'), call('adminPromos'), call('adminDisputes'), call('adminPromoOct'), call('adminAdvances')]).then(function (rs) {
       if (!session()) return;
       if (rs[3] && rs[3].ok) S.dsp = rs[3].items;
       if (rs[4] && rs[4].ok) S.promoOct = rs[4]; loadStars();
       if (rs[2].ok) S.promoItems = promoItemsFrom(rs[2].items);
+      if (rs[5] && rs[5].ok) { S.data.adv = rs[5].items; delete S.err.adv; }   // ADV_ISSUE_SUMMARY_V1: список для блока «к выдаче»
       if (rs[0].ok) { S.sum = rs[0]; delete S.err.sum; S.log = rs[1].ok ? rs[1].items : S.log; } else if (rs[0].error !== 'auth') S.err.sum = errText(rs[0]);
       render();
     });
