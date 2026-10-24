@@ -93,7 +93,7 @@
   var KINDS = {
     adv: { action: 'adminAdvanceDecide', label: 'Аванс', st: { pending: ['На рассмотрении', 'warn'], approved: ['Одобрен', 'info'], issued: ['Выдан', 'ok'], rejected: ['Отклонён', 'bad'], cancelled: ['Отменён', 'gray'] },
       acts: [ { to: 'approved', label: 'Одобрить', cls: 'ok', from: ['pending'], text: 'Одобрен' },
-              { to: 'issued', label: 'Выдан', cls: 'ok', from: ['approved'], text: 'Выдан', confirm: 'Подтвердите, что деньги выданы сотруднику. Статус «Выдан» увидит сотрудник.' },
+              { to: 'issued', label: 'Выдан', cls: 'ok', from: ['approved'], text: 'Выдан', confirm: 'Подтвердите, что деньги выданы сотруднику. Статус «Выдан» увидит сотрудник, и ему уйдёт уведомление в Telegram (если привязан).' },   // ADV_ISSUE_NOTIFY_V1
               { to: 'rejected', label: 'Отклонить', cls: 'danger', from: ['pending', 'approved'], text: 'Отклонён', reason: true, confirm: 'Сотрудник увидит причину отказа.' } ] },
     expl: { action: 'adminExplDecide', label: 'Объяснение', st: { sent: ['Ждёт проверки', 'warn'], accepted: ['Принято', 'ok'], returned: ['Возвращено', 'info'] },
       acts: [ { to: 'accepted', label: 'Принять', cls: 'ok', from: ['sent'], text: 'Принято' },
@@ -488,7 +488,16 @@
       if (!ans) return;
       var btns = card.querySelectorAll('.acts .btn'); [].forEach.call(btns, function (b) { b.disabled = true; b.classList.add('sending'); });
       call(KINDS[kind].action, { id: it.id, to: a.to, reason: ans.reason, from: it.statusText }).then(function (r) {
-        if (r.ok) { toast(a.label + ': готово'); reloadAfter(kind); return; }
+        if (r.ok) {
+          if (kind === 'adv' && a.to === 'issued') {   // ADV_ISSUE_NOTIFY_V1
+            var msg = 'Выдан', tone;
+            if (r.notified) msg += ' · уведомление отправлено';
+            else if (r.notifySkip === 'Telegram не привязан') { msg += ' · Telegram не привязан'; tone = 'warn'; }
+            else if (r.notifySkip) { msg += ' · уведомление не доставлено'; tone = 'warn'; }
+            toast(msg, tone);
+          } else toast(a.label + ': готово');
+          reloadAfter(kind); return;
+        }
         [].forEach.call(btns, function (b) { b.disabled = false; b.classList.remove('sending'); });
         if (r.error === 'state') { toast('Уже изменено: статус «' + (r.statusText || r.status) + '». Список обновлён.', 'warn'); reloadAfter(kind); return; }
         if (r.error === 'auth' || r.error === 'disabled') return;
