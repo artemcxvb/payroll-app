@@ -570,6 +570,10 @@
   }
   function advInfo(d, calc, exclId) {
     var w = weekInfo(NOW), cur = calc[M.periods[0].id];
+    // ADV_UI_FORCEOPEN_V1: сервер (me) может открыть приём точечно (advForceOpen / advClosed=false) вне глобального дедлайна
+    var closed = d && d.advClosed != null ? !!d.advClosed : w.closed;
+    if (d && d.advForceOpen) closed = false;
+    if (!closed) { w = { wk: w.wk, wkEnd: w.wkEnd, deadline: w.deadline, deadlineAt: w.deadlineAt, pay: w.pay, closed: false, forceOpen: !!(d && d.advForceOpen), nextWk: w.nextWk, nextDeadline: w.nextDeadline, nextPay: w.nextPay }; }
     var wkShifts = d.shifts.filter(function (x) { return !x.planned && x.date >= w.wk && x.date <= w.wkEnd; });
     var earned = Math.round(sum(wkShifts, function (x) { return x.tsum; }) * M.SHARE), earnCap = Math.floor(earned * CFG.advShare);
     var mine = d.advances.filter(function (a) { return a.week === w.wk && a.id !== exclId && (a.status === 'pending' || a.status === 'approved' || a.status === 'issued'); });
@@ -582,7 +586,7 @@
     var raw = Math.min(capLimit, capEarn), avail = Math.max(0, Math.floor(raw / CFG.advStep) * CFG.advStep);
     var active = d.advances.filter(function (a) { return a.week === w.wk && (a.status === 'pending' || a.status === 'approved'); })[0];
     return { w: w, earned: earned, earnCap: earnCap, ordered: ordered, risk: risk, riskN: riskN, carry: carry, limit: CFG.advWeekLimit, capLimit: capLimit, capEarn: capEarn, raw: raw,
-      available: avail, active: active, shiftsN: wkShifts.length, binding: capLimit <= capEarn ? 'limit' : 'earn', closed: w.closed };
+      available: avail, active: active, shiftsN: wkShifts.length, binding: capLimit <= capEarn ? 'limit' : 'earn', closed: closed, forceOpen: !!(d && d.advForceOpen) };
   }
 
   /* ---------- состояние клиента ---------- */
