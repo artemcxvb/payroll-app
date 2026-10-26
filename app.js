@@ -2554,12 +2554,18 @@
   var SKUD_F = [['last', 'Фамилия'], ['first', 'Имя'], ['middle', 'Отчество'], ['cit', 'Гражданство'], ['hid', 'HID (номер карты)'], ['birth', 'Дата рождения'], ['start', 'Дата выхода']];
   var SKUD_P = [['pass', 'Паспорт — главный разворот'], ['reg', 'Паспорт — прописка'], ['face', 'Фото на бейдж']];
   var SKUD_SUP = 'Персональное Решение';
-  // SKUD_FILENAME_V1: то же правило, что skudFileName_ в Skud.js — имя вложения = префикс + « — » + Фамилия Имя + расширение по типу
-  var SKUD_FN = { pass: 'Паспорт — разворот', reg: 'Паспорт — прописка', face: 'Фото на бейдж' };
+  // SKUD_FILENAME_V2: «Фамилия И.О. — тип» (без отчества — «Фамилия И.»); то же правило, что skudFileName_ в Skud.js
+  var SKUD_FN = { pass: 'разворот паспорта', reg: 'прописка', face: 'фото на бадж' };
+  function skFioIni(d) {
+    var last = String(d.last || '').trim();
+    var f = String(d.first || '').trim(), m = String(d.middle || '').trim(), ini = '';
+    if (f) ini += f.charAt(0).toUpperCase() + '.';
+    if (m) ini += m.charAt(0).toUpperCase() + '.';
+    return (last + (ini ? ' ' + ini : '')).replace(/\s+/g, ' ').trim();
+  }
   function skFileName(kind, d, dataUrl) {
     var m = /^data:image\/(jpeg|png|webp);/.exec(String(dataUrl || '')), ext = m ? (m[1] === 'jpeg' ? 'jpg' : m[1]) : 'jpg';
-    var fi = (String(d.last || '').trim() + ' ' + String(d.first || '').trim()).replace(/\s+/g, ' ').trim();
-    return SKUD_FN[kind] + ' — ' + fi + '.' + ext;
+    return skFioIni(d) + ' — ' + SKUD_FN[kind] + '.' + ext;
   }
   function skDate(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? m[3] + '.' + m[2] + '.' + m[1] : s; }
   function skCompress(file) {   // сжатие на телефоне: длинная сторона ≤ 1600 px, JPEG 0.8
