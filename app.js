@@ -2894,7 +2894,11 @@
       }).then(function (buf) {
         var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         var url = URL.createObjectURL(blob);
-        var outName = (fileName || 'kpp.xlsx').replace(/\.xlsx$/i, '') + '_обновлён.xlsx';
+        var _d = new Date(Date.now() + 10800000); /* МСК = UTC+3 */
+        var outName = 'КПП Персональное решение ' +
+          ('0' + _d.getUTCDate()).slice(-2) + '.' +
+          ('0' + (_d.getUTCMonth() + 1)).slice(-2) + '.' +
+          String(_d.getUTCFullYear()).slice(-2) + '.xlsx';
         sh.close();
         var dl = h('a', { class: 'btn', href: url, download: outName, 'data-testid': 'kpp-dl' }, 'Скачать Excel');
         var done = openSheet({
