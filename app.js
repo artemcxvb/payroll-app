@@ -2785,14 +2785,14 @@
     }
     function draw() {
       clear(body);
-      body.appendChild(h('div', { class: 'kpp-banner', text: 'Данные стажёров уже есть в заявках СКУД и CRM — отметьте нужных, укажите ТС и загрузите текущий Excel для КПП.' }));
+      body.appendChild(h('div', { class: 'kpp-banner', text: 'Показываем заявки СКУД за последние 3 дня. Отметьте нужных, укажите ТС и загрузите текущий Excel для КПП.' }));
       if (!items.length) {
-        body.appendChild(h('p', { class: 'cap', 'data-testid': 'kpp-empty', text: 'Недавних заявок СКУД нет. Сначала отправьте прошивку СКУД.' }));
+        body.appendChild(h('p', { class: 'cap', 'data-testid': 'kpp-empty', text: 'За последние 3 дня заявок СКУД нет. Сначала отправьте прошивку СКУД.' }));
         drawFoot();
         return;
       }
       var head = h('div', { class: 'kpp-selall' },
-        h('span', { text: 'Недавние заявки СКУД · ' + items.length }),
+        h('span', { text: 'Заявки СКУД за 3 дня · ' + items.length }),
         h('button', { type: 'button', 'data-testid': 'kpp-all', onclick: function () {
           var allOn = selCount() < items.length;
           items.forEach(function (it) { selected[it.id] = allOn; if (allOn && !tsMap[it.id]) tsMap[it.id] = 'автобус'; });
