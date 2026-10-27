@@ -2716,6 +2716,212 @@
       h('p', { class: 'cap', text: 'Одно письмо «Прошивка скуд Персональное решение» на ' + ps.length + ' чел. отправлено службе безопасности Лемана ПРО. Заявка №' + (r.id || '—') + ' — ' + ps.length + ' строк(и) в журнале «СКУД заявки».' })),
       footer: h('button', { class: 'btn', type: 'button', onclick: function () { sh.close(); } }, 'Готово') });
   }
+  /* ---------- KPP_LIST_V1: «Список на КПП» из заявок СКУД + CRM ---------- */
+  function kppCard() {
+    return h('div', { class: 'card fm-sec kpp-card', 'data-testid': 'kpp-card' },
+      h('h2', { text: 'Список на КПП' }),
+      h('p', { class: 'cap', text: 'Обновите Excel для КПП: данные стажёров подтянутся из уже отправленных заявок СКУД и CRM. Бригадиру ничего вручную заполнять не нужно.' }),
+      h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'kpp-open', onclick: function () { kppOpen(); } }, 'Обновить файл для КПП'));
+  }
+  function kppEsc(s) { return String(s == null ? '' : s); }
+  function kppPhoneDisp(p) {
+    var d = String(p || '').replace(/\D/g, '');
+    if (d.length === 11 && d[0] === '7') return '8' + d.slice(1);
+    if (d.length === 10) return '8' + d;
+    return String(p || '');
+  }
+  function kppParseDMY(s) {
+    var m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(String(s || '').trim());
+    if (!m) return null;
+    var d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function kppLoadExcelJS() {
+    if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+    return new Promise(function (ok, bad) {
+      var s = document.createElement('script');
+      s.src = 'vendor/exceljs.min.js';
+      s.onload = function () { window.ExcelJS ? ok(window.ExcelJS) : bad(new Error('exceljs')); };
+      s.onerror = function () { bad(new Error('exceljs_load')); };
+      document.head.appendChild(s);
+    });
+  }
+  function kppOpen() {
+    var sh, items = [], selected = {}, tsMap = {}, fileBuf = null, fileName = '', body = h('div', { class: 'kpp' }), foot = h('div', { class: 'kpp-foot' });
+    function selCount() { return Object.keys(selected).filter(function (k) { return selected[k]; }).length; }
+    function drawFoot() {
+      clear(foot);
+      var n = selCount(), ready = n > 0 && !!fileBuf;
+      var btn = h('button', { class: 'btn', type: 'button', 'data-testid': 'kpp-build', onclick: function () { kppBuild(); } }, 'Собрать файл');
+      if (!ready) btn.setAttribute('disabled', 'disabled'); else btn.removeAttribute('disabled');
+      foot.appendChild(btn);
+    }
+    function preview(it) {
+      var miss = (it.missing || []).length;
+      var src = miss
+        ? ('Данные из заявки СКУД' + (it.skudDate ? ' · ' + it.skudDate : '') + ' · не хватает в CRM: ' + it.missing.join(', '))
+        : ('Данные из CRM и заявки СКУД' + (it.skudDate ? ' · ' + it.skudDate : ''));
+      var cell = function (l, v, full) {
+        return h('div', { class: 'cell' + (full ? ' full' : '') }, h('span', { text: l }), h('b', { text: v || '—' }));
+      };
+      var pass = (it.passportSeries || it.passportNumber)
+        ? [it.passportSeries, it.passportNumber].filter(Boolean).join(' ')
+        : (it.passportRaw || '');
+      var seg = h('div', { class: 'kpp-seg', role: 'group', 'aria-label': 'ТС' });
+      ['автобус', 'Такси'].forEach(function (opt) {
+        var on = (tsMap[it.id] || 'автобус') === opt;
+        seg.appendChild(h('button', { type: 'button', 'aria-pressed': on ? 'true' : 'false', 'data-testid': 'kpp-ts-' + it.id + '-' + (opt === 'Такси' ? 'taxi' : 'bus'), onclick: function (ev) { ev.stopPropagation(); tsMap[it.id] = opt; draw(); } }, opt));
+      });
+      return h('div', { class: 'kpp-preview', 'data-testid': 'kpp-prev-' + it.id },
+        h('div', { class: 'src', text: src }),
+        h('div', { class: 'grid' },
+          cell('Дата рождения', it.birth),
+          cell('Гражданство', it.citizenship),
+          cell('Паспорт', pass, true),
+          cell('Телефон', kppPhoneDisp(it.phone) || it.phone),
+          cell('Дата 1-й смены', it.startDate)),
+        h('div', { class: 'ts-l', text: 'ТС' }), seg);
+    }
+    function draw() {
+      clear(body);
+      body.appendChild(h('div', { class: 'kpp-banner', text: 'Данные стажёров уже есть в заявках СКУД и CRM — отметьте нужных, укажите ТС и загрузите текущий Excel для КПП.' }));
+      if (!items.length) {
+        body.appendChild(h('p', { class: 'cap', 'data-testid': 'kpp-empty', text: 'Недавних заявок СКУД нет. Сначала отправьте прошивку СКУД.' }));
+        drawFoot();
+        return;
+      }
+      var head = h('div', { class: 'kpp-selall' },
+        h('span', { text: 'Недавние заявки СКУД · ' + items.length }),
+        h('button', { type: 'button', 'data-testid': 'kpp-all', onclick: function () {
+          var allOn = selCount() < items.length;
+          items.forEach(function (it) { selected[it.id] = allOn; if (allOn && !tsMap[it.id]) tsMap[it.id] = 'автобус'; });
+          draw();
+        } }, selCount() === items.length ? 'Снять все' : 'Выбрать все'));
+      body.appendChild(h('div', { class: 'sec-l', text: 'Кого добавить' }), head);
+      items.forEach(function (it) {
+        var on = !!selected[it.id];
+        var row = h('div', { class: 'kpp-pick' + (on ? ' on' : '') + ((it.missing || []).length ? ' miss' : ''), 'data-testid': 'kpp-pick-' + it.id, role: 'checkbox', 'aria-checked': on ? 'true' : 'false', tabindex: '0', onclick: function () {
+          selected[it.id] = !selected[it.id];
+          if (selected[it.id] && !tsMap[it.id]) tsMap[it.id] = 'автобус';
+          draw();
+        } },
+          h('span', { class: 'ck', text: on ? '✓' : '' }),
+          h('div', { class: 'txt' },
+            h('div', { class: 'nm', text: it.fio }),
+            h('div', { class: 'meta', text: (it.startDate ? 'выход ' + it.startDate : 'дата выхода —') + (it.skudDate ? ' · заявка ' + it.skudDate : '') })));
+        body.appendChild(row);
+        if (on) body.appendChild(preview(it));
+      });
+      body.appendChild(h('div', { class: 'sec-l', text: 'Текущий файл КПП' }));
+      var up = h('label', { class: 'kpp-upload', 'data-testid': 'kpp-upload' },
+        h('b', { text: fileName || 'Выберите .xlsx' }),
+        h('span', { text: fileName ? 'Нажмите, чтобы заменить' : 'Шаблон списка на КПП — стажёры допишутся в конец' }),
+        h('input', { type: 'file', accept: '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'data-testid': 'kpp-file', onchange: function (ev) {
+          var f = ev.target.files && ev.target.files[0]; if (!f) return;
+          if (!/\.xlsx$/i.test(f.name)) { toast('Нужен файл .xlsx', 'warn'); return; }
+          var fr = new FileReader();
+          fr.onload = function () { fileBuf = fr.result; fileName = f.name; draw(); };
+          fr.onerror = function () { toast('Не удалось прочитать файл', 'warn'); };
+          fr.readAsArrayBuffer(f);
+        } }));
+      body.appendChild(up);
+      drawFoot();
+    }
+    function kppBuild() {
+      var chosen = items.filter(function (it) { return selected[it.id]; });
+      if (!chosen.length || !fileBuf) return;
+      var btn = foot.querySelector('[data-testid=kpp-build]');
+      if (btn) { btn.disabled = true; btn.textContent = 'Собираем…'; }
+      kppLoadExcelJS().then(function (ExcelJS) {
+        var wb = new ExcelJS.Workbook();
+        return wb.xlsx.load(fileBuf).then(function () {
+          var ws = wb.worksheets[0];
+          if (!ws) throw new Error('no_sheet');
+          var last = 1;
+          ws.eachRow({ includeEmpty: false }, function (row, n) {
+            var v = row.getCell(2).value;
+            if (v != null && String(v).trim() !== '') last = n;
+          });
+          var nextNo = 1;
+          var lastNo = ws.getRow(last).getCell(1).value;
+          if (typeof lastNo === 'number') nextNo = lastNo + 1;
+          else if (last > 1) nextNo = last;
+          var styleSrc = last >= 2 ? ws.getRow(last) : null;
+          chosen.forEach(function (it, i) {
+            var r = last + 1 + i;
+            var row = ws.getRow(r);
+            var birth = kppParseDMY(it.birth);
+            var start = kppParseDMY(it.startDate);
+            var phoneRaw = String(it.phone || '').replace(/\D/g, '');
+            var phoneVal = '';
+            if (phoneRaw) {
+              if (phoneRaw.length === 11 && phoneRaw[0] === '7') phoneVal = Number('8' + phoneRaw.slice(1));
+              else if (phoneRaw.length === 10) phoneVal = Number('8' + phoneRaw);
+              else phoneVal = Number(phoneRaw) || kppPhoneDisp(it.phone);
+            }
+            var vals = [
+              nextNo + i,
+              kppEsc(it.fio).trim(),
+              birth || kppEsc(it.birth) || null,
+              kppEsc(it.citizenship) || 'РФ',
+              kppEsc(it.passportSeries),
+              kppEsc(it.passportNumber),
+              start || kppEsc(it.startDate) || null,
+              phoneVal === '' ? null : phoneVal,
+              tsMap[it.id] || 'автобус'
+            ];
+            vals.forEach(function (v, ci) {
+              var cell = row.getCell(ci + 1);
+              cell.value = v;
+              if (styleSrc) {
+                var sc = styleSrc.getCell(ci + 1);
+                try {
+                  if (sc.font) cell.font = Object.assign({}, sc.font);
+                  if (sc.alignment) cell.alignment = Object.assign({}, sc.alignment);
+                  if (sc.border) cell.border = JSON.parse(JSON.stringify(sc.border));
+                } catch (e) {}
+              }
+            });
+            row.getCell(3).numFmt = 'dd.mm.yyyy';
+            row.getCell(5).numFmt = '@';
+            row.getCell(6).numFmt = '@';
+            row.getCell(7).numFmt = 'dd.mm.yyyy';
+            row.commit();
+          });
+          return wb.xlsx.writeBuffer();
+        });
+      }).then(function (buf) {
+        var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        var url = URL.createObjectURL(blob);
+        var outName = (fileName || 'kpp.xlsx').replace(/\.xlsx$/i, '') + '_обновлён.xlsx';
+        sh.close();
+        var dl = h('a', { class: 'btn', href: url, download: outName, 'data-testid': 'kpp-dl' }, 'Скачать Excel');
+        var done = openSheet({
+          title: 'Файл готов',
+          dialog: true,
+          body: h('div', { class: 'kpp kpp-done', 'data-testid': 'kpp-done' },
+            h('div', { class: 'sk-ok', text: '✓' }),
+            h('p', null, h('b', { text: 'Добавлено: ' + chosen.length }), ' · строки в конце списка'),
+            h('p', { class: 'cap', text: chosen.map(function (it) { return it.fio; }).join(', ') })),
+          footer: h('div', { class: 'sk-btns' },
+            dl,
+            h('button', { class: 'btn secondary', type: 'button', onclick: function () { URL.revokeObjectURL(url); done.close(); } }, 'Закрыть'))
+        });
+      }).catch(function (e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Собрать файл'; }
+        toast('Не удалось собрать файл', 'warn');
+        console.warn('kpp', e);
+      });
+    }
+    body.appendChild(h('p', { class: 'cap', text: 'Загружаем заявки…' }));
+    drawFoot();
+    sh = openSheet({ title: 'Список на КПП', body: body, footer: foot });
+    api('skudKppList').then(function (r) {
+      if (!r || !r.ok) { toast((r && r.message) || 'Не удалось загрузить заявки', 'warn'); return; }
+      items = r.items || [];
+      draw();
+    }, function () { toast('Нет связи', 'warn'); });
+  }
   function viewBrig() {
     var f = S.data && S.data.foreman, v = h('div', { class: 'view fm', id: 'main', 'data-testid': 'brig' });
     v.appendChild(pageTop('Бригада', f && f.period ? 'Период ' + f.period : ''));
@@ -2724,7 +2930,10 @@
     v.appendChild(h('div', { class: 'hero', 'data-testid': 'fm-pay' }, h('div', { class: 'lbl', text: 'Ваше вознаграждение сейчас' }), h('div', { class: 'big', text: fmM(f.pay) }),
       h('div', { class: 'note', text: (f.gross != null ? 'до вычета брака ' + fmM(f.gross) : '') + (f.lost ? ' · вычет за брак −' + fmM(f.lost).replace('−', '') : '') })));
     if (f.avg != null && f.rate != null) v.appendChild(fmSlider(f));   // FOREMAN_SLIDER_V1
-    if (f.skud && f.skud.ok) v.appendChild(skudCard());   // SKUD_V1: сервер присылает skud только бригадиру
+    if (f.skud && f.skud.ok) {
+      v.appendChild(skudCard());   // SKUD_V1
+      v.appendChild(kppCard());    // KPP_LIST_V1: список на КПП из заявок СКУД
+    }
     v2BrigCards(v, f);   // V2_IMPROVEMENTS_V1
     if (f.ops && f.ops.ok) foBlocks(v, f.ops);   // FOREMAN_OPS_V1
     function pos(x) { return Math.max(0, Math.min(100, x / top * 100)) + '%'; }
