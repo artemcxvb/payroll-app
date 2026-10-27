@@ -425,6 +425,7 @@
   function okHr(f, t) { return f === Math.floor(f) && t === Math.floor(t) && f >= 0 && f <= 23 && t >= 1 && t <= 24 && f < t; }
   function loginHrs() {   // часы из ответов сервера (приоритет), иначе из config.js (loginHours), иначе 9 и 20
     var st = load(HRSK, null), c = APPC.loginHours || {};
+    if (c && +c.from === 0 && +c.to === 24) return { from: 0, to: 24, off: true }; /* OPEN_NOW temporary: config overrides cache */
     if (st && okHr(+st.from, +st.to)) return { from: +st.from, to: +st.to, off: !!st.off };
     if (okHr(+c.from, +c.to)) return { from: +c.from, to: +c.to, off: false };
     return { from: 9, to: 20, off: false };
