@@ -2679,7 +2679,7 @@
           var f = fi.files && fi.files[0]; if (!f) return;
           if (k === 'face') { skCrop(f, function (u) { d.photos[k] = u; clearErr(i, k); draw(); }); fi.value = ''; return; }
           skCompress(f).then(skFit).then(function (u) { d.photos[k] = u; clearErr(i, k); draw(); }, function () { toast('Не удалось открыть фото', 'warn'); }); } });
-        if (k === 'face') fi.setAttribute('capture', 'user');
+        // SKUD_FACE_GALLERY_V1: без capture — на iOS/Android открывается выбор камера/галерея, как у паспорта
         grid.appendChild(h('label', { class: 'sk-tile' + (k === 'face' ? ' face' : '') + (d.photos[k] ? ' has' : '') + (err[k] ? ' bad' : ''), 'data-testid': 'sk-' + i + '-tile-' + k }, fi,
           d.photos[k] ? (function () { var im = h('img', { alt: p[1] }); im.src = d.photos[k]; return im; })() : h('span', { class: 'sk-plus', text: '+' }),
           h('span', { class: 'sk-tl', text: p[1] }), h('span', { class: 'sk-ts', text: d.photos[k] ? 'Заменить' : 'Камера или галерея' })));
