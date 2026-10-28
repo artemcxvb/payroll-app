@@ -473,11 +473,16 @@
   function filesB64(a) { return Promise.all((a || []).map(function (f) { return blobB64(f.blob).then(function (b) { return { b64: b }; }); })); }
   var backend = LIVE ? {
     requestCode: function (phone) {
-      // NOGEO_FOREMAN_V1: сначала без геопозиции — бригадиру/админу сервер выдаёт код сразу (геолокация не запрашивается); исполнителю сервер отвечает bad_geo → как раньше запрашиваем геопозицию
+      // NOGEO_FOREMAN_V1 + GEO_BLOCK_LOGIN_V1: проба без гео → бригадиру код сразу; исполнителю bad_geo → geoGet; отказ → codeRequest с geoAttempted (сервер блокирует)
       return post(APPC.backendUrl, { action: 'codeRequest', phone: phone, rid: rid() }).then(function (r0) {
         if (!r0 || r0.error !== 'bad_geo') return r0;
         return geoGet().then(function (g) {
-          if (!g.ok) return { ok: false, error: 'geo', reason: g.reason };
+          if (!g.ok) {
+            return post(APPC.backendUrl, { action: 'codeRequest', phone: phone, rid: rid(), geoAttempted: true }).then(function (r) {
+              if (r && (r.error === 'blocked' || r.reason === 'no_geo')) return { ok: false, error: 'blocked', reason: 'no_geo' };
+              return { ok: false, error: 'geo', reason: g.reason };
+            }, function () { return { ok: false, error: 'geo', reason: g.reason }; });
+          }
           return post(APPC.backendUrl, { action: 'codeRequest', phone: phone, rid: rid(), lat: g.lat, lon: g.lon, accuracy: g.accuracy });
         });
       });
@@ -735,8 +740,11 @@
     tabbar.hidden = true; $('#offline').hidden = true; clear(root); clearInterval(L.timer);
     document.title = 'Доступ закрыт · Мои выплаты';
     var v = h('main', { class: 'login blocked', id: 'main', 'data-testid': 'blocked-screen' }); root.appendChild(v);
+    var why = S.blockReason === 'no_geo'
+      ? 'Нужно было разрешить геолокацию. Без неё вход закрыт. Обратитесь к бригадиру.'
+      : 'Обратитесь к бригадиру.';
     v.appendChild(h('div', { class: 'brand' }, h('div', { class: 'logo' }, ico('lock', 'lg')), h('div', null, h('b', { text: 'Персональное Решение' }), h('span', { text: 'Кабинет исполнителя' }))));
-    v.appendChild(h('div', { class: 'lockbox', role: 'alert', 'data-testid': 'blockbox' }, ico('lock', 'lg'), h('h1', { text: 'Доступ закрыт' }), h('p', { text: 'Обратитесь к бригадиру.' })));
+    v.appendChild(h('div', { class: 'lockbox', role: 'alert', 'data-testid': 'blockbox' }, ico('lock', 'lg'), h('h1', { text: 'Доступ закрыт' }), h('p', { text: why })));
     v.appendChild(h('p', { class: 'blocked-note', text: 'Сохранённые на этом телефоне данные удалены.' }));
     v.appendChild(h('p', { class: 'foot', text: LIVE ? 'Данные видны только вам' : 'Демо-прототип · все данные вымышлены' }));
     devRender();
@@ -776,6 +784,7 @@
       btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…'));
       var phone = '7' + d;
       delay(LAT).then(function () { return backend.requestCode(phone); }).then(function (r) {
+        if (r.error === 'blocked') { clearInterval(L.timer); S.blockReason = r.reason === 'no_geo' ? 'no_geo' : (r.reason || ''); S.blocked = true; return renderBlocked(); }   // GEO_BLOCK_LOGIN_V1
         if (r.error === 'geo' || r.error === 'bad_geo') { L.phone = phone; L.step = 'phone'; L.geoErr = r.reason || 'unavailable'; return renderLogin(); }   // без геопозиции код не запрашивается: показываем инструкцию и «Повторить»
         L.geoErr = '';
         if (r.error === 'network' || r.error === 'server' || r.error === 'bad_phone') { toast(r.error === 'bad_phone' ? 'Проверьте номер телефона' : 'Нет связи с сервером. Повторите позже.', 'bad'); return renderLogin(); }
@@ -792,7 +801,29 @@
       h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: 'Введите номер телефона, нажмите «Запросить код» и разрешите определение местоположения: без него код не выдаётся.' })),
       h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: 'Код придёт вам лично в Telegram от бота ' + BOT_NAME + '. Впервые? Откройте бота, нажмите «Старт» и «Поделиться номером».' })),
       h('div', { class: 'stepi' }, h('i', { text: '3' }), h('span', { text: 'Введите 4 цифры — увидите только свои данные.' }))));
-    setTimeout(function () { inp.focus(); }, 50);
+    // LOGIN_BOT_HINT_V1: яркий попап до ввода номера — новые исполнители часто не делятся номером в боте
+    if (LIVE) {
+      try {
+        if (sessionStorage.getItem('login_bot_hint_ok') !== '1' && !document.querySelector('[data-testid=login-bot-modal]')) {
+          var modal = h('div', { class: 'login-bot-modal', role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': 'login-bot-title', 'data-testid': 'login-bot-modal' },
+            h('div', { class: 'login-bot-card' },
+              h('div', { class: 'login-bot-badge', 'aria-hidden': 'true', text: 'Telegram' }),
+              h('h2', { id: 'login-bot-title', text: 'Перед входом подключите бота' }),
+              h('p', { text: 'Код приходит только в Telegram. Откройте бота → «Старт» → обязательно «Поделиться номером». Без этого код в кабинет не придёт.' }),
+              h('a', { class: 'btn login-bot-open', href: BOT_URL, target: '_blank', rel: 'noopener noreferrer', 'data-testid': 'login-bot-open' }, ico('send', 'sm'), 'Открыть бота'),
+              h('button', { class: 'btn ghost login-bot-dismiss', type: 'button', 'data-testid': 'login-bot-dismiss', onclick: function () {
+                try { sessionStorage.setItem('login_bot_hint_ok', '1'); } catch (e) {}
+                if (modal.parentNode) modal.parentNode.removeChild(modal);
+                document.body.classList.remove('has-login-bot-modal');
+                setTimeout(function () { try { inp.focus(); } catch (e) {} }, 30);
+              } }, 'Уже подключил(а)')
+            ));
+          document.body.classList.add('has-login-bot-modal');
+          (overlayRoot || document.body).appendChild(modal);
+        }
+      } catch (e) { /* sessionStorage может быть недоступен */ }
+    }
+    setTimeout(function () { if (!document.querySelector('[data-testid=login-bot-modal]')) inp.focus(); }, 50);
   }
   function loginCode(v) {
     var boxes = [], otp = h('div', { class: 'otp', role: 'group', 'aria-label': 'Код из 4 цифр', 'data-testid': 'otp' }), err = h('div', { class: 'err', id: 'code-err', role: 'alert', hidden: true, 'data-testid': 'code-err' }), busy = false;
@@ -839,6 +870,7 @@
     boundBtn.addEventListener('click', function () { if (!resend.disabled) resend.click(); });
     resend.addEventListener('click', function () {
       backend.requestCode(L.phone).then(function (r) {
+        if (r.error === 'blocked') { clearInterval(L.timer); S.blockReason = r.reason === 'no_geo' ? 'no_geo' : (r.reason || ''); S.blocked = true; return renderBlocked(); }
         if (r.error === 'geo' || r.error === 'bad_geo') { clearInterval(L.timer); L.step = 'phone'; L.geoErr = r.reason || 'unavailable'; return renderLogin(); }
         if (r.closed) { clearInterval(L.timer); L.step = 'phone'; L.notice = closedMsg(r); return renderLogin(); }
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }

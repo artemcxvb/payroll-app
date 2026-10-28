@@ -527,10 +527,18 @@
       btn.disabled = true; clear(btn); btn.appendChild(h('span', { class: 'spinner' })); err.hidden = true;
       if (LIVE) { btn.appendChild(document.createTextNode(' Определяем местоположение…')); if (!emp) geoHint.hidden = false; } else btn.appendChild(document.createTextNode(' Отправляем…'));
       (emp ? (LIVE ? geoStrict() : Promise.resolve({ ok: true })).then(function (g) {
-        if (!g.ok) return { ok: false, error: 'geo', reason: g.reason };
+        if (!g.ok) {
+          // GEO_BLOCK_LOGIN_V1: отказ в гео на такси — сообщаем серверу, чтобы заблокировать доступ
+          clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…'));
+          return call('codeRequest', { phone: L.phone, purpose: 'taxi', geoAttempted: true }).then(function (r) {
+            if (r && r.error === 'blocked') return r;
+            return { ok: false, error: 'geo', reason: g.reason };
+          }, function () { return { ok: false, error: 'geo', reason: g.reason }; });
+        }
         clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…'));
         var q = { phone: L.phone, purpose: 'taxi' }; if (LIVE) { q.lat = g.lat; q.lon = g.lon; if (g.accuracy !== undefined) q.accuracy = g.accuracy; } return call('codeRequest', q);
       }) : withGeo({ purpose: 'taxi', phone: L.phone, name: L.name }).then(function (d) { clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…')); geoHint.hidden = true; return call('adminCodeRequest', d); })).then(function (r) {
+        if (emp && r.error === 'blocked') { fail(r.reason === 'no_geo' ? 'Нужно разрешить геолокацию — доступ закрыт. Обратитесь к бригадиру.' : ERR.blocked); return; }
         if (emp && (r.error === 'geo' || r.error === 'bad_geo')) { L.geoErr = r.reason || 'unavailable'; fail(''); err.hidden = true; showGeoNeed(L.geoErr); return; }
         if (emp) { L.geoErr = ''; showGeoNeed(''); }
         if (r.error === 'locked') { L.step = 'code'; L.lockUntil = r.until; return renderLogin(); }
@@ -584,9 +592,15 @@
     if (boundBtn) boundBtn.addEventListener('click', function () { if (!resend.disabled) resend.click(); });
     resend.addEventListener('click', function () {
       (L.mode === 'emp' ? (LIVE ? geoStrict() : Promise.resolve({ ok: true })).then(function (g) {
-        if (!g.ok) return { ok: false, error: 'geo', reason: g.reason };
+        if (!g.ok) {
+          return call('codeRequest', { phone: L.phone, purpose: 'taxi', geoAttempted: true }).then(function (r) {
+            if (r && r.error === 'blocked') return r;
+            return { ok: false, error: 'geo', reason: g.reason };
+          }, function () { return { ok: false, error: 'geo', reason: g.reason }; });
+        }
         var q = { phone: L.phone, purpose: 'taxi' }; if (LIVE) { q.lat = g.lat; q.lon = g.lon; if (g.accuracy !== undefined) q.accuracy = g.accuracy; } return call('codeRequest', q);
       }) : withGeo({ purpose: 'taxi', phone: L.phone, name: L.name }).then(function (d) { return call('adminCodeRequest', d); })).then(function (r) {
+        if (r.error === 'blocked') { clearInterval(L.timer); toast(r.reason === 'no_geo' ? 'Нужно разрешить геолокацию — доступ закрыт. Обратитесь к бригадиру.' : ERR.blocked, 'bad'); L.step = 'start'; return renderLogin(); }
         if (r.error === 'geo' || r.error === 'bad_geo') { clearInterval(L.timer); L.step = 'start'; L.geoErr = r.reason || 'unavailable'; return renderLogin(); }
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         if (!r.ok) { if (r.error === 'req_limit') L.left = 0; toast(errText(r), 'bad'); tick(); return; }
