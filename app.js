@@ -2590,6 +2590,12 @@
   /* ---------- SKUD_V1: заявка «Прошивка СКУД» (только бригадир) ---------- */
   function skHid(v) { v = String(v || '').trim().replace(/[.\/\s;:\-]+/g, ',').replace(/,+/g, ',').replace(/^,|,$/g, ''); if (/^\d{4,9}$/.test(v)) v = v.slice(0, 3) + ',' + v.slice(3); return v; }
   var SKUD_F = [['last', 'Фамилия'], ['first', 'Имя'], ['middle', 'Отчество'], ['cit', 'Гражданство'], ['hid', 'HID (номер карты)'], ['birth', 'Дата рождения'], ['start', 'Дата выхода']];
+  // PARTNER_V2: паспорт и телефон — только в заявке партнёра
+  var SKUD_FP = SKUD_F.slice(0, 4).concat([['passport', 'Паспорт (серия и номер)'], ['phone', 'Телефон']], SKUD_F.slice(4));
+  function skIsRf(c) { return /^(рф|россия|российская|russia)/i.test(String(c || '').trim()); }
+  function skPassMask(v, cit) { if (skIsRf(cit)) { var dg = String(v || '').replace(/\D/g, '').slice(0, 10); return dg.length > 4 ? dg.slice(0, 4) + ' ' + dg.slice(4) : dg; } return String(v || '').toUpperCase().replace(/[^A-ZА-ЯЁ0-9 \-№]/g, '').replace(/\s+/g, ' ').slice(0, 20); }
+  function skTelMask(v) { var dg = String(v || '').replace(/\D/g, ''); if (/^[78]/.test(dg)) dg = dg.slice(1); dg = dg.slice(0, 10); if (!dg) return ''; var o = '+7 (' + dg.slice(0, 3); if (dg.length >= 3) o += ')'; if (dg.length > 3) o += ' ' + dg.slice(3, 6); if (dg.length > 6) o += '-' + dg.slice(6, 8); if (dg.length > 8) o += '-' + dg.slice(8, 10); return o; }
+  function skPassOk(v, cit) { return skIsRf(cit) ? /^\d{4} \d{6}$/.test(v || '') : /^[A-ZА-ЯЁ0-9][A-ZА-ЯЁ0-9 \-№]{3,19}$/.test(v || '') && /\d/.test(v); }
   var SKUD_P = [['pass', 'Паспорт — главный разворот'], ['reg', 'Паспорт — прописка'], ['face', 'Фото на бейдж']];
   var SKUD_SUP = 'Персональное Решение';
   // SKUD_FILENAME_V3: «Фамилия Имя Отчество — тип» (без отчества — «Фамилия Имя»); то же правило, что skudFileName_ в Skud.js
@@ -2643,6 +2649,7 @@
     if (!/^\d{1,3},\d{1,6}$/.test(d.hid || '')) e.hid = 'Формат: 112,36865';
     if (!d.birth) e.birth = 'Укажите дату'; else { var y = (new Date(today) - new Date(d.birth)) / 31557600000; if (y < 18 || y > 75) e.birth = 'Возраст должен быть от 18 лет'; }
     if (!d.start) e.start = 'Укажите дату'; else if (d.start < today) e.start = 'Дата выхода не может быть в прошлом';
+    if (PMODE) { if (!skPassOk(d.passport, d.cit)) e.passport = skIsRf(d.cit) ? 'РФ: 4 цифры серии и 6 цифр номера' : 'Как в паспорте: буквы и цифры, до 20 знаков'; if (!/^\+7 \(9\d\d\) \d{3}-\d\d-\d\d$/.test(d.phone || '')) e.phone = 'Номер +7 (9XX) XXX-XX-XX'; }   // PARTNER_V2
     SKUD_P.forEach(function (p) { if (!d.photos[p[0]]) e[p[0]] = 'Добавьте фото'; });
     return e;
   }
@@ -2671,11 +2678,20 @@
     function clearErr(i, k) { if (errs[i]) delete errs[i][k]; }
     function personBody(d, i) {
       var err = errs[i] || {}, box = h('div', { class: 'sk-pb' });
-      SKUD_F.forEach(function (f) {
-        var k = f[0], t = (k === 'birth' || k === 'start') ? 'date' : 'text';
+      (PMODE ? SKUD_FP : SKUD_F).forEach(function (f) {
+        var k = f[0], t = (k === 'birth' || k === 'start') ? 'date' : (k === 'phone' ? 'tel' : 'text');
         var inp = h('input', { class: 'inp', type: t, 'data-testid': 'sk-' + i + '-' + k, value: d[k] || '', autocomplete: 'off', inputmode: 'text', autocapitalize: k === 'hid' ? 'off' : null, spellcheck: k === 'hid' ? 'false' : null, placeholder: k === 'hid' ? '112,36865' : (k === 'middle' ? 'если есть' : ''), onblur: k === 'hid' ? function () { d.hid = skHid(inp.value); inp.value = d.hid; } : null, oninput: function () { d[k] = k === 'hid' ? skHid(inp.value) : inp.value.trim(); if (k === 'last' || k === 'first') { var t = body.querySelector('[data-testid=sk-pt-' + i + ']'); if (t) t.textContent = skFio(d); } if (err[k]) { clearErr(i, k); inp.removeAttribute('aria-invalid'); var n = inp.nextSibling; if (n) n.remove(); } } });
         if (err[k]) inp.setAttribute('aria-invalid', 'true');
-        box.appendChild(h('label', { class: 'field sk-f' }, h('div', { class: 'l' }, f[1], k === 'middle' ? h('span', { text: 'необязательно' }) : null), inp, err[k] ? h('p', { class: 'sk-err', text: err[k] }) : null));
+        var hint = null;
+        if (k === 'passport' || k === 'phone') {   // PARTNER_V2: маски
+          var rf = skIsRf(d.cit);
+          inp.setAttribute('inputmode', k === 'phone' || rf ? 'numeric' : 'text'); if (k === 'phone') inp.setAttribute('inputmode', 'tel');
+          inp.setAttribute('placeholder', k === 'phone' ? '+7 (9__) ___-__-__' : (rf ? '4512 345678' : 'как в паспорте'));
+          inp.addEventListener('input', function () { var v = k === 'phone' ? skTelMask(inp.value) : skPassMask(inp.value, d.cit); if (v !== inp.value) inp.value = v; d[k] = v; });
+          if (k === 'passport') hint = h('p', { class: 'help', text: rf ? 'РФ: 4 цифры серии и 6 цифр номера' : 'Иностранный паспорт — как в документе (буквы и цифры, до 20 знаков)' });
+        }
+        if (k === 'cit' && PMODE) inp.addEventListener('blur', function () { if (d.passport) d.passport = skPassMask(d.passport, d.cit); draw(); });
+        box.appendChild(h('label', { class: 'field sk-f' }, h('div', { class: 'l' }, f[1], k === 'middle' ? h('span', { text: 'необязательно' }) : null), inp, err[k] ? h('p', { class: 'sk-err', text: err[k] }) : hint));
       });
       box.appendChild(h('h3', { class: 'sk-h', text: 'Фото' }));
       var grid = h('div', { class: 'sk-ph' });
@@ -2741,7 +2757,7 @@
       h('p', { class: 'cap', text: 'Получателей: ' + rc + '. Письмо уйдёт с почты руководителя.' }));
     var send = h('button', { class: 'btn', type: 'button', 'data-testid': 'sk-send', onclick: function () {
       send.disabled = true; send.textContent = 'Отправляем…';
-      var p = api('skudRequest', { people: ps.map(function (d) { return { last: d.last, first: d.first, middle: d.middle || '', cit: d.cit, hid: d.hid, birth: d.birth, start: d.start, photos: d.photos }; }) });
+      var p = api('skudRequest', { people: ps.map(function (d) { var o = { last: d.last, first: d.first, middle: d.middle || '', cit: d.cit, hid: d.hid, birth: d.birth, start: d.start, photos: d.photos }; if (PMODE) { o.passport = d.passport || ''; o.phone = d.phone || ''; } return o; }) });
       p.then(function (r) { if (!r || !r.ok) { send.disabled = false; send.textContent = 'Отправить'; toast((r && r.message) || 'Не удалось отправить. Попробуйте ещё раз', 'warn'); return; } sh.close(); skudDone(ps, r); },
              function () { send.disabled = false; send.textContent = 'Отправить'; toast('Нет связи — заявка не отправлена', 'warn'); }); } }, 'Отправить');
     sh = openSheet({ title: 'Проверьте заявку', body: body, footer: h('div', { class: 'sk-btns' },
@@ -3199,9 +3215,19 @@
       h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'pt-logout', onclick: function () { pConfirm({ title: 'Выйти из кабинета?', ok: 'Выйти', onOk: function () { pLogout(); } }); } }, 'Выйти')));
     if (!P.me) { v.appendChild(h('div', { class: 'card' }, h('p', { class: 'cap', text: 'Загружаем…' }))); return; }
     v.appendChild(skudCard());
+    v.appendChild(pMailCard());   // PARTNER_V2
     v.appendChild(pRcpCard());
     v.appendChild(pBadgesCard());
     v.appendChild(kppCard());
+  }
+  function pMailCard() {
+    var cur = (P.me && P.me.partner && P.me.partner.email) || '';
+    var inp = h('input', { class: 'inp', type: 'email', placeholder: 'email@example.ru', value: cur, autocomplete: 'email', 'data-testid': 'pt-mail' });
+    return h('section', { class: 'card fm-sec pt-mail', 'data-testid': 'pt-mail-card' }, h('h2', { text: 'Моя почта для ответов' }),
+      h('p', { class: 'cap', text: 'Ваши заявки СКУД уходят от вашего имени: ответы приходят на эту почту, копия каждой заявки — тоже. Это же поле видит администратор.' }),
+      h('form', { class: 'pt-add', onsubmit: function (e) { e.preventDefault(); var em = inp.value.trim();
+        api('partnerEmailSet', { email: em }).then(function (r) { if (!r || !r.ok) return toast((r && r.message) || 'Не получилось', 'warn'); P.me.partner.email = r.email; toast(r.email ? 'Почта сохранена' : 'Почта очищена'); pRender(); }, function () { toast('Нет связи с сервером', 'warn'); }); } },
+        inp, h('button', { class: 'btn secondary', type: 'submit', 'data-testid': 'pt-mail-save' }, 'Сохранить')));
   }
   function pRcpCard() {
     var card = h('section', { class: 'card fm-sec pt-rcp', 'data-testid': 'pt-rcp' }, h('h2', { text: 'Получатели писем' }),

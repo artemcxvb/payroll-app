@@ -801,12 +801,13 @@
     if (!LIVE) { c.appendChild(h('p', { class: 'cap', text: 'Доступно только в рабочем режиме.' })); return c; }
     var R = lazy('ptn', 'adminPartners'); if (!R) { c.appendChild(h('p', { class: 'cap', text: R === false ? 'Не удалось загрузить' : 'Загрузка…' })); return c; }
     R.items.forEach(function (p) {
-      c.appendChild(h('div', { class: 'row between', 'data-testid': 'ptn-item' }, h('div', null, h('b', { text: p.name }), h('div', { class: 'cap', text: '+' + p.phone + ' · Telegram: ' + (p.bound ? 'привязан' : 'не привязан') })),
+      c.appendChild(h('div', { class: 'row between', 'data-testid': 'ptn-item' }, h('div', null, h('b', { text: p.name }), h('div', { class: 'cap', text: '+' + p.phone + ' · Telegram: ' + (p.bound ? 'привязан' : 'не привязан') + ' · почта: ' + (p.email || '—') }),
+          (function () { var ie = h('input', { class: 'inp', type: 'email', placeholder: 'email@example.ru', value: p.email || '', 'data-testid': 'ptn-email' }); return h('div', { class: 'btnrow', style: 'margin-top:8px' }, ie, h('button', { class: 'btn secondary sm', type: 'button', 'data-testid': 'ptn-email-save', onclick: function () { call('adminPartnerEmail', { phone: p.phone, email: ie.value.trim() }).then(function (r) { if (!r.ok) return toast(r.message || errText(r), 'bad'); S.ptn = r; toast('Почта сохранена'); render(); }); } }, 'Сохранить почту')); })()),
         h('button', { class: 'btn ghost', type: 'button', onclick: function () { confirmAct({ title: 'Убрать партнёра?', who: p.name, text: 'Вход в кабинет партнёра сразу закроется.', yes: 'Убрать', danger: true }).then(function (y) { if (!y) return; call('adminPartnerRemove', { phone: p.phone }).then(function (r) { if (!r.ok) return toast(errText(r), 'bad'); S.ptn = r; toast('Партнёр убран'); render(); }); }); } }, 'Убрать')));
     });
-    var iP = h('input', { class: 'inp', type: 'tel', placeholder: '79001234567' }), iN = h('input', { class: 'inp', type: 'text', placeholder: 'Имя Отчество' });
-    c.appendChild(h('div', { class: 'stack' }, h('label', null, 'Телефон', iP), h('label', null, 'Имя', iN), h('button', { class: 'btn secondary', type: 'button', onclick: function () {
-      call('adminPartnerAdd', { phone: iP.value, name: iN.value }).then(function (r) { if (!r.ok) return toast(r.message || errText(r), 'bad'); S.ptn = r; toast('Партнёр добавлен'); render(); });
+    var iP = h('input', { class: 'inp', type: 'tel', placeholder: '79001234567' }), iN = h('input', { class: 'inp', type: 'text', placeholder: 'Имя Отчество' }); var iEm = h('input', { class: 'inp', type: 'email', placeholder: 'email@example.ru' });
+    c.appendChild(h('div', { class: 'stack' }, h('label', null, 'Телефон', iP), h('label', null, 'Имя', iN), h('label', null, 'Почта (ответы и копия заявок)', iEm), h('button', { class: 'btn secondary', type: 'button', onclick: function () {
+      call('adminPartnerAdd', { phone: iP.value, name: iN.value, email: iEm.value.trim() }).then(function (r) { if (!r.ok) return toast(r.message || errText(r), 'bad'); S.ptn = r; toast('Партнёр добавлен'); render(); });
     } }, 'Добавить партнёра')));
     return c;
   }

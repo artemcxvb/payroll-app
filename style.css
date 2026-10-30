@@ -828,3 +828,4 @@ body.has-login-bot-modal .login-bot-modal { pointer-events: auto; }
 .fm-sec>.btn+.btn,.fm-sec>form+.btn{margin-top:10px}
 .btnrow.wrap{flex-wrap:wrap}
 .linkbtn{background:none;border:0;padding:4px 0;color:var(--primary-strong,#2b4bd1);font-size:14px;text-decoration:underline;cursor:pointer;width:auto;align-self:flex-start}
+.pt-mail .pt-add{margin-top:12px}
