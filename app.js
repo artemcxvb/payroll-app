@@ -2754,7 +2754,22 @@
     return h('div', { class: 'card fm-sec kpp-card', 'data-testid': 'kpp-card' },
       h('h2', { text: 'Список на КПП' }),
       h('p', { class: 'cap', text: 'Обновите Excel для КПП: данные стажёров подтянутся из уже отправленных заявок СКУД и CRM. Бригадиру ничего вручную заполнять не нужно.' }),
-      h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'kpp-open', onclick: function () { kppOpen(); } }, 'Обновить файл для КПП'));
+      h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'kpp-open', onclick: function () { kppOpen(); } }, 'Обновить файл для КПП'),
+      h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'gl-dl', onclick: function (ev) { glDownload(ev.currentTarget); } }, 'Скачать гарантийное письмо'));   // GUARANTEE_V1
+  }
+  function glDownload(btn) {   // GUARANTEE_V1: docx собирается на сервере из шаблона (подпись и печать сохранены)
+    if (btn) { btn.disabled = true; btn.textContent = 'Готовим письмо…'; }
+    function done() { if (btn) { btn.disabled = false; btn.textContent = 'Скачать гарантийное письмо'; } }
+    api('glDownload').then(function (r) {
+      done();
+      if (!r || !r.ok) { toast(r && r.error === 'no_letter' ? 'Письмо ещё не создано админом' : 'Не удалось получить письмо', 'warn'); return; }
+      var bin = atob(r.b64), arr = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      var url = URL.createObjectURL(new Blob([arr], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+      var a = document.createElement('a'); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+      toast('Письмо № ' + r.num + ': ' + r.count + ' чел.');
+    }, function () { done(); toast('Нет связи', 'warn'); });
   }
   function kppEsc(s) { return String(s == null ? '' : s); }
   function kppPhoneDisp(p) {
@@ -2931,6 +2946,7 @@
           ('0' + _d.getUTCDate()).slice(-2) + '.' +
           ('0' + (_d.getUTCMonth() + 1)).slice(-2) + '.' +
           String(_d.getUTCFullYear()).slice(-2) + '.xlsx';
+        try { api('glAdd', { ids: chosen.map(function (it) { return it.id; }) }).then(function () {}, function () {}); } catch (e) {}   // GUARANTEE_V1: люди из списка КПП → текущее гарантийное письмо
         sh.close();
         var dl = h('a', { class: 'btn', href: url, download: outName, 'data-testid': 'kpp-dl' }, 'Скачать Excel');
         var done = openSheet({

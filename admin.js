@@ -788,6 +788,47 @@
     return c;
   }
   function loadStars() { if (!LIVE || !session()) return Promise.resolve(); return call('adminStars').then(function (r) { if (r && r.ok) { S.starsAdm = r; render(); } }); }
+  function loadGl() { if (!LIVE || !session()) return Promise.resolve(); return call('adminGl').then(function (r) { if (r && r.ok) { S.gl = r; render(); } }); }   // GUARANTEE_V1
+  function glSaveB64(r) {
+    var bin = atob(r.b64), arr = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    var url = URL.createObjectURL(new Blob([arr], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+    var a = document.createElement('a'); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+  }
+  function glCard() {
+    var g = S.gl, c = h('section', { class: 'card stack', 'aria-labelledby': 'gl-h', 'data-testid': 'gl-card' }, h('h2', { id: 'gl-h', text: 'Гарантийное письмо' }));
+    if (!LIVE) { c.appendChild(h('p', { class: 'cap', text: 'Доступно только в рабочем режиме.' })); return c; }
+    if (!g) { c.appendChild(h('p', { class: 'cap', text: 'Загрузка…' })); return c; }
+    var L = g.letter;
+    function dmyS(x) { return x ? x.split('-').reverse().join('.') : ''; }
+    c.appendChild(h('p', { class: 'cap', 'data-testid': 'gl-meta', text: L ? '№ ' + L.num + ' от ' + dmyS(L.date) + ' · период ' + dmyS(L.from) + '–' + dmyS(L.to) + ' · людей: ' + g.people.length : 'Письмо ещё не создано.' }));
+    var dlB = h('button', { class: 'btn', type: 'button', 'data-testid': 'gl-admin-dl', onclick: function () { dlB.disabled = true; call('adminGlDownload').then(function (r) { dlB.disabled = false; if (!r.ok) return toast(errText(r), 'bad'); glSaveB64(r); }); } }, 'Скачать письмо');
+    if (!L) dlB.disabled = true;
+    var form = h('div', { class: 'stack', hidden: true, 'data-testid': 'gl-new-form' });
+    var today = new Date(Date.now() + 10800000).toISOString().slice(0, 10), nx = new Date(Date.now() + 10800000); nx.setUTCDate(1); nx.setUTCMonth(nx.getUTCMonth() + 1);
+    var iNum = h('input', { type: 'text', inputmode: 'numeric', value: g.suggest || '', 'data-testid': 'gl-num' }), iDate = h('input', { type: 'date', value: today, 'data-testid': 'gl-date' });
+    var iMon = h('input', { type: 'month', value: nx.toISOString().slice(0, 7), 'data-testid': 'gl-month' });
+    var iHalf = h('select', { 'data-testid': 'gl-half' }, h('option', { value: '1', text: '1–15 число' }), h('option', { value: '2', text: '16 – конец месяца' }));
+    form.appendChild(h('label', null, 'Номер письма', iNum)); form.appendChild(h('label', null, 'Дата письма', iDate));
+    form.appendChild(h('label', null, 'Месяц оказания услуг', iMon)); form.appendChild(h('label', null, 'Период', iHalf));
+    form.appendChild(h('p', { class: 'help', text: 'В новое письмо перейдут все люди из текущего. Лишних можно убрать ниже.' }));
+    form.appendChild(h('button', { class: 'btn', type: 'button', 'data-testid': 'gl-create', onclick: function () {
+      var m = iMon.value; if (!/^\d{4}-\d{2}$/.test(m) || !iNum.value || !iDate.value) return toast('Заполните номер, дату и месяц', 'warn');
+      var last = new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 0)).getUTCDate();
+      var from = m + (iHalf.value === '1' ? '-01' : '-16'), to = m + (iHalf.value === '1' ? '-15' : '-' + last);
+      call('adminGlNew', { num: iNum.value.trim(), date: iDate.value, from: from, to: to }).then(function (r) { if (!r.ok) return toast(r.error === 'exists' ? 'Письмо с таким номером уже есть' : errText(r), 'bad'); S.gl = r; toast('Создано письмо № ' + r.letter.num); render(); });
+    } }, 'Создать письмо'));
+    c.appendChild(h('div', { class: 'btnrow' }, dlB, h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'gl-new', onclick: function () { form.hidden = !form.hidden; } }, 'Новое письмо')));
+    c.appendChild(form);
+    (g.people || []).forEach(function (p) {
+      c.appendChild(h('div', { class: 'dsp-it', 'data-testid': 'gl-item' }, h('div', { class: 'row between' }, h('b', { text: p.n + '. ' + p.fio }),
+        h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'gl-remove', onclick: function () {
+          confirmAct({ title: 'Убрать из письма?', who: p.fio, text: 'Человек не попадёт в текущее и следующие письма.', yes: 'Убрать', danger: true }).then(function (y) {
+            if (!y) return; call('adminGlRemove', { key: p.key }).then(function (r) { if (!r.ok) return toast(errText(r), 'bad'); S.gl = r; toast('Убран: ' + p.fio); render(); }); });
+        } }, 'Убрать')),
+        h('div', { class: 'cap', text: [p.cit, p.pass || 'паспорт —', p.birth ? 'ДР ' + p.birth : ''].filter(Boolean).join(' · ') })));
+    });
+    return c;
+  }
   function promoOctCard() {
     var p = S.promoOct, c = h('section', { class: 'card stack', 'aria-labelledby': 'po-h', 'data-testid': 'promo-oct' }, h('h2', { id: 'po-h', text: 'Акция: кто участвует' }));
     if (!p) { c.appendChild(h('p', { class: 'cap', text: 'Нет данных (обновите сводку).' })); return c; }
@@ -886,6 +927,7 @@
     g.appendChild(tile('acc', s.blocked, 'Заблокировано', s.blocked ? 'доступ закрыт' : 'никто не заблокирован', 'sum-acc'));
     v.appendChild(g);
     v.appendChild(promoOctCard());   // PROMO_OCT_V1
+    v.appendChild(glCard());   // GUARANTEE_V1
     v.appendChild(starsCard());   // STARS_V1
     v.appendChild(dspCard());   // V2_IMPROVEMENTS_V1: споры по штрафам
     v.appendChild(notifyCard(s));
@@ -1061,7 +1103,7 @@
     return Promise.all([call('adminSummary'), call('adminLog'), call('adminPromos'), call('adminDisputes'), call('adminPromoOct'), call('adminAdvances')]).then(function (rs) {
       if (!session()) return;
       if (rs[3] && rs[3].ok) S.dsp = rs[3].items;
-      if (rs[4] && rs[4].ok) S.promoOct = rs[4]; loadStars();
+      if (rs[4] && rs[4].ok) S.promoOct = rs[4]; loadStars(); loadGl();
       if (rs[2].ok) S.promoItems = promoItemsFrom(rs[2].items);
       if (rs[5] && rs[5].ok) { S.data.adv = rs[5].items; delete S.err.adv; }   // ADV_ISSUE_SUMMARY_V1: список для блока «к выдаче»
       if (rs[0].ok) { S.sum = rs[0]; delete S.err.sum; S.log = rs[1].ok ? rs[1].items : S.log; } else if (rs[0].error !== 'auth') S.err.sum = errText(rs[0]);
