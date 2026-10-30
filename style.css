@@ -801,3 +801,23 @@ button.v2-pp { width: 100%; background: none; border-left: 0; border-right: 0; b
 }
 body.has-login-bot-modal #app { pointer-events: none; }
 body.has-login-bot-modal .login-bot-modal { pointer-events: auto; }
+/* PARTNER_V1: кабинет партнёра */
+.pt-step{margin:10px 0;padding:14px 16px}
+.pt-step .pt-sh{display:flex;align-items:center;gap:10px}
+.pt-step .pt-num{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--line,#dde3ee);font-style:normal;font-weight:700;font-size:13px}
+.pt-step.pt-active .pt-num{background:var(--accent,#2b6cff);color:#fff}
+.pt-step.pt-done .pt-num{background:#1f9d55;color:#fff}
+.pt-step.pt-todo{opacity:.55}
+.pt-step.pt-active>.gap16{margin-top:12px}
+.pt-code{font-size:22px;letter-spacing:8px;text-align:center;width:100%}
+.pt-home .top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.pt-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line,#e6e9f0)}
+.pt-row>:first-child{flex:1;min-width:0;overflow-wrap:anywhere}
+.pt-row.off .pt-sw span{opacity:.5;text-decoration:line-through}
+.pt-sw{display:flex;align-items:center;gap:8px}
+.pt-add{display:flex;gap:8px;margin:10px 0}
+.pt-add input{flex:1;min-width:0}
+.pt-log{margin-top:10px}
+.pt-st{font-size:12px;font-weight:600;padding:3px 8px;border-radius:10px;white-space:nowrap}
+.pt-st.st-wait{background:#fff4d6;color:#8a5a00}.pt-st.st-ok{background:#dcf5e5;color:#0f6b35}.pt-st.st-bad{background:#fde2e2;color:#9b1c1c}
+.btn.sm{padding:6px 10px;font-size:13px;min-height:0;width:auto}

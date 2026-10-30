@@ -794,6 +794,53 @@
     var url = URL.createObjectURL(new Blob([arr], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
     var a = document.createElement('a'); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
   }
+  /* ---------- PARTNER_V1: партнёры, получатели писем СКУД, статусы баджей ---------- */
+  function lazy(key, action) { if (S[key] === undefined) { S[key] = null; call(action).then(function (r) { S[key] = r && r.ok ? r : false; render(); }, function () { S[key] = false; render(); }); } return S[key]; }
+  function partnersCard() {
+    var c = h('section', { class: 'card stack', 'data-testid': 'ptn-card' }, h('h2', { text: 'Партнёры' }), h('p', { class: 'cap', text: 'Вход: ' + location.origin + location.pathname.replace(/admin\.html$/, '') + '#/partner — код приходит в Telegram-бота. Доступ: заявки СКУД, получатели писем, баджи (просмотр), список на КПП, гарантийное письмо.' }));
+    if (!LIVE) { c.appendChild(h('p', { class: 'cap', text: 'Доступно только в рабочем режиме.' })); return c; }
+    var R = lazy('ptn', 'adminPartners'); if (!R) { c.appendChild(h('p', { class: 'cap', text: R === false ? 'Не удалось загрузить' : 'Загрузка…' })); return c; }
+    R.items.forEach(function (p) {
+      c.appendChild(h('div', { class: 'row between', 'data-testid': 'ptn-item' }, h('div', null, h('b', { text: p.name }), h('div', { class: 'cap', text: '+' + p.phone + ' · Telegram: ' + (p.bound ? 'привязан' : 'не привязан') })),
+        h('button', { class: 'btn ghost', type: 'button', onclick: function () { confirmAct({ title: 'Убрать партнёра?', who: p.name, text: 'Вход в кабинет партнёра сразу закроется.', yes: 'Убрать', danger: true }).then(function (y) { if (!y) return; call('adminPartnerRemove', { phone: p.phone }).then(function (r) { if (!r.ok) return toast(errText(r), 'bad'); S.ptn = r; toast('Партнёр убран'); render(); }); }); } }, 'Убрать')));
+    });
+    var iP = h('input', { type: 'tel', placeholder: '79001234567' }), iN = h('input', { type: 'text', placeholder: 'Имя Отчество' });
+    c.appendChild(h('div', { class: 'stack' }, h('label', null, 'Телефон', iP), h('label', null, 'Имя', iN), h('button', { class: 'btn secondary', type: 'button', onclick: function () {
+      call('adminPartnerAdd', { phone: iP.value, name: iN.value }).then(function (r) { if (!r.ok) return toast(r.message || errText(r), 'bad'); S.ptn = r; toast('Партнёр добавлен'); render(); });
+    } }, 'Добавить партнёра')));
+    return c;
+  }
+  function skudRcpCard() {
+    var c = h('section', { class: 'card stack', 'data-testid': 'rcp-card' }, h('h2', { text: 'Получатели писем СКУД' }), h('p', { class: 'cap', text: 'Письмо «Прошивка СКУД» уходит только включённым. Тест — демо-письмо без персональных данных, не больше 10 в день (общий лимит с партнёром).' }));
+    if (!LIVE) { c.appendChild(h('p', { class: 'cap', text: 'Доступно только в рабочем режиме.' })); return c; }
+    var R = lazy('rcp', 'adminSkudRcp'); if (!R) { c.appendChild(h('p', { class: 'cap', text: R === false ? 'Не удалось загрузить' : 'Загрузка…' })); return c; }
+    function act(a, b, msg) { call(a, b).then(function (r) { if (!r.ok) return toast(r.message || errText(r), 'bad'); S.rcp = r; if (msg) toast(msg); render(); }); }
+    var on = R.items.filter(function (x) { return x.on; }).length;
+    c.appendChild(h('p', { class: 'cap', text: 'Включено ' + on + ' из ' + R.items.length + ' · тестов осталось сегодня: ' + R.testsLeft }));
+    R.items.forEach(function (x) {
+      c.appendChild(h('div', { class: 'row between', 'data-testid': 'rcp-item' },
+        h('label', null, h('input', { type: 'checkbox', checked: x.on, onchange: function (ev) { act('adminSkudRcpToggle', { email: x.email, on: ev.target.checked }); } }), ' ' + x.email),
+        h('div', { class: 'btnrow' },
+          h('button', { class: 'btn ghost', type: 'button', disabled: !R.testsLeft, onclick: function () { confirmAct({ title: 'Тестовое письмо', text: 'Демо-письмо «[ТЕСТ] Прошивка СКУД» на ' + x.email, yes: 'Отправить' }).then(function (y) { if (y) act('adminSkudRcpTest', { email: x.email }, 'Тест отправлен'); }); } }, 'Тест'),
+          h('button', { class: 'btn ghost', type: 'button', onclick: function () { confirmAct({ title: 'Удалить адрес?', who: x.email, yes: 'Удалить', danger: true }).then(function (y) { if (y) act('adminSkudRcpRemove', { email: x.email, confirm: true }, 'Удалён'); }); } }, '✕'))));
+    });
+    var iE = h('input', { type: 'email', placeholder: 'name@example.ru' });
+    c.appendChild(h('div', { class: 'btnrow' }, iE, h('button', { class: 'btn secondary', type: 'button', onclick: function () { act('adminSkudRcpAdd', { email: iE.value }, 'Добавлен'); } }, 'Добавить'),
+      h('button', { class: 'btn ghost', type: 'button', disabled: !R.testsLeft || !on, onclick: function () { confirmAct({ title: 'Тест всем включённым', text: 'Демо-письмо уйдёт на ' + on + ' адрес(ов).', yes: 'Отправить' }).then(function (y) { if (y) act('adminSkudRcpTestAll', { confirm: true }, 'Тест отправлен'); }); } }, 'Тест всем включённым')));
+    if (R.log && R.log.length) { var d = h('details', null, h('summary', { text: 'Журнал' })); R.log.forEach(function (l) { d.appendChild(h('div', { class: 'cap', text: l.at + ' · ' + l.who + ' · ' + l.action + (l.email ? ' · ' + l.email : '') })); }); c.appendChild(d); }
+    return c;
+  }
+  function badgesCard() {
+    var c = h('section', { class: 'card stack', 'data-testid': 'bdg-card' }, h('h2', { text: 'Баджи: статус заявок СКУД' }), h('p', { class: 'cap', text: 'Партнёр видит эти статусы в своём кабинете (только просмотр).' }));
+    if (!LIVE) { c.appendChild(h('p', { class: 'cap', text: 'Доступно только в рабочем режиме.' })); return c; }
+    var R = lazy('bdg', 'adminSkudBadges'); if (!R) { c.appendChild(h('p', { class: 'cap', text: R === false ? 'Не удалось загрузить' : 'Загрузка…' })); return c; }
+    R.items.slice(0, 40).forEach(function (it) {
+      var sel = h('select', { onchange: function () { call('adminSkudBadgeSet', { row: it.row, fio: it.fio, status: sel.value }).then(function (r) { if (!r.ok) { toast(r.message || errText(r), 'bad'); S.bdg = undefined; render(); return; } it.status = sel.value; toast('Статус: ' + sel.value); }); } },
+        R.statuses.map(function (s) { var o = h('option', { value: s, text: s }); if (s === it.status) o.selected = true; return o; }));
+      c.appendChild(h('div', { class: 'row between' }, h('div', null, h('b', { text: it.fio }), h('div', { class: 'cap', text: 'HID ' + it.hid + ' · выход ' + (it.start || '—') + ' · ' + it.who })), sel));
+    });
+    return c;
+  }
   function glCard() {
     var g = S.gl, c = h('section', { class: 'card stack', 'aria-labelledby': 'gl-h', 'data-testid': 'gl-card' }, h('h2', { id: 'gl-h', text: 'Гарантийное письмо' }));
     if (!LIVE) { c.appendChild(h('p', { class: 'cap', text: 'Доступно только в рабочем режиме.' })); return c; }
@@ -928,6 +975,7 @@
     v.appendChild(g);
     v.appendChild(promoOctCard());   // PROMO_OCT_V1
     v.appendChild(glCard());   // GUARANTEE_V1
+    v.appendChild(partnersCard()); v.appendChild(skudRcpCard()); v.appendChild(badgesCard());   // PARTNER_V1
     v.appendChild(starsCard());   // STARS_V1
     v.appendChild(dspCard());   // V2_IMPROVEMENTS_V1: споры по штрафам
     v.appendChild(notifyCard(s));

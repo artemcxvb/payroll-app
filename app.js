@@ -152,7 +152,8 @@
   }
 
   /* ---------- «сервер» (эмуляция Apps Script в localStorage) ---------- */
-  var SK = 'pr.server', CK = 'pr.cache', SESSK = 'pr.session';
+  var PMODE = /^#\/partner/.test(location.hash);   // PARTNER_V1: кабинет партнёра — отдельная сессия
+  var SK = 'pr.server', CK = 'pr.cache', SESSK = PMODE ? 'pr.psession' : 'pr.session';
   /* ---------- согласие на обработку персональных данных ----------
      ЧЕРНОВИК ДЛЯ ПРОВЕРКИ ЮРИСТОМ: текст ниже не утверждён. Версия должна совпадать с CONSENT_VERSION в backend/Code.gs.
      Экран включает сервер (Script Property CONSENT_REQUIRED=1); в демо он включён всегда (config.js: consentDemo: false отключает). */
@@ -398,6 +399,7 @@
   /* GEO_FRESH_V1: при каждом открытии/входе и возврате в приложение - свежая геопозиция на сервер (перезаписывает прежнюю). Отказ/ошибка - молча, работа не блокируется */
   var geoLast = 0;
   function geoPing(reason) {
+    if (PMODE) return;
     if (!LIVE || !session() || isForeman() || geoPing.busy || Date.now() - geoLast < 60000) return Promise.resolve(null);
     geoPing.busy = true;
     return geoGet().then(function (g) {
@@ -443,8 +445,8 @@
     if (h < hr.from || h >= hr.to) return 'closed';
     var iat = tokenIat(se); return iat && iat < mskLastClose(hr) ? 'stale' : null;
   }
-  function autoCheck() { var se = session(); if (!LIVE || !se) return; var k = clockState(se); if (k) logout(k === 'closed' ? closedNotice() : staleNotice()); }
-  function armAuto() {   // точный таймер на ближайшее закрытие (плюс страховочный опрос ниже)
+  function autoCheck() { var se = session(); if (PMODE || !LIVE || !se) return; var k = clockState(se); if (k) logout(k === 'closed' ? closedNotice() : staleNotice()); }
+  function armAuto() { if (PMODE) return;    // точный таймер на ближайшее закрытие (плюс страховочный опрос ниже)
     clearTimeout(autoT); if (!LIVE || !session()) return;
     var hr = loginHrs(); if (hr.off) return;
     var m = Date.now() + 10800000, d = new Date(m), c = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hr.to, 0, 0); if (c <= m) c += 86400000;
@@ -455,7 +457,10 @@
     document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { autoCheck(); armAuto(); geoPing('resume'); try { navigator.serviceWorker && navigator.serviceWorker.getRegistration().then(function (r) { if (r) r.update(); }).catch(function () {}); } catch (e) {} } /* SW_RESUME_UPDATE */ });
     window.addEventListener('pageshow', function () { autoCheck(); armAuto(); });
   }
+  var PMAP = { skudRequest: 'partnerSkud', skudKppList: 'partnerKpp', glAdd: 'partnerGlAdd', glDownload: 'partnerGlDownload', skudRcp: 'partnerRcp', skudRcpAdd: 'partnerRcpAdd', skudRcpToggle: 'partnerRcpToggle', skudRcpRemove: 'partnerRcpRemove', skudRcpTest: 'partnerRcpTest', skudRcpTestAll: 'partnerRcpTestAll', skudBadges: 'partnerBadges' };
   function api(action, body) {
+    if (PMODE) { var pb = { action: PMAP[action] || action }; for (var pk in (body || {})) pb[pk] = body[pk]; var pse = session(); if (pse && pse.token) pb.token = pse.token;
+      return post(APPC.backendUrl, pb).then(function (r) { if (r && (r.error === 'auth' || r.error === 'blocked') && session()) pLogout(r.error === 'blocked' ? 'Доступ закрыт администратором' : 'Сессия закончилась — войдите снова'); return r; }); }
     var se = session(), b = { action: action }; for (var k in (body || {})) b[k] = body[k]; if (se && se.token) b.token = se.token;
     return post(APPC.backendUrl, b).then(function (r) {
       if (isLoginClosed(r) && session()) { rememberHours({ from: r.from, to: r.to, off: false }); logout(closedNotice()); return r; }   // сервер закрыт на ночь: сессия стирается, данные не показываем
@@ -3071,9 +3076,9 @@
     root.appendChild(VIEWS[r]()); renderTabs(); devRender();
     window.scrollTo(0, S.lastRoute === r ? y : 0); S.lastRoute = r;
   }
-  window.addEventListener('hashchange', function () { if (session()) render(); });
-  window.addEventListener('online', function () { refresh(); toast('Связь восстановлена'); });
-  window.addEventListener('offline', function () { render(); toast('Нет сети — работаем с сохранёнными данными', 'warn'); });
+  window.addEventListener('hashchange', function () { if (/^#\/partner/.test(location.hash) !== PMODE) { location.reload(); return; } if (PMODE) return; if (session()) render(); });
+  window.addEventListener('online', function () { if (PMODE) return; refresh(); toast('Связь восстановлена'); });
+  window.addEventListener('offline', function () { if (PMODE) return; render(); toast('Нет сети — работаем с сохранёнными данными', 'warn'); });
 
   function boot() {
     var se0 = session();
@@ -3126,6 +3131,120 @@
   }
   window.__dev = { periodOf: M.periodOf, buildPeriods: M.buildPeriods, anonChallenge: function () { return server.anonChallenge(); }, anonSubmit: function (p) { return server.anonSubmit(p); }, anonBuild: anonBuildRequest, applyJob: function (p) { return server.applyJob(session().phone, p); }, promoState: promoState, photosOf: photosOf, validate: incidentErrors, advInfo: function () { return advInfo(S.data, S.calc); }, advCheck: function (x) { return server._advCheck(x); }, advInfoFor: function (d) { var i = advInfo(d, calcAll(d)); i.w = null; return i; }, weekInfo: weekInfo, open: function (v) { devOpen = v !== false; devRender(); } };
 
+  /* ---------- PARTNER_V1: кабинет партнёра (#/partner). Своя сессия pr.psession, без гео и часов входа; только СКУД, получатели писем, баджи, КПП, гарантийное ---------- */
+  function pLogout(msg) { localStorage.removeItem(SESSK); P.me = null; P.step = 'bot'; P.notice = msg || ''; S.data = null; clear(overlayRoot); pRender(); }
+  function pConfirm(o) { pConfirm({ title: o.title, body: o.text ? h('p', { text: o.text }) : null, yes: o.ok, danger: o.danger }).then(function (v) { if (v) o.onOk(); }); }
+  var P = { step: 'bot', phone: '', notice: '', me: null, rcp: null, badges: null };
+  try { if (localStorage.getItem('pr.ptg') === '1') P.step = 'phone'; } catch (e) { /* ignore */ }
+  function pBrand(v, sub) { v.appendChild(h('div', { class: 'brand' }, h('div', { class: 'logo' }, ico('star', 'lg')), h('div', null, h('b', { text: 'Персональное Решение' }), h('span', { text: sub })))); }
+  function pStep(n, title, state, body) {
+    return h('section', { class: 'card pt-step pt-' + state, 'data-testid': 'pt-step-' + n }, h('div', { class: 'pt-sh' }, h('i', { class: 'pt-num', text: state === 'done' ? '✓' : String(n) }), h('b', { text: 'Шаг ' + n + '. ' + title })), state === 'active' ? body : null);
+  }
+  function pRenderLogin() {
+    tabbar.hidden = true; clear(root); document.title = 'Кабинет партнёра · Персональное Решение';
+    var v = h('main', { class: 'login pt-login', id: 'main', 'data-testid': 'pt-login' }); root.appendChild(v);
+    pBrand(v, 'Кабинет партнёра');
+    v.appendChild(h('h1', { text: 'Вход для партнёра' }));
+    v.appendChild(h('p', { class: 'lead', text: 'Три шага: подпишитесь на бота, введите номер, введите код из бота.' }));
+    var err = h('div', { class: 'err', role: 'alert', hidden: !P.notice, 'data-testid': 'pt-err', text: P.notice || '' });
+    var st = P.step, order = { bot: 1, phone: 2, code: 3 }, cur = order[st];
+    function state(n) { return n < cur ? 'done' : n === cur ? 'active' : 'todo'; }
+    var b1 = h('div', { class: 'gap16' },
+      h('p', { class: 'cap', text: 'Код для входа приходит только в Telegram от бота ' + BOT_NAME + '. Откройте бота, нажмите «Старт» и обязательно «Поделиться номером».' }),
+      h('a', { class: 'btn', href: BOT_URL, target: '_blank', rel: 'noopener noreferrer', 'data-testid': 'pt-bot-open' }, ico('send', 'sm'), 'Открыть ' + BOT_NAME),
+      h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'pt-bot-done', onclick: function () { try { localStorage.setItem('pr.ptg', '1'); } catch (e) { /* ignore */ } P.step = 'phone'; P.notice = ''; pRenderLogin(); } }, 'Я подписался, дальше'));
+    var inp = h('input', { type: 'tel', inputmode: 'tel', autocomplete: 'tel-national', 'data-testid': 'pt-phone', placeholder: '900 000-00-00' });
+    inp.value = P.phone ? P.phone.replace(/^7/, '') : '';
+    var reqBtn = h('button', { class: 'btn', type: 'submit', 'data-testid': 'pt-req' }, 'Получить код');
+    var b2 = h('form', { class: 'gap16', novalidate: true, onsubmit: function (e) {
+      e.preventDefault(); var d = inp.value.replace(/\D/g, '').replace(/^[78](?=\d{10})/, '');
+      if (d.length !== 10) { err.textContent = 'Введите 10 цифр номера'; err.hidden = false; return; }
+      reqBtn.disabled = true; reqBtn.textContent = 'Отправляем…';
+      post(APPC.backendUrl, { action: 'partnerCodeRequest', phone: '7' + d }).then(function (r) {
+        reqBtn.disabled = false; reqBtn.textContent = 'Получить код';
+        if (r && r.error === 'req_limit') { P.notice = reqLimitMsg(r.until); return pRenderLogin(); }
+        if (r && r.error === 'locked') { P.notice = 'Слишком много неверных кодов. Попробуйте после ' + mskWhen(r.until) + ' (МСК).'; return pRenderLogin(); }
+        if (!r || !r.ok) { err.textContent = r && r.error === 'bad_phone' ? 'Проверьте номер' : 'Нет связи с сервером. Повторите.'; err.hidden = false; return; }
+        P.phone = '7' + d; P.step = 'code'; P.notice = ''; pRenderLogin();
+      }, function () { reqBtn.disabled = false; reqBtn.textContent = 'Получить код'; err.textContent = 'Нет связи с сервером. Повторите.'; err.hidden = false; });
+    } }, h('div', { class: 'field' }, h('label', { class: 'l', text: 'Номер телефона' }), h('div', { class: 'phone' }, h('span', { class: 'pre', 'aria-hidden': 'true', text: '+7' }), inp)), reqBtn,
+      h('button', { class: 'link', type: 'button', onclick: function () { P.step = 'bot'; pRenderLogin(); } }, '← Назад к шагу 1'));
+    var cin = h('input', { type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: '4', 'data-testid': 'pt-code', placeholder: '••••', class: 'pt-code' });
+    var vBtn = h('button', { class: 'btn', type: 'submit', 'data-testid': 'pt-verify' }, 'Войти');
+    var b3 = h('form', { class: 'gap16', novalidate: true, onsubmit: function (e) {
+      e.preventDefault(); var c = cin.value.replace(/\D/g, ''); if (c.length !== 4) { err.textContent = 'Код — 4 цифры'; err.hidden = false; return; }
+      vBtn.disabled = true; vBtn.textContent = 'Проверяем…';
+      post(APPC.backendUrl, { action: 'partnerCodeVerify', phone: P.phone, code: c }).then(function (r) {
+        vBtn.disabled = false; vBtn.textContent = 'Войти';
+        if (r && r.ok && r.token) { store(SESSK, { phone: P.phone, token: r.token, exp: r.expiresAt, name: r.name }); P.notice = ''; pBoot(); return; }
+        if (r && r.error === 'locked') { P.step = 'phone'; P.notice = 'Слишком много неверных кодов. Попробуйте после ' + mskWhen(r.until) + ' (МСК).'; return pRenderLogin(); }
+        err.textContent = 'Неверный код' + (r && typeof r.left === 'number' ? ' · осталось попыток: ' + r.left : ''); err.hidden = false;
+      }, function () { vBtn.disabled = false; vBtn.textContent = 'Войти'; err.textContent = 'Нет связи с сервером. Повторите.'; err.hidden = false; });
+    } }, h('p', { class: 'cap', text: 'Код отправлен в Telegram от ' + BOT_NAME + ' на номер ' + fmtPhone(P.phone || '') + '. Если бот не прислал код — его передаст администратор.' }),
+      h('div', { class: 'field' }, h('label', { class: 'l', text: 'Код из бота' }), cin), vBtn,
+      h('button', { class: 'link', type: 'button', onclick: function () { P.step = 'phone'; pRenderLogin(); } }, 'Изменить номер / запросить код снова'));
+    v.appendChild(pStep(1, 'Подпишитесь на бота в Telegram', state(1), b1));
+    v.appendChild(pStep(2, 'Номер телефона', state(2), b2));
+    v.appendChild(pStep(3, 'Код из бота', state(3), b3));
+    v.appendChild(err);
+    v.appendChild(h('p', { class: 'foot', text: 'Кабинет партнёра: заявки СКУД, баджи, список на КПП, гарантийное письмо' }));
+    setTimeout(function () { try { (st === 'code' ? cin : st === 'phone' ? inp : null) && (st === 'code' ? cin : inp).focus(); } catch (e) { /* ignore */ } }, 50);
+  }
+  function pRender() {
+    if (!session()) return pRenderLogin();
+    tabbar.hidden = true; clear(root); document.title = 'Кабинет партнёра · Персональное Решение';
+    var v = h('main', { class: 'view pt-home', id: 'main', 'data-testid': 'pt-home' }); root.appendChild(v);
+    var nm = (P.me && P.me.partner && P.me.partner.name) || (session() || {}).name || 'Партнёр';
+    v.appendChild(h('div', { class: 'top' }, h('div', null, h('h1', { text: nm }), h('p', { class: 'sub', text: 'Кабинет партнёра · Персональное Решение' })),
+      h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'pt-logout', onclick: function () { pConfirm({ title: 'Выйти из кабинета?', ok: 'Выйти', onOk: function () { pLogout(); } }); } }, 'Выйти')));
+    if (!P.me) { v.appendChild(h('div', { class: 'card' }, h('p', { class: 'cap', text: 'Загружаем…' }))); return; }
+    v.appendChild(skudCard());
+    v.appendChild(pRcpCard());
+    v.appendChild(pBadgesCard());
+    v.appendChild(kppCard());
+  }
+  function pRcpCard() {
+    var card = h('section', { class: 'card fm-sec pt-rcp', 'data-testid': 'pt-rcp' }, h('h2', { text: 'Получатели писем' }),
+      h('p', { class: 'cap', text: 'Кому уходит письмо «Прошивка СКУД». Выключенные адреса письма не получают. «Тест» — демо-письмо без персональных данных (не больше 10 в день).' }));
+    var R = P.rcp;
+    if (!R) { card.appendChild(h('p', { class: 'cap', text: 'Загружаем…' })); api('skudRcp').then(function (r) { if (r && r.ok) { P.rcp = r; pRender(); } }); return card; }
+    function act(action, body, okMsg) { return api(action, body).then(function (r) { if (!r || !r.ok) { toast((r && r.message) || 'Не получилось', 'warn'); return; } P.rcp = r; if (okMsg) toast(okMsg); pRender(); }, function () { toast('Нет связи', 'warn'); }); }
+    var on = R.items.filter(function (x) { return x.on; }).length;
+    card.appendChild(h('p', { class: 'cap', 'data-testid': 'pt-rcp-sum', text: 'Включено ' + on + ' из ' + R.items.length + ' · тестов осталось сегодня: ' + R.testsLeft + ' из ' + R.testPerDay }));
+    R.items.forEach(function (x) {
+      card.appendChild(h('div', { class: 'pt-row' + (x.on ? '' : ' off'), 'data-testid': 'pt-rcp-row' },
+        h('label', { class: 'pt-sw' }, h('input', { type: 'checkbox', checked: x.on, onchange: function (ev) { act('skudRcpToggle', { email: x.email, on: ev.target.checked }); } }), h('span', { text: x.email })),
+        h('button', { class: 'btn secondary sm', type: 'button', disabled: !R.testsLeft, onclick: function () { pConfirm({ title: 'Тестовое письмо', text: 'Отправить демо-письмо «[ТЕСТ] Прошивка СКУД» на ' + x.email + '?', ok: 'Отправить', onOk: function () { act('skudRcpTest', { email: x.email }, 'Тест отправлен на ' + x.email); } }); } }, 'Тест'),
+        h('button', { class: 'btn ghost sm', type: 'button', 'aria-label': 'Удалить ' + x.email, onclick: function () { pConfirm({ title: 'Удалить адрес?', text: x.email + ' больше не будет получать письма.', ok: 'Удалить', danger: true, onOk: function () { act('skudRcpRemove', { email: x.email, confirm: true }, 'Адрес удалён'); } }); } }, '✕')));
+    });
+    var ein = h('input', { type: 'email', placeholder: 'name@example.ru', 'data-testid': 'pt-rcp-new' });
+    card.appendChild(h('form', { class: 'pt-add', onsubmit: function (e) { e.preventDefault(); var em = ein.value.trim(); if (!em) return; act('skudRcpAdd', { email: em }, 'Адрес добавлен'); } }, ein, h('button', { class: 'btn secondary', type: 'submit' }, 'Добавить')));
+    card.appendChild(h('button', { class: 'btn secondary', type: 'button', disabled: !R.testsLeft || !on, 'data-testid': 'pt-rcp-testall', onclick: function () { pConfirm({ title: 'Тест всем включённым', text: 'Демо-письмо уйдёт на ' + on + ' адрес(ов). Это 1 тест из дневного лимита.', ok: 'Отправить', onOk: function () { act('skudRcpTestAll', { confirm: true }, 'Тест отправлен всем включённым'); } }); } }, 'Тест всем включённым'));
+    if (R.log && R.log.length) {
+      var lg = h('details', { class: 'pt-log' }, h('summary', { text: 'Журнал изменений' }));
+      R.log.forEach(function (l) { lg.appendChild(h('div', { class: 'cap', text: l.at + ' · ' + l.who + ' · ' + l.action + (l.email ? ' · ' + l.email : '') })); });
+      card.appendChild(lg);
+    }
+    return card;
+  }
+  function pBadgesCard() {
+    var card = h('section', { class: 'card fm-sec pt-badges', 'data-testid': 'pt-badges' }, h('h2', { text: 'Баджи' }), h('p', { class: 'cap', text: 'Статус заявок СКУД. Статус ставит администратор: «В работе», «Готов» или «Отказ».' }));
+    if (!P.badges) { card.appendChild(h('p', { class: 'cap', text: 'Загружаем…' })); api('skudBadges').then(function (r) { if (r && r.ok) { P.badges = r; pRender(); } }); return card; }
+    if (!P.badges.items.length) card.appendChild(h('p', { class: 'cap', text: 'Заявок пока нет' }));
+    P.badges.items.slice(0, 40).forEach(function (it) {
+      card.appendChild(h('div', { class: 'pt-row' }, h('div', null, h('b', { text: it.fio }), h('div', { class: 'cap', text: 'HID ' + it.hid + ' · выход ' + (it.start || '—') + ' · ' + it.date.slice(0, 10) + ' · ' + it.who })),
+        h('span', { class: 'pt-st st-' + (it.status === 'Готов' ? 'ok' : it.status === 'Отказ' ? 'bad' : 'wait'), text: it.status })));
+    });
+    return card;
+  }
+  function pBoot() {
+    tabbar.hidden = true; try { var mb = document.querySelector('[data-testid=login-bot-modal]'); if (mb) mb.remove(); document.body.classList.remove('has-login-bot-modal'); } catch (e) { /* ignore */ }
+    if (!session()) return pRenderLogin();
+    S.data = { foreman: { skud: { recipients: 0 } } };
+    pRender();
+    api('partnerMe').then(function (r) { if (!r || !r.ok) return; P.me = r; S.data = { foreman: { skud: r.skud || { recipients: 0 } } }; pRender(); }, function () { toast('Нет связи с сервером', 'warn'); });
+  }
+
   /* ---------- старт ---------- */
   setTheme(load('pr.theme', 'auto'));
   function updateBar() {   // новая версия оболочки встала в кэш: предложить перезапуск, ничего не перезагружая само (в форме может быть черновик)
@@ -3140,6 +3259,7 @@
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(function () { /* офлайн-оболочка необязательна */ });
     navigator.serviceWorker.addEventListener('controllerchange', function () { if (hadCtl) updateBar(); hadCtl = true; });   // первая установка (контроллера не было) не считается обновлением
   }
+  if (PMODE) { pBoot(); } else {
   if (!location.hash) location.hash = session() ? '#/home' : '#/login';
-  boot(); devRender();
+  boot(); devRender(); }
 })();
