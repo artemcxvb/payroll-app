@@ -804,7 +804,7 @@
       c.appendChild(h('div', { class: 'row between', 'data-testid': 'ptn-item' }, h('div', null, h('b', { text: p.name }), h('div', { class: 'cap', text: '+' + p.phone + ' · Telegram: ' + (p.bound ? 'привязан' : 'не привязан') })),
         h('button', { class: 'btn ghost', type: 'button', onclick: function () { confirmAct({ title: 'Убрать партнёра?', who: p.name, text: 'Вход в кабинет партнёра сразу закроется.', yes: 'Убрать', danger: true }).then(function (y) { if (!y) return; call('adminPartnerRemove', { phone: p.phone }).then(function (r) { if (!r.ok) return toast(errText(r), 'bad'); S.ptn = r; toast('Партнёр убран'); render(); }); }); } }, 'Убрать')));
     });
-    var iP = h('input', { type: 'tel', placeholder: '79001234567' }), iN = h('input', { type: 'text', placeholder: 'Имя Отчество' });
+    var iP = h('input', { class: 'inp', type: 'tel', placeholder: '79001234567' }), iN = h('input', { class: 'inp', type: 'text', placeholder: 'Имя Отчество' });
     c.appendChild(h('div', { class: 'stack' }, h('label', null, 'Телефон', iP), h('label', null, 'Имя', iN), h('button', { class: 'btn secondary', type: 'button', onclick: function () {
       call('adminPartnerAdd', { phone: iP.value, name: iN.value }).then(function (r) { if (!r.ok) return toast(r.message || errText(r), 'bad'); S.ptn = r; toast('Партнёр добавлен'); render(); });
     } }, 'Добавить партнёра')));
@@ -824,8 +824,9 @@
           h('button', { class: 'btn ghost', type: 'button', disabled: !R.testsLeft, onclick: function () { confirmAct({ title: 'Тестовое письмо', text: 'Демо-письмо «[ТЕСТ] Прошивка СКУД» на ' + x.email, yes: 'Отправить' }).then(function (y) { if (y) act('adminSkudRcpTest', { email: x.email }, 'Тест отправлен'); }); } }, 'Тест'),
           h('button', { class: 'btn ghost', type: 'button', onclick: function () { confirmAct({ title: 'Удалить адрес?', who: x.email, yes: 'Удалить', danger: true }).then(function (y) { if (y) act('adminSkudRcpRemove', { email: x.email, confirm: true }, 'Удалён'); }); } }, '✕'))));
     });
-    var iE = h('input', { type: 'email', placeholder: 'name@example.ru' });
-    c.appendChild(h('div', { class: 'btnrow' }, iE, h('button', { class: 'btn secondary', type: 'button', onclick: function () { act('adminSkudRcpAdd', { email: iE.value }, 'Добавлен'); } }, 'Добавить'),
+    var iE = h('input', { class: 'inp', type: 'email', placeholder: 'email@example.ru', autocomplete: 'off' });
+    c.appendChild(iE);
+    c.appendChild(h('div', { class: 'btnrow wrap' }, h('button', { class: 'btn secondary', type: 'button', onclick: function () { act('adminSkudRcpAdd', { email: iE.value }, 'Добавлен'); } }, 'Добавить'),
       h('button', { class: 'btn ghost', type: 'button', disabled: !R.testsLeft || !on, onclick: function () { confirmAct({ title: 'Тест всем включённым', text: 'Демо-письмо уйдёт на ' + on + ' адрес(ов).', yes: 'Отправить' }).then(function (y) { if (y) act('adminSkudRcpTestAll', { confirm: true }, 'Тест отправлен'); }); } }, 'Тест всем включённым')));
     if (R.log && R.log.length) { var d = h('details', null, h('summary', { text: 'Журнал' })); R.log.forEach(function (l) { d.appendChild(h('div', { class: 'cap', text: l.at + ' · ' + l.who + ' · ' + l.action + (l.email ? ' · ' + l.email : '') })); }); c.appendChild(d); }
     return c;
@@ -834,11 +835,14 @@
     var c = h('section', { class: 'card stack', 'data-testid': 'bdg-card' }, h('h2', { text: 'Баджи: статус заявок СКУД' }), h('p', { class: 'cap', text: 'Партнёр видит эти статусы в своём кабинете (только просмотр).' }));
     if (!LIVE) { c.appendChild(h('p', { class: 'cap', text: 'Доступно только в рабочем режиме.' })); return c; }
     var R = lazy('bdg', 'adminSkudBadges'); if (!R) { c.appendChild(h('p', { class: 'cap', text: R === false ? 'Не удалось загрузить' : 'Загрузка…' })); return c; }
-    R.items.slice(0, 40).forEach(function (it) {
-      var sel = h('select', { onchange: function () { call('adminSkudBadgeSet', { row: it.row, fio: it.fio, status: sel.value }).then(function (r) { if (!r.ok) { toast(r.message || errText(r), 'bad'); S.bdg = undefined; render(); return; } it.status = sel.value; toast('Статус: ' + sel.value); }); } },
+    var done = R.items.filter(function (it) { return it.status && it.status !== 'В работе'; }).length, list = S.bdgAll ? R.items : R.items.filter(function (it) { return !it.status || it.status === 'В работе'; });
+    if (!list.length) c.appendChild(h('p', { class: 'cap', text: 'Заявок в работе нет' }));
+    list.slice(0, 40).forEach(function (it) {
+      var sel = h('select', { style: 'min-width:120px;flex:none', onchange: function () { call('adminSkudBadgeSet', { row: it.row, fio: it.fio, status: sel.value }).then(function (r) { if (!r.ok) { toast(r.message || errText(r), 'bad'); S.bdg = undefined; render(); return; } it.status = sel.value; toast('Статус: ' + sel.value); }); } },
         R.statuses.map(function (s) { var o = h('option', { value: s, text: s }); if (s === it.status) o.selected = true; return o; }));
-      c.appendChild(h('div', { class: 'row between' }, h('div', null, h('b', { text: it.fio }), h('div', { class: 'cap', text: 'HID ' + it.hid + ' · выход ' + (it.start || '—') + ' · ' + it.who })), sel));
+      c.appendChild(h('div', { class: 'row between' }, h('div', null, h('b', { text: it.fio }), h('div', { class: 'cap', text: 'HID ' + it.hid + ' · выход ' + (it.start || '—') + (it.date ? ' · заявка ' + String(it.date || '').replace(/^(\d{4})-(\d\d)-(\d\d).*$/, '$3.$2').slice(0, 5) : '') + ' · ' + it.who })), sel));
     });
+    if (done) c.appendChild(h('button', { class: 'linkbtn', type: 'button', 'data-testid': 'bdg-toggle', onclick: function () { S.bdgAll = !S.bdgAll; render(); } }, S.bdgAll ? 'Скрыть обработанные' : 'Показать обработанные (' + done + ')'));
     return c;
   }
   function glCard() {

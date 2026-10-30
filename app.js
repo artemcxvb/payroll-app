@@ -3217,7 +3217,7 @@
         h('button', { class: 'btn secondary sm', type: 'button', disabled: !R.testsLeft, onclick: function () { pConfirm({ title: 'Тестовое письмо', text: 'Отправить демо-письмо «[ТЕСТ] Прошивка СКУД» на ' + x.email + '?', ok: 'Отправить', onOk: function () { act('skudRcpTest', { email: x.email }, 'Тест отправлен на ' + x.email); } }); } }, 'Тест'),
         h('button', { class: 'btn ghost sm', type: 'button', 'aria-label': 'Удалить ' + x.email, onclick: function () { pConfirm({ title: 'Удалить адрес?', text: x.email + ' больше не будет получать письма.', ok: 'Удалить', danger: true, onOk: function () { act('skudRcpRemove', { email: x.email, confirm: true }, 'Адрес удалён'); } }); } }, '✕')));
     });
-    var ein = h('input', { type: 'email', placeholder: 'name@example.ru', 'data-testid': 'pt-rcp-new' });
+    var ein = h('input', { class: 'inp', type: 'email', placeholder: 'email@example.ru', autocomplete: 'off', 'data-testid': 'pt-rcp-new' });
     card.appendChild(h('form', { class: 'pt-add', onsubmit: function (e) { e.preventDefault(); var em = ein.value.trim(); if (!em) return; act('skudRcpAdd', { email: em }, 'Адрес добавлен'); } }, ein, h('button', { class: 'btn secondary', type: 'submit' }, 'Добавить')));
     card.appendChild(h('button', { class: 'btn secondary', type: 'button', disabled: !R.testsLeft || !on, 'data-testid': 'pt-rcp-testall', onclick: function () { pConfirm({ title: 'Тест всем включённым', text: 'Демо-письмо уйдёт на ' + on + ' адрес(ов). Это 1 тест из дневного лимита.', ok: 'Отправить', onOk: function () { act('skudRcpTestAll', { confirm: true }, 'Тест отправлен всем включённым'); } }); } }, 'Тест всем включённым'));
     if (R.log && R.log.length) {
@@ -3230,9 +3230,10 @@
   function pBadgesCard() {
     var card = h('section', { class: 'card fm-sec pt-badges', 'data-testid': 'pt-badges' }, h('h2', { text: 'Баджи' }), h('p', { class: 'cap', text: 'Статус заявок СКУД. Статус ставит администратор: «В работе», «Готов» или «Отказ».' }));
     if (!P.badges) { card.appendChild(h('p', { class: 'cap', text: 'Загружаем…' })); api('skudBadges').then(function (r) { if (r && r.ok) { P.badges = r; pRender(); } }); return card; }
-    if (!P.badges.items.length) card.appendChild(h('p', { class: 'cap', text: 'Заявок пока нет' }));
-    P.badges.items.slice(0, 40).forEach(function (it) {
-      card.appendChild(h('div', { class: 'pt-row' }, h('div', null, h('b', { text: it.fio }), h('div', { class: 'cap', text: 'HID ' + it.hid + ' · выход ' + (it.start || '—') + ' · ' + it.date.slice(0, 10) + ' · ' + it.who })),
+    var bw = P.badges.items.filter(function (it) { return !it.status || it.status === 'В работе'; });   // обработанные (Готов/Отказ) не копим
+    if (!bw.length) card.appendChild(h('p', { class: 'cap', text: 'Заявок в работе нет' }));
+    bw.slice(0, 40).forEach(function (it) {
+      card.appendChild(h('div', { class: 'pt-row' }, h('div', null, h('b', { text: it.fio }), h('div', { class: 'cap', text: 'HID ' + it.hid + ' · выход ' + (it.start || '—') + ' · заявка ' + String(it.date || '').replace(/^(\d{4})-(\d\d)-(\d\d).*$/, '$3.$2').slice(0, 5) + ' · ' + it.who })),
         h('span', { class: 'pt-st st-' + (it.status === 'Готов' ? 'ok' : it.status === 'Отказ' ? 'bad' : 'wait'), text: it.status })));
     });
     return card;
