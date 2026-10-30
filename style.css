@@ -829,3 +829,7 @@ body.has-login-bot-modal .login-bot-modal { pointer-events: auto; }
 .btnrow.wrap{flex-wrap:wrap}
 .linkbtn{background:none;border:0;padding:4px 0;color:var(--primary-strong,#2b4bd1);font-size:14px;text-decoration:underline;cursor:pointer;width:auto;align-self:flex-start}
 .pt-mail .pt-add{margin-top:12px}
+/* BADGE_DONE_V1 */
+.undo-toast { align-items: center; }
+.undo-btn { background: none; border: 0; color: #8fb8ff; font: inherit; font-weight: 700; padding: 4px 6px; margin-left: 6px; cursor: pointer; }
+.pt-badges .bdg-done { flex: none; }

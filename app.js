@@ -3253,14 +3253,24 @@
     }
     return card;
   }
+  function undoToast(msg, onUndo) {   // BADGE_DONE_V1: тост с «Отменить» на 5 с
+    var used = false, t = h('div', { class: 'toast ok undo-toast', 'data-testid': 'undo-toast' }, h('span', { text: msg }),
+      h('button', { class: 'undo-btn', type: 'button', 'data-testid': 'undo-btn', onclick: function () { if (used) return; used = true; t.remove(); onUndo(); } }, 'Отменить'));
+    toasts.appendChild(t); setTimeout(function () { used = true; t.remove(); }, 5000);
+  }
+  function pBadgeDone(it) {
+    it.status = 'Готов'; pRender();
+    var req = api('partnerBadgeDone', { row: it.row, fio: it.fio }).then(function (r) { if (!r || !r.ok) { it.status = 'В работе'; pRender(); toast((r && r.message) || 'Не получилось', 'warn'); return false; } return true; }, function () { it.status = 'В работе'; pRender(); toast('Нет связи с сервером', 'warn'); return false; });
+    undoToast('«Готов»: ' + it.fio, function () { req.then(function (ok) { if (!ok) return; api('partnerBadgeDone', { row: it.row, fio: it.fio, undo: true }).then(function (r) { if (r && r.ok) { it.status = 'В работе'; pRender(); } else toast((r && r.message) || 'Не получилось отменить', 'warn'); }); }); });
+  }
   function pBadgesCard() {
-    var card = h('section', { class: 'card fm-sec pt-badges', 'data-testid': 'pt-badges' }, h('h2', { text: 'Баджи' }), h('p', { class: 'cap', text: 'Статус заявок СКУД. Статус ставит администратор: «В работе», «Готов» или «Отказ».' }));
+    var card = h('section', { class: 'card fm-sec pt-badges', 'data-testid': 'pt-badges' }, h('h2', { text: 'Баджи' }), h('p', { class: 'cap', text: 'Статус заявок СКУД. Нажмите «Готов», когда бадж выдан — заявка уйдёт из списка.' }));
     if (!P.badges) { card.appendChild(h('p', { class: 'cap', text: 'Загружаем…' })); api('skudBadges').then(function (r) { if (r && r.ok) { P.badges = r; pRender(); } }); return card; }
     var bw = P.badges.items.filter(function (it) { return !it.status || it.status === 'В работе'; });   // обработанные (Готов/Отказ) не копим
     if (!bw.length) card.appendChild(h('p', { class: 'cap', text: 'Заявок в работе нет' }));
     bw.slice(0, 40).forEach(function (it) {
       card.appendChild(h('div', { class: 'pt-row' }, h('div', null, h('b', { text: it.fio }), h('div', { class: 'cap', text: 'HID ' + it.hid + ' · выход ' + (it.start || '—') + ' · заявка ' + String(it.date || '').replace(/^(\d{4})-(\d\d)-(\d\d).*$/, '$3.$2').slice(0, 5) + ' · ' + it.who })),
-        h('span', { class: 'pt-st st-' + (it.status === 'Готов' ? 'ok' : it.status === 'Отказ' ? 'bad' : 'wait'), text: it.status })));
+        h('button', { class: 'btn secondary sm bdg-done', type: 'button', 'data-testid': 'bdg-done', onclick: function () { pBadgeDone(it); } }, 'Готов')));
     });
     return card;
   }

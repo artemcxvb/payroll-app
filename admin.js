@@ -325,6 +325,11 @@
   var L = { step: 'start', readyAt: 0, lockUntil: 0, wait: false, timer: null, phone: '', name: '' };
   var root = $('#view-root'), tabbar = $('#tabbar'), overlayRoot = $('#overlay-root'), toasts = $('#toasts');
 
+  function undoToast(msg, onUndo) {   // BADGE_DONE_V1: тост с «Отменить» на 5 с
+    var used = false, t = h('div', { class: 'toast ok undo-toast', 'data-testid': 'undo-toast' }, h('span', { text: msg }),
+      h('button', { class: 'undo-btn', type: 'button', 'data-testid': 'undo-btn', onclick: function () { if (used) return; used = true; t.remove(); onUndo(); } }, 'Отменить'));
+    toasts.appendChild(t); setTimeout(function () { used = true; t.remove(); }, 5000);
+  }
   function toast(msg, tone) {
     var t = h('div', { class: 'toast ' + (tone || 'ok'), role: tone === 'bad' ? 'alert' : null }, ico(tone === 'bad' ? 'alert' : tone === 'warn' ? 'info' : 'check'), h('span', { text: msg }));
     toasts.appendChild(t); setTimeout(function () { t.remove(); }, 4200);
@@ -833,7 +838,7 @@
     return c;
   }
   function badgesCard() {
-    var c = h('section', { class: 'card stack', 'data-testid': 'bdg-card' }, h('h2', { text: 'Баджи: статус заявок СКУД' }), h('p', { class: 'cap', text: 'Партнёр видит эти статусы в своём кабинете (только просмотр).' }));
+    var c = h('section', { class: 'card stack', 'data-testid': 'bdg-card' }, h('h2', { text: 'Баджи: статус заявок СКУД' }), h('p', { class: 'cap', text: 'Партнёр тоже может отметить «Готов» в своём кабинете.' }));
     if (!LIVE) { c.appendChild(h('p', { class: 'cap', text: 'Доступно только в рабочем режиме.' })); return c; }
     var R = lazy('bdg', 'adminSkudBadges'); if (!R) { c.appendChild(h('p', { class: 'cap', text: R === false ? 'Не удалось загрузить' : 'Загрузка…' })); return c; }
     var done = R.items.filter(function (it) { return it.status && it.status !== 'В работе'; }).length, list = S.bdgAll ? R.items : R.items.filter(function (it) { return !it.status || it.status === 'В работе'; });
@@ -841,8 +846,13 @@
     list.slice(0, 40).forEach(function (it) {
       var sel = h('select', { style: 'min-width:120px;flex:none', onchange: function () { call('adminSkudBadgeSet', { row: it.row, fio: it.fio, status: sel.value }).then(function (r) { if (!r.ok) { toast(r.message || errText(r), 'bad'); S.bdg = undefined; render(); return; } it.status = sel.value; toast('Статус: ' + sel.value); }); } },
         R.statuses.map(function (s) { var o = h('option', { value: s, text: s }); if (s === it.status) o.selected = true; return o; }));
-      c.appendChild(h('div', { class: 'row between' }, h('div', null, h('b', { text: it.fio }), h('div', { class: 'cap', text: 'HID ' + it.hid + ' · выход ' + (it.start || '—') + (it.date ? ' · заявка ' + String(it.date || '').replace(/^(\d{4})-(\d\d)-(\d\d).*$/, '$3.$2').slice(0, 5) : '') + ' · ' + it.who })), sel));
+      c.appendChild(h('div', { class: 'row between' }, h('div', null, h('b', { text: it.fio }), h('div', { class: 'cap', text: 'HID ' + it.hid + ' · выход ' + (it.start || '—') + (it.date ? ' · заявка ' + String(it.date || '').replace(/^(\d{4})-(\d\d)-(\d\d).*$/, '$3.$2').slice(0, 5) : '') + ' · ' + it.who })), h('div', { class: 'btnrow', style: 'flex:none;gap:6px' }, (!it.status || it.status === 'В работе') ? h('button', { class: 'btn secondary sm', type: 'button', 'data-testid': 'bdg-done', onclick: function () { bdgDone(it); } }, 'Готов') : null, sel)));
     });
+    function bdgDone(it) {   // BADGE_DONE_V1
+      it.status = 'Готов'; render();
+      var req = call('adminSkudBadgeDone', { row: it.row, fio: it.fio }).then(function (r) { if (!r.ok) { toast(r.message || errText(r), 'bad'); S.bdg = undefined; render(); return false; } return true; });
+      undoToast('«Готов»: ' + it.fio, function () { req.then(function (ok) { if (!ok) return; call('adminSkudBadgeDone', { row: it.row, fio: it.fio, undo: true }).then(function (r) { if (!r.ok) return toast(r.message || errText(r), 'bad'); it.status = 'В работе'; render(); }); }); });
+    }
     if (done) c.appendChild(h('button', { class: 'linkbtn', type: 'button', 'data-testid': 'bdg-toggle', onclick: function () { S.bdgAll = !S.bdgAll; render(); } }, S.bdgAll ? 'Скрыть обработанные' : 'Показать обработанные (' + done + ')'));
     return c;
   }
