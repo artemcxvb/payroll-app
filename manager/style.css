@@ -102,3 +102,5 @@ header .hr{display:flex;align-items:center;gap:6px;flex-shrink:0}
 header #logout.lo{display:flex;align-items:center;gap:6px;width:auto;height:44px;padding:0 12px;margin:0;font-size:14px}
 header #logout.lo svg{width:18px;height:18px}
 @media(max-width:360px){header #logout.lo span{display:none}header #logout.lo{width:44px;padding:0;justify-content:center}}
+.dtop{margin:12px 0;border:2px solid #3d4fd8;background:#f4f6ff}.dth{display:block;font-size:16px;margin-bottom:8px}
+.dq{margin-top:8px;padding:6px 12px;border:1px solid #c9cff5;background:#eef1ff;color:#3d4fd8;border-radius:10px;font-weight:600;font-size:13px}
