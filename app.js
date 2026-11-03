@@ -2815,6 +2815,55 @@
       document.head.appendChild(s);
     });
   }
+  /* KPP_XLSX_FIX_V1: ExcelJS пишет <sheetPr> в неверном порядке — строгий Excel не открывает файл */
+  function kppLoadJSZip() {
+    if (window.JSZip) return Promise.resolve(window.JSZip);
+    function load(src) {
+      return new Promise(function (ok, bad) {
+        var s = document.createElement('script');
+        s.src = src;
+        s.onload = function () { window.JSZip ? ok(window.JSZip) : bad(new Error('jszip')); };
+        s.onerror = function () { bad(new Error('jszip_load')); };
+        document.head.appendChild(s);
+      });
+    }
+    return load('vendor/jszip.min.js').catch(function () { return load('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'); });
+  }
+  function kppFixSheetPr(xml) {
+    return xml.replace(/<sheetPr(\s[^>]*)?>([\s\S]*?)<\/sheetPr>/, function (all, attrs, inner) {
+      var order = ['tabColor', 'outlinePr', 'pageSetUpPr'], parts = {}, rest = inner;
+      order.forEach(function (t) {
+        var re = new RegExp('<' + t + '\\b[^>]*?(?:/>|>[\\s\\S]*?</' + t + '>)');
+        var m = rest.match(re);
+        if (m) { parts[t] = m[0]; rest = rest.replace(m[0], ''); }
+      });
+      return '<sheetPr' + (attrs || '') + '>' + order.map(function (t) { return parts[t] || ''; }).join('') + rest.trim() + '</sheetPr>';
+    });
+  }
+  function kppFixXlsx(buf) {
+    return kppLoadJSZip().then(function (JSZip) {
+      return JSZip.loadAsync(buf).then(function (src) {
+        var names = Object.keys(src.files).filter(function (n) { return !src.files[n].dir; });
+        var first = ['[Content_Types].xml', '_rels/.rels', 'xl/workbook.xml'];
+        names.sort(function (a, b) {
+          var ia = first.indexOf(a), ib = first.indexOf(b);
+          return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+        });
+        var out = new JSZip();
+        return names.reduce(function (p, n) {
+          return p.then(function () {
+            if (/^xl\/worksheets\/[^\/]+\.xml$/.test(n)) {
+              return src.file(n).async('string').then(function (x) { out.file(n, kppFixSheetPr(x), { createFolders: false }); });
+            }
+            return src.file(n).async('uint8array').then(function (d) { out.file(n, d, { createFolders: false }); });
+          });
+        }, Promise.resolve()).then(function () {
+          return out.generateAsync({ type: 'uint8array', compression: 'DEFLATE', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        });
+      });
+    });
+  }
+  function kppClean(v) { return typeof v === 'string' ? v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '') : v; }
   function kppOpen() {
     var sh, items = [], selected = {}, tsMap = {}, fileBuf = null, fileName = '', body = h('div', { class: 'kpp' }), foot = h('div', { class: 'kpp-foot' });
     function selCount() { return Object.keys(selected).filter(function (k) { return selected[k]; }).length; }
@@ -2941,7 +2990,7 @@
             ];
             vals.forEach(function (v, ci) {
               var cell = row.getCell(ci + 1);
-              cell.value = v;
+              cell.value = kppClean(v);
               if (styleSrc) {
                 var sc = styleSrc.getCell(ci + 1);
                 try {
@@ -2957,13 +3006,13 @@
             row.getCell(7).numFmt = 'dd.mm.yyyy';
             row.commit();
           });
-          return wb.xlsx.writeBuffer();
+          return wb.xlsx.writeBuffer().then(kppFixXlsx);
         });
       }).then(function (buf) {
         var blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         var url = URL.createObjectURL(blob);
         var _d = new Date(Date.now() + 10800000); /* МСК = UTC+3 */
-        var outName = 'КПП Персональное решение ' +
+        var outName = 'KPP_PR_' +
           ('0' + _d.getUTCDate()).slice(-2) + '.' +
           ('0' + (_d.getUTCMonth() + 1)).slice(-2) + '.' +
           String(_d.getUTCFullYear()).slice(-2) + '.xlsx';
