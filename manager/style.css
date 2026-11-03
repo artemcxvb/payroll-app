@@ -98,3 +98,7 @@ td .rb{margin:0}.rt tr[data-rec]{cursor:pointer}.rt tr[data-rec]:active td{backg
 .brand{min-width:0;overflow:hidden}.brand .logo{flex-shrink:0}.brand *{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #logout.lo{padding:0 10px;margin-right:6px;flex-shrink:0}
 @media(max-width:420px){#who span{display:none}}
+header .hr{display:flex;align-items:center;gap:6px;flex-shrink:0}
+header #logout.lo{display:flex;align-items:center;gap:6px;width:auto;height:44px;padding:0 12px;margin:0;font-size:14px}
+header #logout.lo svg{width:18px;height:18px}
+@media(max-width:360px){header #logout.lo span{display:none}header #logout.lo{width:44px;padding:0;justify-content:center}}

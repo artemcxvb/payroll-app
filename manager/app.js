@@ -208,8 +208,11 @@ function addGeneric(kind){sheet(formHtml(kind));$('#cl').onclick=function(){$('#
    else D.leads.unshift({row:-Date.now(),date:t,fio:fio,phone:ph,source:b.source,vacancy:b.vacancy,site:b.site,resp:b.resp,status:b.status,next:b.next,nextDate:b.nextDate,plan:b.plan,days:0,crmStatus:'—',comment:b.comment})},LIVE)}}
 function addCand(){addGeneric('c')}function addLead(){addGeneric('l')}
 document.querySelectorAll('#tabs button').forEach(function(b){b.onclick=function(){tab=b.dataset.t;render();scrollTo(0,0)}});
-$('#logout').onclick=logout;$('#refresh').onclick=function(){load();toast('Обновляю')};
-if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
+$('#logout').onclick=logout;$('#refresh').onclick=hardUpdate;
+var VER=13;function hardUpdate(){toast('Обновляю приложение');var p=[];if(window.caches)p.push(caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x)}))}));if('serviceWorker'in navigator)p.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister()}))}));Promise.all(p).catch(function(){}).then(function(){location.replace(location.pathname+'?u='+Date.now())})}
+function checkVer(){fetch('index.html?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.text()}).then(function(t){var m=t.match(/app\.js\?v=(\d+)/);if(m&&+m[1]>VER&&sessionStorage.mgrUpd!==m[1]){sessionStorage.mgrUpd=m[1];hardUpdate()}}).catch(function(){})}
+if('serviceWorker'in navigator){var hadC=!!navigator.serviceWorker.controller,rl=false;navigator.serviceWorker.addEventListener('controllerchange',function(){if(hadC&&!rl){rl=true;location.reload()}});navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(r){r.update()}).catch(function(){})}
+checkVer();document.addEventListener('visibilitychange',function(){if(!document.hidden)checkVer()});
 if(LIVE&&!localStorage.mgrToken)login();else load();
 
 var ICO={u:'<circle cx="9" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2"/>',ok:'<path d="M20 6 9 17l-5-5"/>',x:'<circle cx="12" cy="12" r="9"/><path d="m15 9-6 6M9 9l6 6"/>',cl:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',tr:'<path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/>',
