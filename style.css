@@ -833,3 +833,4 @@ body.has-login-bot-modal .login-bot-modal { pointer-events: auto; }
 .undo-toast { align-items: center; }
 .undo-btn { background: none; border: 0; color: #8fb8ff; font: inherit; font-weight: 700; padding: 4px 6px; margin-left: 6px; cursor: pointer; }
 .pt-badges .bdg-done { flex: none; }
+.note-it { padding: 8px 0; border-top: 1px solid var(--line); }   /* NOTE_V1 */

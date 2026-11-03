@@ -143,3 +143,4 @@ body.adminpage .app { max-width: 520px; }
 [data-testid=ptn-card] label{display:grid;gap:6px}
 [data-testid=bdg-card] select{min-width:120px;flex:none;width:auto}
 [data-testid=rcp-item]{gap:8px}[data-testid=rcp-item] label{flex:1;min-width:0;overflow-wrap:anywhere}[data-testid=rcp-item] .btnrow{flex:none}
+body.adminpage .tabbar { grid-template-columns: repeat(7, 1fr); }   /* NOTE_V1: 7 вкладок */

@@ -230,7 +230,7 @@
     me: function (phone) {
       var cs = server.consent(phone); if (!cs.ok) return { ok: true, consent: cs, today: M.today, fetchedAt: Date.now() };   // без согласия данные не отдаются
       var s = srv(), u = userByPhone(phone);
-      return { consent: cs, user: u, periods: M.periods, shifts: M.shifts, cases: s.cases, advances: s.advances, incidents: s.incidents, promos: M.promos, jobs: M.jobs, applications: s.applications.filter(function (x) { return x.userId === u.id; }), today: M.today, fetchedAt: Date.now(), disputes: V2D.disputes.slice(), konsolOn: true, statements: M.demoStatement ? (function () { var o = {}; o[M.periods[0].id] = M.demoStatement; return o; })() : undefined, foreman: qs.get('foreman') === '1' && M.foreman ? M.foreman : undefined };
+      return { consent: cs, user: u, periods: M.periods, shifts: M.shifts, cases: s.cases, advances: s.advances, incidents: s.incidents, notes: s.notes || [], promos: M.promos, jobs: M.jobs, applications: s.applications.filter(function (x) { return x.userId === u.id; }), today: M.today, fetchedAt: Date.now(), disputes: V2D.disputes.slice(), konsolOn: true, statements: M.demoStatement ? (function () { var o = {}; o[M.periods[0].id] = M.demoStatement; return o; })() : undefined, foreman: qs.get('foreman') === '1' && M.foreman ? M.foreman : undefined };
     },
     submitExplanation: function (id, text, photos) {
       var s = srv(), c = s.cases.filter(function (x) { return x.id === id; })[0];
@@ -495,6 +495,7 @@
     verify: function (phone, code) { return post(APPC.backendUrl, { action: 'codeVerify', phone: phone, code: code }).then(function (r) { if (r.ok && r.token) { store(SESSK, { phone: phone, token: r.token, at: Date.now() }); if (r.loginHours) rememberHours(r.loginHours); } return r; }); },
     me: function () { return api('me').then(function (r) { if (!r.ok) throw new Error(r.error || 'fail'); if (r.loginHours) rememberHours(r.loginHours); if (r.consent && r.consent.ok === false) return r; r.user.phone = session().phone; if (r.loginHours) rememberHours(r.loginHours); applyLive(r); return r; }); },
     submitExplanation: function (id, text, photos) { return filesB64(photos).then(function (ph) { return api('explainSubmit', { caseId: id, text: text, photos: ph, rid: rid() }); }); },
+    submitNote: function (p) { return filesB64(p.photos).then(function (ph) { return api('noteSubmit', { id: p.id || '', date: p.date, reason: p.reason, text: p.text, photos: ph, rid: rid() }); }); },   // NOTE_V1
     resubmitIncident: function (id, text) { return api('incidentResubmit', { id: id, text: text, rid: rid() }); },
     submitIncident: function (p) { return Promise.all([filesB64(p.scene), filesB64(p.damage), filesB64(p.acts)]).then(function (g) { return api('incidentSubmit', { date: p.date, type: p.type, desc: p.desc, text: p.text, scene: g[0], damage: g[1], acts: g[2], rid: p.rid }); }); },
     consentAccept: function (version) { return api('consentAccept', { agree: true, version: version }); },
@@ -512,6 +513,11 @@
     verify: function (phone, code) { return Promise.resolve(server.verify(phone, code)); },
     me: function () { var se = session(); return Promise.resolve(server.me(se.phone)); },
     submitExplanation: function (id, text, photos) { return Promise.resolve(server.submitExplanation(id, text, photos.map(function (p) { return { thumb: p.thumb, w: p.w, h: p.h, size: p.size }; }))); },
+    submitNote: function (p) {   // NOTE_V1 демо
+      var s = srv(); s.notes = s.notes || []; var t = String(p.text || '').trim(); if (t.length < 30) return Promise.resolve({ ok: false, error: 'text_short' });
+      var ex = p.id ? s.notes.filter(function (x) { return x.id === p.id; })[0] : null, o = { id: p.id || 'N' + Date.now(), date: p.date, reason: p.reason, reasonText: NOTE_REASONS[p.reason], text: t, photos: (p.photos || []).length, status: 'sent', answer: ex ? ex.answer : '', sentAt: new Date().toISOString() };
+      if (ex) Object.assign(ex, o); else s.notes.push(o); save(s); return Promise.resolve({ ok: true, id: o.id });
+    },
     resubmitIncident: function (id, text) { return Promise.resolve(server.resubmitIncident(id, text)); },
     submitIncident: function (p) { return Promise.resolve(server.submitIncident(p)); },
     consentAccept: function (version) { return Promise.resolve(server.consentAccept(session().phone, version)); },
@@ -522,7 +528,7 @@
     anonChallenge: function () { return Promise.resolve(server.anonChallenge()); },
     anonSubmit: function (body) { return Promise.resolve(server.anonSubmit(body)); }
   };
-  if (!LIVE) ['me', 'submitExplanation', 'resubmitIncident', 'submitIncident', 'applyJob', 'createAdvance', 'updateAdvance', 'cancelAdvance'].forEach(function (k) {   // демо: заблокированного не обслуживаем ни в одном действии (как live → 'blocked')
+  if (!LIVE) ['me', 'submitExplanation', 'submitNote', 'resubmitIncident', 'submitIncident', 'applyJob', 'createAdvance', 'updateAdvance', 'cancelAdvance'].forEach(function (k) {   // демо: заблокированного не обслуживаем ни в одном действии (как live → 'blocked')
     var f = backend[k]; backend[k] = function () { var se = session(); if (se && srv().blocked[se.phone]) { onBlocked(); return k === 'me' ? Promise.reject(new Error('blocked')) : Promise.resolve({ ok: false, error: 'blocked' }); } return f.apply(null, arguments); };
   });
 
@@ -951,6 +957,7 @@
       h('p', { class: 'note', text: open ? 'Ожидаемая выплата ' + dlong(c.p.payDate) + ' — сумма может измениться до конца периода' : wait ? 'Период закрыт, выплата ' + dlong(c.p.payDate) + ' — сумма уточняется при расчёте' : 'Выплата ' + dlong(c.p.payDate) }),
       h('div', { class: 'eq' }, h('span', { class: 'num', text: 'Начислено ' + money(c.accrued) }), h('span', { class: 'num', text: 'Удержано ' + minus(c.withheld) }))));
     v.appendChild(reportBtn('report-home'));
+    v.appendChild(noteBtn('note-home')); noteList(v, 'home');   // NOTE_V1
     v.appendChild(advHomeCard());
     v2HomeCards(v, c);   // V2_IMPROVEMENTS_V1
     v.appendChild(moreTiles());
@@ -1560,6 +1567,7 @@
     v.appendChild(pageTop('Вычеты', 'Брак, ошибки, авансы, проживание'));
     v.appendChild(h('div', null, periodBtn()));
     v.appendChild(reportBtn('report-ded'));
+    v.appendChild(noteBtn('note-ded')); noteList(v, 'ded');   // NOTE_V1
     var incs = (S.data.incidents || []).slice().sort(function (a, b) { return a.sentAt < b.sentAt ? 1 : -1; });
     if (incs.length && S.dedFilter === 'all') { var isec = h('section', { 'aria-labelledby': 'inc-h', class: 'stack' }, h('h2', { class: 'h3', id: 'inc-h', text: 'Мои сообщения о происшествиях (' + incs.length + ')' })); var il = h('div', { class: 'stack', 'data-testid': 'incident-list' }); incs.forEach(function (i) { il.appendChild(incCard(i)); }); isec.appendChild(il); v.appendChild(isec); }
     var all = c.cases.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
@@ -1657,6 +1665,124 @@
       onChange: function (f) { cb = f; },
       release: function () { items.forEach(function (f) { if (f.url) URL.revokeObjectURL(f.url); }); }
     };
+  }
+
+  /* ---------- NOTE_V1: «Написать объяснительную» без брака/порчи (отстранение, опоздание…) — только запись, на выплаты не влияет ---------- */
+  var NOTE_REASONS = { suspend: 'Отстранение от работы', late: 'Опоздание', absent: 'Неявка', early: 'Ранний уход', other: 'Другое' };
+  var NOTE_MIN = 30, NOTE_DAYS = 14;
+  var NOTE_ST = { sent: ['На проверке', 'warn'], accepted: ['Принято', 'ok'], returned: ['Возвращено', 'bad'] };
+  function noteBtn(id) {
+    return h('button', { class: 'report', type: 'button', 'data-testid': id, onclick: function () { openNote(null); } },
+      h('span', { class: 'ric' }, ico('file')), h('span', { class: 'rt' }, h('b', { text: 'Написать объяснительную' }), h('small', { text: 'Если отстранили от работы, опоздали и т.п. — без брака и удержаний' })), ico('cr', 'sm'));
+  }
+  function noteList(v, where) {
+    var all = S.data.notes || [], ns = where === 'home' ? all.slice(0, 3) : all.slice(); if (!ns.length) return;
+    var sec = h('section', { class: 'card', 'data-testid': 'note-list-' + where, 'aria-labelledby': 'note-h-' + where }, h('div', { class: 'card-h' }, h('h2', { id: 'note-h-' + where, text: 'Мои объяснительные (' + all.length + ')' })));
+    ns.forEach(function (n) {
+      var st = NOTE_ST[n.status] || NOTE_ST.sent;
+      sec.appendChild(h('div', { class: 'stack note-it', 'data-testid': 'note-item' },
+        h('div', { class: 'row between' }, h('b', { text: dmy(n.date) + ' · ' + (n.reasonText || NOTE_REASONS[n.reason] || '') }), chip(st[0], st[1])),
+        where === 'ded' ? h('p', { class: 'help', text: n.text.length > 160 ? n.text.slice(0, 160) + '…' : n.text }) : null,
+        n.answer ? h('p', { class: 'help', text: 'Комментарий: ' + n.answer }) : null,
+        n.status === 'returned' ? h('button', { class: 'btn', type: 'button', 'data-testid': 'note-resend', onclick: function () { openNote(n); } }, ico('send', 'sm'), 'Исправить и отправить снова') : null));
+    });
+    v.appendChild(sec);
+  }
+  var FM_NOTE_DEMO = [{ id: 'N_demo1', created: '2026-10-18 10:40', date: '2026-10-18', name: 'Демо Пётр Сергеевич', reason: 'Отстранение от работы', text: 'Отстранили в 10:30: не было пропуска на складе, привёз к 13:00, смену уже закрыли.', photos: 0, status: 'sent', statusText: 'Отправлено', answer: '', by: '' }];
+  function fmNotesCard(v, f) {   // NOTE_V1
+    var list = f.notes || (LIVE ? [] : FM_NOTE_DEMO); f.notes = list; if (!list.length) return;
+    var wait = list.filter(function (x) { return x.status === 'sent'; }).length;
+    var sec = h('section', { class: 'card fm-sec', 'data-testid': 'fm-notes' }, h('h2', { text: 'Объяснительные сотрудников' + (wait ? ' · ждут решения: ' + wait : '') }),
+      h('p', { class: 'cap', text: 'Без удержаний и без влияния на KPI — только запись. Решение видят сотрудник и администратор.' }));
+    list.forEach(function (n) {
+      var st = NOTE_ST[n.status] || NOTE_ST.sent, row = h('div', { class: 'stack note-it', 'data-testid': 'fm-note' },
+        h('div', { class: 'row between' }, h('b', { text: n.name }), chip(st[0], st[1])),
+        h('div', { class: 'help', text: dmy(n.date) + ' · ' + n.reason + (n.photos ? ' · фото: ' + n.photos : '') + (n.resent ? ' · повторно' : '') }),
+        h('p', { text: n.text }),
+        n.answer ? h('p', { class: 'help', text: 'Комментарий: ' + n.answer }) : null,
+        n.by ? h('p', { class: 'help', text: 'Решил: ' + n.by }) : null);
+      if (n.status === 'sent') row.appendChild(h('div', { class: 'btnrow' },
+        h('button', { class: 'btn', type: 'button', 'data-testid': 'fm-note-ok', onclick: function () { fmNoteAct(n, 'accepted'); } }, 'Принять'),
+        h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'fm-note-ret', onclick: function () { fmNoteAct(n, 'returned'); } }, 'Вернуть')));
+      sec.appendChild(row);
+    });
+    v.appendChild(sec);
+  }
+  function fmNoteAct(n, to) {
+    var ta = h('textarea', { class: 'inp', rows: '3', maxlength: '300', 'data-testid': 'fm-note-why', placeholder: to === 'returned' ? 'Что исправить (обязательно)' : 'Комментарий (по желанию)' }), err = h('p', { class: 'help', role: 'status' }), ctl, busy = false;
+    var go = h('button', { class: 'btn', type: 'button', 'data-testid': 'fm-note-go', onclick: function () {
+      var why = ta.value.trim(); if (busy) return; if (to === 'returned' && why.length < 3) { err.textContent = 'Напишите, что исправить.'; return; }
+      busy = true; v2Send('fmNoteDecide', { id: n.id, to: to, reason: why, from: n.statusText }).then(function (r) {
+        busy = false; if (!r) return; n.status = r.status; n.statusText = r.statusText; if (why) n.answer = why; n.by = r.by || 'Бригадир'; ctl.close(); toast(to === 'accepted' ? 'Принято' : 'Возвращено сотруднику', 'ok'); render();
+      });
+    } }, to === 'accepted' ? 'Принять' : 'Вернуть');
+    ctl = openSheet({ title: (to === 'accepted' ? 'Принять' : 'Вернуть') + ': ' + n.name, body: h('div', { class: 'gap12' }, h('p', { class: 'help', text: n.text }), ta, err), footer: go });
+  }
+  function openNote(prev) {
+    if (!requireOnline()) return;
+    var today = S.data.today, minD = (function () { var d = new Date(today + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - NOTE_DAYS); return d.toISOString().slice(0, 10); })();
+    var dr = prev ? { date: prev.date, reason: prev.reason, text: prev.text } : load('pr.ndraft', {}), sending = false, ctl, photos = [];
+    var date = h('input', { class: 'inp', type: 'date', id: 'note-date', 'data-testid': 'note-date', value: dr.date && dr.date >= minD && dr.date <= today ? dr.date : today, min: minD, max: today });
+    var sel = h('select', { class: 'inp', id: 'note-reason', 'data-testid': 'note-reason' }, h('option', { value: '', text: 'Выберите причину' }));
+    Object.keys(NOTE_REASONS).forEach(function (k) { var o = h('option', { value: k, text: NOTE_REASONS[k] }); if (dr.reason === k) o.selected = true; sel.appendChild(o); });
+    var ta = h('textarea', { class: 'inp', id: 'note-text', 'data-testid': 'note-text', rows: '6', maxlength: '1000', placeholder: 'Что произошло, когда и почему. Например: «Отстранили в 10:30, потому что…»' }); ta.value = dr.text || '';
+    var count = h('span', { 'data-testid': 'note-count' }), grid = h('div', { class: 'photos', role: 'list', 'aria-label': 'Добавленные фото' });
+    var sendBtn = h('button', { class: 'btn', type: 'button', 'data-testid': 'note-send', disabled: true }), why = h('p', { class: 'note-s', role: 'status', 'data-testid': 'note-why' });
+    function sendLabel() { clear(sendBtn); sendBtn.appendChild(ico('send', 'sm')); sendBtn.appendChild(document.createTextNode(prev ? 'Отправить снова' : 'Отправить')); }
+    sendLabel();
+    var fGal = h('input', { type: 'file', accept: 'image/*', multiple: true, class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true', 'data-testid': 'note-file-gallery' });
+    var fCam = h('input', { type: 'file', accept: 'image/*', capture: 'environment', class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true', 'data-testid': 'note-file-camera' });
+    var btnCam = h('button', { class: 'addbtn', type: 'button', onclick: function () { fCam.click(); } }, ico('camera'), 'Сделать фото');
+    var btnGal = h('button', { class: 'addbtn', type: 'button', onclick: function () { fGal.click(); } }, ico('image'), 'Из галереи');
+    function saveDraft() { if (!prev) store('pr.ndraft', { date: date.value, reason: sel.value, text: ta.value }); }
+    function update() {
+      var t = ta.value.trim().length, okT = t >= NOTE_MIN, okR = !!NOTE_REASONS[sel.value], okD = !!date.value && date.value <= today && date.value >= minD, busy = photos.some(function (p) { return p.busy; });
+      count.textContent = okT ? t + ' симв. ✓' : t + ' из ' + NOTE_MIN + ' симв. минимум';
+      sendBtn.disabled = !(okT && okR && okD) || busy || sending;
+      var miss = []; if (!okD) miss.push('дата — не позже сегодня и не раньше ' + dmy(minD)); if (!okR) miss.push('выберите причину'); if (!okT) miss.push('напишите объяснительную (ещё ' + (NOTE_MIN - t) + ' симв.)');
+      why.textContent = busy ? 'Обрабатываем фото…' : miss.length ? 'Чтобы отправить: ' + miss.join(', ') + '.' : 'Всё готово — можно отправлять.';
+      btnCam.disabled = btnGal.disabled = photos.length >= CFG.maxPhotos;
+    }
+    function drawPhotos() {
+      clear(grid);
+      photos.forEach(function (p, i) {
+        grid.appendChild(p.busy ? h('div', { class: 'ph-item ph-busy', role: 'listitem' }, h('span', { class: 'spinner' }))
+          : h('figure', { class: 'ph-item', role: 'listitem' }, h('img', { src: p.url, alt: 'Фото ' + (i + 1) }),
+            h('button', { class: 'rm', type: 'button', 'aria-label': 'Удалить фото ' + (i + 1), onclick: function () { URL.revokeObjectURL(p.url); photos.splice(i, 1); drawPhotos(); update(); } }, h('span', null, ico('x', 'sm')))));
+      });
+    }
+    function addFiles(files) {
+      [].slice.call(files).forEach(function (f) {
+        if (photos.length >= CFG.maxPhotos) { toast('Не больше ' + CFG.maxPhotos + ' фото', 'warn'); return; }
+        var slot = { busy: true }; photos.push(slot); drawPhotos(); update();
+        processImage(f).then(function (r) { Object.assign(slot, r); slot.busy = false; drawPhotos(); update(); }, function (e) {
+          photos.splice(photos.indexOf(slot), 1); drawPhotos(); update(); toast(e.message === 'notimage' ? 'Это не изображение. Выберите фото.' : 'Не удалось обработать фото', 'bad');
+        });
+      });
+    }
+    fGal.addEventListener('change', function () { addFiles(fGal.files); fGal.value = ''; });
+    fCam.addEventListener('change', function () { addFiles(fCam.files); fCam.value = ''; });
+    [ta, sel, date].forEach(function (x) { x.addEventListener('input', function () { saveDraft(); update(); }); x.addEventListener('change', function () { saveDraft(); update(); }); });
+    sendBtn.addEventListener('click', function () {
+      if (sendBtn.disabled || !requireOnline()) return; sending = true; sendBtn.disabled = true; clear(sendBtn); sendBtn.appendChild(h('span', { class: 'spinner' })); sendBtn.appendChild(document.createTextNode(' Отправляем…'));
+      delay(LAT + 200).then(function () { return backend.submitNote({ id: prev ? prev.id : '', date: date.value, reason: sel.value, text: ta.value, photos: photos.filter(function (p) { return !p.busy; }) }); }).then(function (r) {
+        if (!r.ok) { sending = false; sendLabel(); update(); toast('Не отправлено: ' + ({ text_short: 'объяснительная короче ' + NOTE_MIN + ' символов', future_date: 'дата в будущем', old_date: 'дата старше ' + NOTE_DAYS + ' дней', bad_date: 'неверная дата', type: 'выберите причину', already: 'уже отправлено', rate_limit: 'слишком много отправок за час', bad_file: 'файл не подошёл (нужны фото JPG/PNG)', too_big: 'файл слишком большой', too_many: 'слишком много фото' }[r.error] || netMsg(r.error) || 'ошибка'), 'bad'); return; }
+        if (!prev) store('pr.ndraft', {});
+        photos.forEach(function (p) { if (p.url) URL.revokeObjectURL(p.url); });
+        ctl.close(true); toast('Объяснительная отправлена администратору'); refresh();
+      }, function () { sending = false; sendLabel(); update(); toast('Не отправлено: нет связи с сервером, повторите', 'bad'); });
+    });
+    var body = h('div', null,
+      prev && prev.answer ? retBox(prev.answer, 'note-returned') : null,
+      h('div', { class: 'reqbanner', 'data-testid': 'note-banner' }, ico('info'), h('div', null, h('b', { text: 'Это не брак и не порча' }), h('span', { text: 'Сумма не удерживается. Объяснительную увидит администратор.' }))),
+      h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('label', { for: 'note-date', text: 'Дата' }), h('span', { class: 'req', 'aria-hidden': 'true', text: '*' })), date, h('p', { class: 'help', text: 'Не позже сегодня и не раньше чем за ' + NOTE_DAYS + ' дней.' })),
+      h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('label', { for: 'note-reason', text: 'Причина' }), h('span', { class: 'req', 'aria-hidden': 'true', text: '*' })), sel),
+      h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('label', { for: 'note-text', text: 'Объяснительная' }), h('span', { class: 'req', 'aria-hidden': 'true', text: '*' })), ta,
+        h('div', { class: 'row between' }, h('p', { class: 'help', text: 'Минимум ' + NOTE_MIN + ' символов.' }), h('p', { class: 'help num' }, count))),
+      h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('span', { text: 'Фото / документ' }), h('span', { class: 'tag opt', text: 'По желанию' })),
+        grid, h('div', { class: 'addrow' }, btnCam, btnGal), fCam, fGal, h('p', { class: 'help', text: 'Не больше ' + CFG.maxPhotos + ' фото.' })));
+    ctl = openSheet({ title: prev ? 'Объяснительная — исправить' : 'Объяснительная', body: body, footer: h('div', null, sendBtn, why), focus: function () { sel.focus(); } });
+    drawPhotos(); update();
   }
 
   /* ---------- «Сообщить о порче / браке» ---------- */
@@ -2364,6 +2490,7 @@
     bad_comment: 'Напишите, почему вы не согласны (от 3 символов).', bad_case: 'Этот штраф нельзя оспорить.', already: 'Спор по этому штрафу уже на рассмотрении.', busy: 'Сервер занят, попробуйте ещё раз.', not_configured: 'Связь с Консолью не настроена.', unavailable: 'Консоль сейчас недоступна.' };
   var V2D = { att: [], disputes: [], gone: [] };   // демо: записи в памяти
   function v2Demo(action, b) {
+    if (action === 'fmNoteDecide') return { ok: true, status: b.to, statusText: b.to === 'accepted' ? 'Принято' : 'Возвращено', by: 'Бригадир' };   // NOTE_V1 (демо)
     if (action === 'fmGone') {   // YAVKA_GONE_V1 (макет): «Не работает» / «Вернуть»
       V2D.gone = (V2D.gone || []).filter(function (x) { return x.name !== b.name || x.by === 'блок'; });
       if (!b.back) V2D.gone.push({ name: b.name, from: b.from, by: 'бригадир', at: new Date().toISOString().slice(0, 16).replace('T', ' ') });
@@ -3058,6 +3185,7 @@
       v.appendChild(kppCard());    // KPP_LIST_V1: список на КПП из заявок СКУД
     }
     v2BrigCards(v, f);   // V2_IMPROVEMENTS_V1
+    fmNotesCard(v, f);   // NOTE_V1: объяснительные без удержания — бригадир принимает/возвращает
     if (f.ops && f.ops.ok) foBlocks(v, f.ops);   // FOREMAN_OPS_V1
     function pos(x) { return Math.max(0, Math.min(100, x / top * 100)) + '%'; }
     function at(el, x) { el.style.left = pos(x); return el; }   // CSP: только CSSOM, без атрибута style

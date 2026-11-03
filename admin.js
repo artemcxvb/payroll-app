@@ -98,6 +98,9 @@
     expl: { action: 'adminExplDecide', label: 'Объяснение', st: { sent: ['Ждёт проверки', 'warn'], accepted: ['Принято', 'ok'], returned: ['Возвращено', 'info'] },
       acts: [ { to: 'accepted', label: 'Принять', cls: 'ok', from: ['sent'], text: 'Принято' },
               { to: 'returned', label: 'Вернуть', cls: 'warnb', from: ['sent'], text: 'Возвращено', reason: true, confirm: 'Сотрудник увидит причину и сможет отправить объяснение заново.' } ] },
+    note: { action: 'adminNoteDecide', label: 'Объяснительная', st: { sent: ['Ждёт проверки', 'warn'], accepted: ['Принято', 'ok'], returned: ['Возвращено', 'info'] },   // NOTE_V1
+      acts: [ { to: 'accepted', label: 'Принять', cls: 'ok', from: ['sent'], text: 'Принято' },
+              { to: 'returned', label: 'Вернуть', cls: 'warnb', from: ['sent'], text: 'Возвращено', reason: true, confirm: 'Сотрудник увидит комментарий в приложении и сможет отправить объяснительную заново.' } ] },
     inc: { action: 'adminIncidentDecide', label: 'Происшествие', st: { review: ['Ждёт проверки', 'warn'], accepted: ['Принято', 'ok'], returned: ['На доработке', 'info'], rejected: ['Отклонено', 'bad'] },
       acts: [ { to: 'accepted', label: 'Принять', cls: 'ok', from: ['review'], text: 'Принято' },
               { to: 'returned', label: 'На доработку', cls: 'warnb', from: ['review'], text: 'Возвращено', reason: true, confirm: 'Сотрудник увидит, что нужно исправить, и сможет дополнить объяснение.' },
@@ -108,8 +111,8 @@
               { to: 'closed', label: 'Обработан', cls: 'ghost', from: ['sent', 'viewed', 'invited'], text: 'Закрыто' } ] }
   };
   var CLOSED_CODE = { closed: 'declined' };   // код в ответе сервера для статуса «Закрыто» — declined
-  var TABS = [['sum', 'Сводка', 'home'], ['adv', 'Авансы', 'wallet'], ['expl', 'Объяснения', 'file'], ['inc', 'Происшествия', 'alert'], ['apps', 'Отклики', 'briefcase'], ['acc', 'Доступ', 'lock']];
-  var LIST_ACTION = { adv: 'adminAdvances', expl: 'adminExplanations', inc: 'adminIncidents', apps: 'adminApplications', acc: 'adminAccess' };
+  var TABS = [['sum', 'Сводка', 'home'], ['adv', 'Авансы', 'wallet'], ['expl', 'Объяснения', 'file'], ['note', 'Без удерж.', 'file'], ['inc', 'Происшествия', 'alert'], ['apps', 'Отклики', 'briefcase'], ['acc', 'Доступ', 'lock']];
+  var LIST_ACTION = { adv: 'adminAdvances', expl: 'adminExplanations', note: 'adminNotes', inc: 'adminIncidents', apps: 'adminApplications', acc: 'adminAccess' };
 
   /* ---------- рассылка акций: проверка ввода (одна и та же в форме и в демо; на сервере проверка повторяется) ---------- */
   var PROMO = { head: '🔔 Уведомление от «Персональное Решение»', textMin: 5, textMax: 1000, linkMax: 300, minGapMs: 600000, dupMs: 86400000 };
@@ -137,6 +140,7 @@
         { id: 'Apend1', created: n, week: '2026-10-19', payDate: '2026-10-24', phone: '79001234567', name: 'Новиков Пётр Алексеевич', amount: 2500, comment: 'На проезд', status: 'pending', statusText: 'Новая', answer: '', available: 5000, reserve: 0, bank: 'Сбербанк', card: '4276123456789012', last4: '9012' },
         { id: 'Aissued1', created: '2026-10-18 9:49', week: '2026-10-12', payDate: '2026-10-18', phone: '79161550308', name: 'Перхов Владислав Юрьевич', amount: 3500, comment: '', status: 'issued', statusText: 'Выдан', answer: '', available: 3500, reserve: 0, bank: 'Т-Банк (Тинькофф)', card: '2200702121828839', last4: '8839', paid: 3500 } ],
       expl: [ { id: 'X1', created: n, phone: '79000000001', name: 'Тестов Иван Петрович', caseId: 's7', kind: 'брак', caseDate: '2026-09-17', amount: 3000, text: 'Задел стеллаж погрузчиком при развороте, сразу сообщил бригадиру и сфотографировал повреждения.', files: ['app:/Объяснения/2026-09/E1/s7_1.jpg', 'app:/Объяснения/2026-09/E1/s7_2.jpg'], status: 'sent', statusText: 'Отправлено', answer: '' } ],
+      note: [ { id: 'N1', created: n, date: '2026-11-02', phone: '79000000003', name: 'Демо Пётр Сергеевич', reason: 'Отстранение от работы', text: 'Отстранили в 10:30: не было пропуска на складе, привёз к 13:00, смену уже закрыли.', files: [], status: 'sent', statusText: 'Отправлено', answer: '', needs: true } ],
       inc: [ { id: 'I1', created: n, date: '2026-09-29', phone: '79000000002', name: 'Образцова Мария Сергеевна', type: 'Порча имущества', desc: 'Разбит защитный борт стеллажа', text: 'При разгрузке паллеты погрузчик задел борт. Сообщила бригадиру, борт заменён.', scene: ['app:/Происшествия/2026-09/E2/I1/scene_1.jpg'], damage: ['app:/Происшествия/2026-09/E2/I1/damage_1.jpg'], acts: ['app:/Происшествия/2026-09/E2/I1/act_1.pdf'], status: 'review', statusText: 'Отправлено, ждёт проверки', answer: '', addendum: '[2026-09-30 10:15] Дополнение: акт подписан начальником смены.' } ],
       apps: [ { id: 'J1', created: n, jobId: 'j1', title: 'Бригадир смены', phone: '79000000003', name: 'Демов Олег Викторович', tab: '', comment: 'Есть опыт 3 года', status: 'sent', statusText: 'Отправлен', answer: '' } ],
       acc: [ { phone: '79000000009', name: 'Пример Блокированный', status: 'blocked', statusText: 'Заблокирован', reason: 'Уволен (демо)', at: '2026-09-25 12:00', by: 'админ (кабинет)' } ],
@@ -184,12 +188,13 @@
       function sm(l) { return l.reduce(function (t, x) { return t + x.amount; }, 0); }
       var pay0 = '2026-10-24', iss = s.adv.filter(function (a) { return a.status === 'issued' && a.payDate === pay0; });
       return demoRes({ ok: true, today: nowMsk().slice(0, 10), payDate: pay0, advances: { pending: pe.length, pendingSum: sm(pe), approved: ap.length, approvedSum: sm(ap), approvedForPay: ap.length, approvedForPaySum: sm(ap), issued: iss.length, issuedSum: iss.reduce(function (t, x) { return t + (x.paid > 0 ? x.paid : x.amount); }, 0), issuedChanged: iss.filter(function (x) { return x.paid != null && x.paid !== x.amount; }).length, issuedPayDate: pay0 },
-        explanations: { sent: counts(s.expl, 'sent') }, incidents: { review: counts(s.inc, 'review') }, applications: { sent: counts(s.apps, 'sent') }, blocked: counts(s.acc, 'blocked'),
+        explanations: { sent: counts(s.expl, 'sent') }, notes: { sent: counts(s.note || [], 'sent') }, incidents: { review: counts(s.inc, 'review') }, applications: { sent: counts(s.apps, 'sent') }, blocked: counts(s.acc, 'blocked'),
         notify: { recipients: 12, queue: 0, nextAt: s.notifyAt && s.notifyAt + 1800000 > Date.now() ? s.notifyAt + 1800000 : 0, quiet: false, from: 9, to: 20 },
         promo: promoDemoInfo(s) });
     }
     if (action === 'adminAdvances') return demoRes({ ok: true, items: needs(s.adv, ['pending', 'approved']) });
     if (action === 'adminExplanations') return demoRes({ ok: true, items: needs(s.expl, ['sent']) });
+    if (action === 'adminNotes') return demoRes({ ok: true, items: needs(s.note || [], ['sent']) });
     if (action === 'adminIncidents') return demoRes({ ok: true, items: needs(s.inc, ['review']) });
     if (action === 'adminApplications') return demoRes({ ok: true, items: needs(s.apps, ['sent']) });
     if (action === 'adminAccess') return demoRes({ ok: true, items: s.acc, limited: (s.limited || []).map(function (x) { return { phone: x.phone, name: x.name, kind: x.kind, until: Date.now() + x.off, requests: x.requests, wrong: x.wrong }; }) });
@@ -223,7 +228,7 @@
       pa.paid = pv; logit('Аванс: изменена выданная сумма', pa.id, pa.name + ' | было ' + money(wasP) + ' → стало ' + money(pv) + ' (запрошено ' + money(pa.amount) + ')' + (why2 ? ' | причина: ' + why2 : '')); store(DEMOK, s);
       return demoRes({ ok: true, paid: pv, was: wasP });
     }
-    var key = { adminAdvanceDecide: 'adv', adminExplDecide: 'expl', adminIncidentDecide: 'inc', adminAppMark: 'apps' }[action];
+    var key = { adminAdvanceDecide: 'adv', adminExplDecide: 'expl', adminNoteDecide: 'note', adminIncidentDecide: 'inc', adminAppMark: 'apps' }[action];
     if (key) {
       var K = KINDS[key], act = K.acts.filter(function (x) { return x.to === d.to; })[0]; if (!act) return demoRes({ ok: false, error: 'bad_action' });
       var reason = String(d.reason || '').trim(); if (act.reason && reason.length < REASON_MIN) return demoRes({ ok: false, error: 'reason_required' });
@@ -643,6 +648,13 @@
     add(c, txt('Комментарий сотрудника', it.comment)); add(c, txt('Ответ админа', it.answer, 'ans')); add(c, actsRow('adv', it, c)); return c;
   }
   function x2(it) { return it; }
+  function cardNote(it) {   // NOTE_V1: без суммы — только запись
+    var c = h('article', { class: 'card acard', 'data-testid': 'card-' + it.id, 'data-status': it.status });
+    c.appendChild(headRow(it, null, phoneLine(it) + ' · ' + dmyT(it.created)));
+    c.appendChild(h('div', null, statusChip('note', it)));
+    c.appendChild(kv([['Причина', it.reason], ['Дата', dmy(it.date)]].concat(it.resent ? [['Повторно', dmyT(it.resent)]] : []).concat(it.by ? [['Решил', it.by]] : [])));
+    add(c, txt('Объяснительная', it.text)); add(c, fileBtns(it.files)); add(c, txt('Комментарий админа', it.answer, 'ans')); add(c, actsRow('note', it, c)); return c;
+  }
   function cardExpl(it) {
     var c = h('article', { class: 'card acard', 'data-testid': 'card-' + it.id, 'data-status': it.status });
     c.appendChild(headRow(it, it.amount ? h('div', { class: 'amt num', text: money(it.amount) }) : null, phoneLine(it) + ' · ' + dmyT(it.created)));
@@ -673,12 +685,12 @@
     else c.appendChild(h('div', { class: 'acts' }, h('button', { class: 'btn danger', type: 'button', 'data-testid': 'act-block-' + it.phone, onclick: function () { blockFlow(it.phone, it.name); } }, 'Заблокировать')));
     return c;
   }
-  var CARD = { adv: cardAdv, expl: cardExpl, inc: cardInc, apps: cardApp, acc: cardAcc };
+  var CARD = { adv: cardAdv, expl: cardExpl, note: cardNote, inc: cardInc, apps: cardApp, acc: cardAcc };
 
   /* ---------- вкладки-списки ---------- */
-  var TITLES = { sum: 'Сводка', adv: 'Заявки на аванс', expl: 'Объяснения', inc: 'Происшествия', apps: 'Отклики на вакансии', acc: 'Доступ' };
+  var TITLES = { sum: 'Сводка', adv: 'Заявки на аванс', expl: 'Объяснения', note: 'Без удержания', inc: 'Происшествия', apps: 'Отклики на вакансии', acc: 'Доступ' };
   var FLT = { need: 'Требуют решения', all: 'Все', done: 'Решённые' }, FLT_ACC = { need: 'Заблокированные', all: 'Все', done: 'Разрешённые' };
-  var EMPTY = { adv: ['wallet', 'заявок на аванс'], expl: ['file', 'объяснений'], inc: ['alert', 'происшествий'], apps: ['briefcase', 'откликов'], acc: ['lock', 'записей'] };
+  var EMPTY = { adv: ['wallet', 'заявок на аванс'], expl: ['file', 'объяснений'], note: ['file', 'объяснительных'], inc: ['alert', 'происшествий'], apps: ['briefcase', 'откликов'], acc: ['lock', 'записей'] };
   function matches(tab, it, f, q) {
     var on = tab === 'acc' ? it.status === 'blocked' : it.needs;
     if (f === 'need' && !on) return false; if (f === 'done' && on) return false;
@@ -984,6 +996,7 @@
     g.appendChild(tile('adv', s.advances.approved, 'Одобрено, ждёт выдачи', s.advances.approved ? 'на ' + money(s.advances.approvedSum) + (s.payDate ? ' · выдача ' + dmy(s.payDate) : '') : 'нет', 'sum-adv-ok'));
     if (s.advances.issued) { var pt = tile('adv', s.advances.issued, 'Выдано на ' + (s.advances.issuedPayDate ? dmy(s.advances.issuedPayDate) : 'эту субботу'), 'на ' + money(s.advances.issuedSum) + (s.advances.issuedChanged ? ' · сумма изменена: ' + s.advances.issuedChanged : ''), 'sum-adv-paid'); pt.firstChild.classList.remove('hot'); g.appendChild(pt); }
     g.appendChild(tile('expl', s.explanations.sent, 'Объяснения на проверке', '', 'sum-expl'));
+    g.appendChild(tile('note', (s.notes && s.notes.sent) || 0, 'Объяснительные (без удержания)', '', 'sum-note'));
     g.appendChild(tile('inc', s.incidents.review, 'Происшествия на проверке', '', 'sum-inc'));
     g.appendChild(tile('apps', s.applications.sent, 'Новые отклики', '', 'sum-apps'));
     g.appendChild(tile('acc', s.blocked, 'Заблокировано', s.blocked ? 'доступ закрыт' : 'никто не заблокирован', 'sum-acc'));
@@ -1143,9 +1156,9 @@
         h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Сменить тему', 'data-testid': 'theme', onclick: toggleTheme }, ico(document.documentElement.getAttribute('data-theme') === 'dark' ? 'sun' : 'moon')),
         h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Выйти', 'data-testid': 'adm-logout', onclick: function () { confirmAct({ title: 'Выйти из кабинета?', text: 'Чтобы войти снова, понадобится новый код из Telegram.', yes: 'Выйти', danger: true }).then(function (a) { if (a) endSession(); }); } }, ico('logout'))));
   }
-  function counts() { var s = S.sum; return s ? { adv: (s.advances.pending || 0) + (s.advances.approved || 0), expl: s.explanations.sent, inc: s.incidents.review, apps: s.applications.sent } : {}; }   // ADV_ISSUE_SUMMARY_V1: бейдж = на рассмотрении + к выдаче
+  function counts() { var s = S.sum; return s ? { adv: (s.advances.pending || 0) + (s.advances.approved || 0), expl: s.explanations.sent, note: (s.notes && s.notes.sent) || 0, inc: s.incidents.review, apps: s.applications.sent } : {}; }   // ADV_ISSUE_SUMMARY_V1: бейдж = на рассмотрении + к выдаче
   function renderTabs() {
-    clear(tabbar); var c = counts();
+    clear(tabbar); tabbar.classList.add('many'); var c = counts();
     TABS.forEach(function (t) {
       var n = c[t[0]] || 0;
       tabbar.appendChild(h('a', { class: 'tab', href: '#/' + t[0], 'data-tab': t[0], 'aria-current': S.tab === t[0] ? 'page' : null, 'aria-label': t[1] + (n ? ', требуют решения: ' + n : '') }, ico(t[2]), h('span', { text: t[1] }), n ? h('span', { class: 'cnt', 'data-testid': 'cnt-' + t[0], text: String(n) }) : null));
@@ -1189,7 +1202,7 @@
   window.addEventListener('offline', function () { if (session()) { render(); toast('Нет сети', 'warn'); } });
   function boot() {
     if (!session()) { renderLogin(); return; }
-    if (!/^#\/(sum|adv|expl|inc|apps|acc)$/.test(location.hash)) location.hash = '#/sum';
+    if (!/^#\/(sum|adv|expl|note|inc|apps|acc)$/.test(location.hash)) location.hash = '#/sum';
     render(); loadSummary(); loadTab(location.hash.slice(2));
   }
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {   // оболочку кэширует sw.js (регистрируется из index.html); о новой версии предупреждаем, сами не перезагружаемся
