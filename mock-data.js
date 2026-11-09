@@ -116,23 +116,23 @@
       expl: { status: 'accepted', text: 'Артикулы в соседних ячейках были похожи, ярлык на ячейке был стёрт. Перепроверил остальные позиции заявки.', sentAt: '2026-09-23T09:05:00' } },
     { id: 'c104', periodId: '2026-09b', date: '2026-09-25', kind: 'error', title: 'Повреждение маркировки при переклейке', amount: 500, damage: true, expl: { status: 'waiting' } },
     { id: 'c109', periodId: '2026-09b', date: '2026-09-27', kind: 'error', title: 'Неверное количество в накладной', amount: 700, damage: false, expl: { status: 'waiting' } },
-    { id: 'c105', periodId: '2026-09b', date: '2026-09-19', kind: 'advance', title: 'Аванс (выдан 19.09)', amount: 8000 },
-    { id: 'c106', periodId: '2026-09b', date: '2026-09-26', kind: 'advance', title: 'Аванс (выдан 26.09)', amount: 10000 },
+    { id: 'c105', periodId: '2026-09b', date: '2026-09-19', kind: 'advance', title: 'Предоплата (выдана 19.09)', amount: 8000 },
+    { id: 'c106', periodId: '2026-09b', date: '2026-09-26', kind: 'advance', title: 'Предоплата (выдана 26.09)', amount: 10000 },
     { id: 'c107', periodId: '2026-09b', date: '2026-09-16', kind: 'housing', title: 'Проживание, 16.09–30.09', amount: 9000 },
     { id: 'c108', periodId: '2026-09b', date: '2026-09-26', kind: 'other', title: 'Спецодежда: перчатки, 2 пары', amount: 500 },
     // период 01–15.09
     { id: 'c201', periodId: '2026-09a', date: '2026-09-01', kind: 'housing', title: 'Проживание, 01.09–15.09', amount: 9000 },
-    { id: 'c202', periodId: '2026-09a', date: '2026-09-05', kind: 'advance', title: 'Аванс (выдан 05.09)', amount: 5000 },
+    { id: 'c202', periodId: '2026-09a', date: '2026-09-05', kind: 'advance', title: 'Предоплата (выдана 05.09)', amount: 5000 },
     { id: 'c203', periodId: '2026-09a', date: '2026-09-09', kind: 'error', title: 'Неверное количество в накладной', amount: 800, damage: false,
       expl: { status: 'accepted', text: 'Пересчитал позиции вручную, ошибся при сканировании двух коробов. Впредь сверяю с накладной перед закрытием.', sentAt: '2026-09-10T11:20:00' } },
     // период 16–31.08
     { id: 'c301', periodId: '2026-08b', date: '2026-08-16', kind: 'housing', title: 'Проживание, 16.08–31.08', amount: 9000 },
-    { id: 'c302', periodId: '2026-08b', date: '2026-08-29', kind: 'advance', title: 'Аванс (выдан 29.08)', amount: 10000 },
+    { id: 'c302', periodId: '2026-08b', date: '2026-08-29', kind: 'advance', title: 'Предоплата (выдана 29.08)', amount: 10000 },
     { id: 'c303', periodId: '2026-08b', date: '2026-08-20', kind: 'brak', title: 'Разбита единица товара при укладке', amount: 2500, damage: true,
       expl: { status: 'accepted', text: 'Коробка упала со стеллажа нижнего яруса, когда снимал верхнюю паллету. Повреждение зафиксировал на фото.', sentAt: '2026-08-21T08:40:00' } },
     // период 01–15.08
     { id: 'c401', periodId: '2026-08a', date: '2026-08-01', kind: 'housing', title: 'Проживание, 01.08–15.08', amount: 9000 },
-    { id: 'c402', periodId: '2026-08a', date: '2026-08-08', kind: 'advance', title: 'Аванс (выдан 08.08)', amount: 5000 }
+    { id: 'c402', periodId: '2026-08a', date: '2026-08-08', kind: 'advance', title: 'Предоплата (выдана 08.08)', amount: 5000 }
   ];
 
   // Периоды: 01–15 и 16–конец месяца (30/31, февраль 28/29). id = 'ГГГГ-ММa' (1–15) / 'ГГГГ-ММb' (16–конец).

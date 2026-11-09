@@ -181,14 +181,14 @@
     bad_file: 'Файл не подходит: нужны фото (JPG, PNG) или PDF.', too_big: 'Файл слишком большой (фото до 1,5 МБ после сжатия, PDF до ' + LIM.pdfMB + ' МБ).',
     upload_failed: 'Чек не загрузился на Яндекс Диск, поездка не сохранена. Повторите.', not_found: 'Поездка не найдена. Обновите список.', state: 'Поездка уже удалена. Обновите список.',
     bad_reason: 'Причина: от ' + LIM.reasonMin + ' до ' + LIM.reason + ' символов.', bad_period: 'Период указан неверно (не больше ' + LIM.periodDays + ' дней).',
-    unavailable: 'Чек сейчас недоступен на Яндекс Диске.', demo: 'В демо чеки не открываются.', closed: 'Вход для сотрудников закрыт: учёт такси работает с 7:00 до 00:00 по Москве.', blocked: 'Доступ закрыт. Обратитесь к бригадиру.', consent: 'Сначала примите согласие в приложении «Мои выплаты», затем вернитесь сюда.', rate: 'Слишком много записей за час. Подождите немного.',
+    unavailable: 'Чек сейчас недоступен на Яндекс Диске.', demo: 'В демо чеки не открываются.', closed: 'Вход для исполнителей закрыт: учёт такси работает с 7:00 до 00:00 по Москве.', blocked: 'Доступ закрыт. Обратитесь к координатору.', consent: 'Сначала примите согласие в приложении «Мои выплаты», затем вернитесь сюда.', rate: 'Слишком много записей за час. Подождите немного.',
     bad_geo: 'Нужно разрешить определение местоположения: без него код не запрашивается.', bad_phone: 'Введите номер телефона полностью, например +7 900 000-00-01.', auth: 'Сессия закончилась — войдите снова.'
   };
   function mskWhen(ms) {   // время по Москве: «17:10» или «05.10 в 02:40», если это не сегодня
     var d = new Date(ms + 10800000), n = new Date(Date.now() + 10800000), hm = ('0' + d.getUTCHours()).slice(-2) + ':' + ('0' + d.getUTCMinutes()).slice(-2);
     return d.toISOString().slice(0, 10) === n.toISOString().slice(0, 10) ? hm : ('0' + d.getUTCDate()).slice(-2) + '.' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + ' в ' + hm;
   }
-  function errText(r) { if (r && r.error === 'req_limit') return 'Лимит запросов кода исчерпан, обратитесь к администратору.' + (r.until ? ' Новый код можно будет запросить после ' + mskWhen(r.until) + ' (МСК).' : ''); if (r && r.error === 'closed' && r.from != null && r.to != null) { saveHrs(r.from, r.to); return 'Вход для сотрудников закрыт: учёт такси работает ' + hrsText(r.from, r.to) + ' по Москве.'; } if (r && r.error === 'closed') return 'Вход для сотрудников закрыт: учёт такси работает ' + hrsText() + ' по Москве.'; return ERR[r && r.error] || 'Не получилось выполнить действие. Повторите.'; }
+  function errText(r) { if (r && r.error === 'req_limit') return 'Лимит запросов кода исчерпан, обратитесь к администратору.' + (r.until ? ' Новый код можно будет запросить после ' + mskWhen(r.until) + ' (МСК).' : ''); if (r && r.error === 'closed' && r.from != null && r.to != null) { saveHrs(r.from, r.to); return 'Вход для исполнителей закрыт: учёт такси работает ' + hrsText(r.from, r.to) + ' по Москве.'; } if (r && r.error === 'closed') return 'Вход для исполнителей закрыт: учёт такси работает ' + hrsText() + ' по Москве.'; return ERR[r && r.error] || 'Не получилось выполнить действие. Повторите.'; }
 
   /* ---------- демо-«сервер» (вымышленные поездки) ---------- */
   function demoSeed() {
@@ -196,7 +196,7 @@
       var d = addDays(t, -off); if (d < m0) d = m0;
       return { id: 'TD' + n, date: d, route: route, amount: amount, people: people, perPerson: r2(amount / people), names: names || '', note: note || '', hasFile: true, fileKind: n % 3 === 0 ? 'pdf' : 'image', created: d + ' 08:10:00', status: 'active', reason: '', changed: '', by: demoWho(n)[0], byPhone: demoWho(n)[1] };
     };
-    var trips = [mk(1, 1, ROUTES[0], 850, 3, 'Иванов И. И.; Петров П. П.; Сидоров С. С.', ''), mk(2, 1, ROUTES[1], 920, 3, '', 'вечер, пробки'), mk(3, 2, ROUTES[0], 780, 2, '', ''), mk(4, 3, ROUTES[2], 640, 4, 'Демов О. В.', ''), mk(5, 4, ROUTES[0], 1200.5, 5, '', 'ночная смена')];
+    var trips = [mk(1, 1, ROUTES[0], 850, 3, 'Иванов И. И.; Петров П. П.; Сидоров С. С.', ''), mk(2, 1, ROUTES[1], 920, 3, '', 'вечер, пробки'), mk(3, 2, ROUTES[0], 780, 2, '', ''), mk(4, 3, ROUTES[2], 640, 4, 'Демов О. В.', ''), mk(5, 4, ROUTES[0], 1200.5, 5, '', 'ночное задание')];
     trips.forEach(function (x) { x.site = siteOfRoute(x.route, SITES); });
     return { trips: trips, seq: 5,
       comps: { TD2: { id: 'KD2', status: 'pending', at: t + ' 09:00' }, TD5: { id: 'KD5', status: 'paid', at: t + ' 09:30' } }, budget: { allocated: 10000, since: m0 },
@@ -538,7 +538,7 @@
         clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…'));
         var q = { phone: L.phone, purpose: 'taxi' }; if (LIVE) { q.lat = g.lat; q.lon = g.lon; if (g.accuracy !== undefined) q.accuracy = g.accuracy; } return call('codeRequest', q);
       }) : withGeo({ purpose: 'taxi', phone: L.phone, name: L.name }).then(function (d) { clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…')); geoHint.hidden = true; return call('adminCodeRequest', d); })).then(function (r) {
-        if (emp && r.error === 'blocked') { fail(r.reason === 'app_closed' ? 'Вход временно закрыт. Попробуйте позже.' : r.reason === 'no_geo' ? 'Нужно разрешить геолокацию — доступ закрыт. Обратитесь к бригадиру.' : ERR.blocked); return; }
+        if (emp && r.error === 'blocked') { fail(r.reason === 'app_closed' ? 'Вход временно закрыт. Попробуйте позже.' : r.reason === 'no_geo' ? 'Нужно разрешить геолокацию — доступ закрыт. Обратитесь к координатору.' : ERR.blocked); return; }
         if (emp && (r.error === 'geo' || r.error === 'bad_geo')) { L.geoErr = r.reason || 'unavailable'; fail(''); err.hidden = true; showGeoNeed(L.geoErr); return; }
         if (emp) { L.geoErr = ''; showGeoNeed(''); }
         if (r.error === 'locked') { L.step = 'code'; L.lockUntil = r.until; return renderLogin(); }
@@ -554,7 +554,7 @@
     if (emp && L.geoErr) showGeoNeed(L.geoErr);
     v.appendChild(h('div', { class: 'gap12' }, h('div', { class: 'field' }, h('label', { class: 'l', text: emp ? 'Телефон' : 'Ваш телефон' }), ph), nm ? h('div', { class: 'field' }, h('label', { class: 'l' }, 'Ваше ФИО ', h('span', { text: 'по желанию' })), nm) : null, geoBox, btn, geoHint, err));
     v.appendChild(h('div', { class: 'steps' }, h('div', { class: 'stepi' }, h('i', { text: '1' }), h('span', { text: emp ? 'Введите свой номер телефона, нажмите «Получить код» и разрешите определение местоположения (без него код не выдаётся): 4 цифры придут вам в Telegram.' : 'Введите свой номер телефона и нажмите «Получить код в Telegram»: админ увидит, кто просит доступ, и 4 цифры придут в админский чат.' })), h('div', { class: 'stepi' }, h('i', { text: '2' }), h('span', { text: emp ? 'Введите код. Сессия держится до ' + hhT(taxiHrs().to) + ' по Москве, потом код запросите снова.' : 'Введите код. Сессия держится 12 часов, потом код запросите снова.' }))));
-    if (!emp) v.appendChild(h('button', { class: 'btn ghost tx-mode', type: 'button', 'data-testid': 'mode-emp', onclick: function () { L = newL('emp', L.phone); renderLogin(); } }, 'Я сотрудник: войти по номеру телефона'));
+    if (!emp) v.appendChild(h('button', { class: 'btn ghost tx-mode', type: 'button', 'data-testid': 'mode-emp', onclick: function () { L = newL('emp', L.phone); renderLogin(); } }, 'Я исполнитель: войти по номеру телефона'));
   }
   function loginCode(v) {
     var boxes = [], busy = false, otp = h('div', { class: 'otp', role: 'group', 'aria-label': 'Код из 4 цифр', 'data-testid': 'otp' }), err = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'code-err' });
@@ -600,7 +600,7 @@
         }
         var q = { phone: L.phone, purpose: 'taxi' }; if (LIVE) { q.lat = g.lat; q.lon = g.lon; if (g.accuracy !== undefined) q.accuracy = g.accuracy; } return call('codeRequest', q);
       }) : withGeo({ purpose: 'taxi', phone: L.phone, name: L.name }).then(function (d) { return call('adminCodeRequest', d); })).then(function (r) {
-        if (r.error === 'blocked') { clearInterval(L.timer); toast(r.reason === 'app_closed' ? 'Вход временно закрыт. Попробуйте позже.' : r.reason === 'no_geo' ? 'Нужно разрешить геолокацию — доступ закрыт. Обратитесь к бригадиру.' : ERR.blocked, 'bad'); L.step = 'start'; return renderLogin(); }
+        if (r.error === 'blocked') { clearInterval(L.timer); toast(r.reason === 'app_closed' ? 'Вход временно закрыт. Попробуйте позже.' : r.reason === 'no_geo' ? 'Нужно разрешить геолокацию — доступ закрыт. Обратитесь к координатору.' : ERR.blocked, 'bad'); L.step = 'start'; return renderLogin(); }
         if (r.error === 'geo' || r.error === 'bad_geo') { clearInterval(L.timer); L.step = 'start'; L.geoErr = r.reason || 'unavailable'; return renderLogin(); }
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         if (!r.ok) { if (r.error === 'req_limit') L.left = 0; toast(errText(r), 'bad'); tick(); return; }
@@ -685,7 +685,7 @@
     var fPeople = h('input', { class: 'inp tx-people', type: 'text', inputmode: 'numeric', id: 'fp' + n, maxlength: '1', autocomplete: 'off', 'data-testid': 'f-people' });
     var per = h('div', { class: 'tx-per', 'data-testid': 'f-per', role: 'status', 'aria-live': 'polite' });
     var fNames = h('textarea', { class: 'inp', id: 'fn' + n, maxlength: String(LIM.names), rows: '3', placeholder: 'По одному ФИО в строке', 'data-testid': 'f-names' });
-    var fNote = h('textarea', { class: 'inp tx-note', id: 'fm' + n, maxlength: String(LIM.note), rows: '2', placeholder: 'Например: ночная смена, ждали 15 минут', 'data-testid': 'f-note' });
+    var fNote = h('textarea', { class: 'inp tx-note', id: 'fm' + n, maxlength: String(LIM.note), rows: '2', placeholder: 'Например: ночное задание, ждали 15 минут', 'data-testid': 'f-note' });
     var cnt = h('span', { class: 'cnt2' });
     var errs = {}; function errEl(k) { return (errs[k] = h('div', { class: 'err', role: 'alert', hidden: true, 'data-testid': 'e-' + k })); }
     function setErr(k, t) { var e = errs[k]; if (!e) return; clear(e); if (t) { e.appendChild(ico('alert', 'sm')); e.appendChild(document.createTextNode(t)); } e.hidden = !t; }
@@ -1054,7 +1054,7 @@
   var COMP_TXT = { pending: ['Ждёт оплаты', 'warn'], paid: ['Оплачено', 'ok'], rejected: ['Отклонено', 'bad'] };
   function compAsk(x, btn) {
     if (!requireOnline()) return;
-    confirmAct({ title: 'Компенсировать проезд?', text: 'Администратору уйдёт заявка: дата ' + dmy(x.date) + ', ' + x.route + (x.site ? ', площадка «' + x.site + '»' : '') + ', ' + money(x.amount) + '. Деньги переводят по СБП на ваш номер телефона или на карту из заявки на аванс.', yes: 'Отправить заявку' }).then(function (c) {
+    confirmAct({ title: 'Компенсировать проезд?', text: 'Администратору уйдёт заявка: дата ' + dmy(x.date) + ', ' + x.route + (x.site ? ', площадка «' + x.site + '»' : '') + ', ' + money(x.amount) + '. Деньги переводят по СБП на ваш номер телефона или на карту из заявки на предоплату.', yes: 'Отправить заявку' }).then(function (c) {
       if (!c) return; btn.disabled = true;
       call('taxiCompRequest', { id: x.id }).then(function (r) {
         btn.disabled = false;
@@ -1233,7 +1233,7 @@
     var fKm = h('input', { class: 'inp', type: 'text', inputmode: 'decimal', id: 'dk' + n, placeholder: 'необязательно', autocomplete: 'off', 'data-testid': o.p + '-km' });
     var fAmount = h('input', { class: 'inp', type: 'text', inputmode: 'decimal', id: 'da' + n, placeholder: 'необязательно', autocomplete: 'off', 'data-testid': o.p + '-amount' });
     var fNames = h('textarea', { class: 'inp', maxlength: String(LIM.names), rows: '3', placeholder: 'По одному ФИО в строке', 'data-testid': o.p + '-names', 'aria-label': 'Имена пассажиров' });
-    var fNote = h('textarea', { class: 'inp tx-note', maxlength: String(LIM.note), rows: '2', placeholder: 'Например: возил в ночную смену', 'data-testid': o.p + '-note', 'aria-label': 'Примечание' });
+    var fNote = h('textarea', { class: 'inp tx-note', maxlength: String(LIM.note), rows: '2', placeholder: 'Например: возил на ночное задание', 'data-testid': o.p + '-note', 'aria-label': 'Примечание' });
     function people() { return +fPeople.value; }
     function setPeople(v) { v = Math.max(1, Math.min(LIM.maxPeople, v)); fPeople.value = String(v); setFieldErr(errs, 'people', ''); }
     var minus = h('button', { class: 'iconbtn big', type: 'button', 'aria-label': 'Меньше пассажиров', 'data-testid': o.p + '-minus', onclick: function () { setPeople((people() || 1) - 1); } }, ico('minus'));

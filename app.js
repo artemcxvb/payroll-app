@@ -57,9 +57,9 @@
   function maskPhone(d) { return '+7 ' + d.slice(1, 4) + ' •••-••-' + d.slice(-2); }
   function kb(n) { return Math.max(1, Math.round(n / 1024)) + ' КБ'; }
   function pctClass(p) { return p >= CFG.normGood ? 'good' : p >= CFG.normLow ? 'mid' : 'low'; }
-  function pctText(p) { return p >= CFG.normGood ? 'Норма выполнена' : p >= CFG.normLow ? 'Ниже нормы' : 'Сильно ниже нормы'; }
+  function pctText(p) { return p >= CFG.normGood ? 'План выполнен' : p >= CFG.normLow ? 'Ниже плана' : 'Сильно ниже плана'; }
   function rate4(n) { return (Math.round(n * 10000) / 10000).toFixed(4).replace('.', ','); }   // «ЗП сотруднику, ₽/ед» в таблице — 4 знака (16,3605)
-  function normTxt(o) { return o.perHour ? 'за час' : o.normH > 0 ? o.normH + ' ед./ч' : 'нормы нет'; }
+  function normTxt(o) { return o.perHour ? 'за час' : o.normH > 0 ? o.normH + ' ед./ч' : 'плана нет'; }
   // HOURLY_V1: часовые услуги. Смена может нести hz = { hours, tsum, nh, items[] } (табель); tsum смены = сдельная + часовая сумма по тарифу.
   function hzOf(x) { return x && x.hz && x.hz.hours > 0 ? x.hz : null; }
   function pieceT(x) { var z = hzOf(x); return z ? Math.max(0, x.tsum - z.tsum) : x.tsum; }   // сдельная часть суммы по тарифу
@@ -111,18 +111,18 @@
     return s;
   }
   var KIND = {
-    brak: { n: 'Брак', ic: 'box' }, error: { n: 'Ошибка', ic: 'err' }, advance: { n: 'Аванс', ic: 'wallet' },
+    brak: { n: 'Брак', ic: 'box' }, error: { n: 'Ошибка', ic: 'err' }, advance: { n: 'Предоплата', ic: 'wallet' },
     housing: { n: 'Проживание', ic: 'bed' }, other: { n: 'Прочее', ic: 'tag' }
   };
   var KINDS = ['brak', 'error', 'advance', 'housing', 'other'];
-  var ADV_ST = { pending: ['На рассмотрении', 'warn'], approved: ['Одобрен', 'info'], rejected: ['Отклонён', 'bad'], issued: ['Выдан', 'ok'], cancelled: ['Отменён', 'gray'] };
-  var EX_ST = { waiting: ['Ждёт объяснения', 'warn'], sent: ['Отправлено', 'info'], accepted: ['Принято', 'ok'] };
+  var ADV_ST = { pending: ['На рассмотрении', 'warn'], approved: ['Одобрена', 'info'], rejected: ['Отклонена', 'bad'], issued: ['Выдана', 'ok'], cancelled: ['Отменена', 'gray'] };   // GPH_TEXT_V1: подписи для «предоплаты» (ключи статусов те же)
+  var EX_ST = { waiting: ['Ждёт пояснения', 'warn'], sent: ['Отправлено', 'info'], accepted: ['Принято', 'ok'] };
   function chip(t, tone, ic) { return h('span', { class: 'chip ' + tone }, ic ? ico(ic, 'sm') : null, t); }
   function needPhotoOf() { return true; }   // по уже начисленному браку/ошибке: и фото, и объяснительная обязательны
 
   /* ---------- происшествия: типы, статусы, общая валидация (клиент И «сервер») ---------- */
-  var ANON_TOPICS = { conditions: 'Условия труда', safety: 'Безопасность', boss: 'Руководство', pay: 'Зарплата', idea: 'Идея', other: 'Другое' };
-  var APP_ST = { sent: ['Отправлен', 'info'], viewed: ['Просмотрен', 'warn'], invited: ['Приглашён на собеседование', 'ok'], declined: ['Закрыто', 'gray'] };
+  var ANON_TOPICS = { conditions: 'Условия на объекте', safety: 'Безопасность', boss: 'Координация', pay: 'Вознаграждение', idea: 'Идея', other: 'Другое' };
+  var APP_ST = { sent: ['Отправлен', 'info'], viewed: ['Просмотрен', 'warn'], invited: ['Предложение принято', 'ok'], declined: ['Закрыто', 'gray'] };
   var INC_TYPES = { brak: 'Брак', damage: 'Порча имущества', other: 'Другое' };
   var INC_ST = { review: ['Отправлено, ждёт проверки', 'info'], accepted: ['Принято', 'ok'], returned: ['Возвращено на доработку', 'warn'], rejected: ['Отклонено', 'bad'] };
   var INC_ST_IC = { review: 'clock', accepted: 'check', returned: 'info', rejected: 'x' };
@@ -160,12 +160,12 @@
   var CONSENT_VERSION = '2026-10-черновик';
   var CONSENT_TITLE = 'Согласие на обработку персональных данных';
   var CONSENT_TEXT = [
-    'Я, пользователь приложения «Мои выплаты», даю согласие ООО «Персональное Решение» (далее оператор) на обработку моих персональных данных: фамилии, имени, отчества, номера телефона, табельного номера, должности и места работы, сведений о моих сменах, выработке, выплатах и авансах, банка и номера банковской карты, которые я указываю для выплаты аванса, а также фотографий, актов и объяснительных, которые я сам загружаю в приложение, а также моего местоположения (координат и точности) в момент запроса кода входа. Если я вожу людей на своём автомобиле и заполняю профиль водителя в учёте такси, также даю согласие на обработку фамилии, имени, отчества, телефона, марки и модели автомобиля, государственного регистрационного знака, цвета, а также дат и маршрутов моих рейсов, числа и имён пассажиров, километража и суммы, если я их указал.',
+    'Я, пользователь приложения «Мои выплаты», даю согласие ООО «Персональное Решение» (далее оператор) на обработку моих персональных данных: фамилии, имени, отчества, номера телефона, ID исполнителя, вида услуг и объекта, сведений о моих сменах, выработке, выплатах и авансах, банка и номера банковской карты, которые я указываю для выплаты аванса, а также фотографий, актов и объяснительных, которые я сам загружаю в приложение, а также моего местоположения (координат и точности) в момент запроса кода входа. Если я вожу людей на своём автомобиле и заполняю профиль водителя в учёте такси, также даю согласие на обработку фамилии, имени, отчества, телефона, марки и модели автомобиля, государственного регистрационного знака, цвета, а также дат и маршрутов моих рейсов, числа и имён пассажиров, километража и суммы, если я их указал.',
     'Цели обработки: показать мне мои выплаты и выработку, принять мои заявки на аванс и выплатить аванс на мою карту, принять объяснительные и сведения о происшествиях, отправить мне код входа и показать администратору, откуда запрошен код входа, а также вести учёт рейсов на моём автомобиле и показывать профиль водителя администратору.',
     'Срок хранения: данные хранятся, пока я работаю у оператора. Фотографии и файлы хранятся 12 месяцев с даты записи, затем переносятся в архив для удаления. Местоположение при запросе кода входа не хранится: оно передаётся один раз вместе с запросом и показывается администратору в Telegram.',
-    'Я могу отозвать согласие или попросить удалить мои данные в любой момент, обратившись к бригадиру склада.'
+    'Я могу отозвать согласие или попросить удалить мои данные в любой момент, обратившись к координатору.'
   ];
-  var MYDATA_ITEMS = ['Фамилия, имя, отчество', 'Номер телефона', 'Табельный номер', 'Ваши заявки на аванс, объяснительные и сведения о происшествиях', 'Банк и номер банковской карты для выплаты аванса (сотрудник видит только последние 4 цифры, полный номер видит администратор)', 'Фото случаев и происшествий, акты и чеки, которые вы загрузили', 'Местоположение в момент запроса кода входа (обязательно для входа): передаётся только вместе с запросом, видно администратору в Telegram и нигде не сохраняется', 'Профиль водителя, если вы возите людей на своём авто: ФИО, телефон, марка и модель, госномер, цвет, а также даты, маршруты и пассажиры ваших рейсов (видны вам и администратору)'];
+  var MYDATA_ITEMS = ['Фамилия, имя, отчество', 'Номер телефона', 'ID исполнителя', 'Ваши заявки на предоплату, пояснения и сведения о происшествиях', 'Банк и номер банковской карты для выплаты предоплаты (исполнитель видит только последние 4 цифры, полный номер видит администратор)', 'Фото случаев и происшествий, акты и чеки, которые вы загрузили', 'Местоположение в момент запроса кода входа (обязательно для входа): передаётся только вместе с запросом, видно администратору в Telegram и нигде не сохраняется', 'Профиль водителя, если вы возите людей на своём авто: ФИО, телефон, марка и модель, госномер, цвет, а также даты, маршруты и пассажиры ваших рейсов (видны вам и администратору)'];
   function srv() {
     var s = load(SK, null);
     if (!s) { s = { cases: JSON.parse(JSON.stringify(M.cases)), advances: JSON.parse(JSON.stringify(M.advances)), incidents: JSON.parse(JSON.stringify(M.incidents)), codes: {}, locks: {}, attempts: {}, tg: [], lastReq: {}, blocked: {} }; store(SK, s); }
@@ -353,7 +353,7 @@
       var s = srv(), a = s.advances.filter(function (x) { return x.id === id; })[0]; if (!a) return;
       a.status = st; a.decidedAt = new Date().toISOString();
       if (st === 'rejected') a.answer = 'Не согласовано: есть незакрытые случаи брака (демо).';
-      if (st === 'issued') s.cases.push({ id: 'c' + rid(), periodId: M.periods[0].id, date: M.today, kind: 'advance', advId: a.id, title: 'Аванс (выдан ' + dm(a.payDate || M.today) + ')', amount: a.amount });
+      if (st === 'issued') s.cases.push({ id: 'c' + rid(), periodId: M.periods[0].id, date: M.today, kind: 'advance', advId: a.id, title: 'Предоплата (выдана ' + dm(a.payDate || M.today) + ')', amount: a.amount });
       save(s); refresh();
     },
     application: function (id, st) { var s = srv(); s.applications.forEach(function (x) { if (x.id === id) x.status = st; }); save(s); refresh(); },
@@ -704,7 +704,7 @@
       h('span', { class: 'dot' + (p.status === 'paid' ? ' paid' : ''), 'aria-hidden': 'true' }), h('span', { class: 'num', text: periodLabel(p) }), ico('cd', 'sm'));
   }
   function openPeriods() {
-    var ctl, list = h('div', { role: 'radiogroup', 'aria-label': 'Расчётный период', class: 'gap8' });
+    var ctl, list = h('div', { role: 'radiogroup', 'aria-label': 'Отчётный период', class: 'gap8' });
     M.periods.forEach(function (p) {
       var sel = p.id === S.periodId;
       list.appendChild(h('button', { class: 'popt', type: 'button', role: 'radio', 'aria-checked': sel ? 'true' : 'false', 'data-period': p.id,
@@ -712,7 +712,7 @@
         h('div', { class: 'grow' }, h('b', { class: 'num', text: periodLabel(p) }), h('small', { text: p.status === 'open' ? 'Текущий · выплата ' + dms(p.payDate) : p.status === 'closed' ? 'Закрыт · выплата ' + dms(p.payDate) : 'Выплачено ' + dms(p.payDate) })),
         sel ? ico('check') : null));
     });
-    ctl = openSheet({ title: 'Расчётный период', body: list });
+    ctl = openSheet({ title: 'Отчётный период', body: list });
   }
   function offlineBanner() {
     var b = $('#offline');
@@ -724,13 +724,13 @@
   function explReturnedCount() { return S.data ? S.data.cases.filter(function (c) { return c.expl && c.expl.status === 'waiting' && c.expl.returned; }).length : 0; }
   function waitingCount() { return S.data ? S.data.cases.filter(function (c) { return c.expl && c.expl.status === 'waiting'; }).length : 0; }
   function returnedCount() { return S.data ? (S.data.incidents || []).filter(function (i) { return i.status === 'returned'; }).length : 0; }
-  var TABS0 = [['home', 'Главная', 'home'], ['cal', 'Календарь', 'cal'], ['ops', 'Операции', 'box'], ['ded', 'Вычеты', 'ded'], ['adv', 'Аванс', 'wallet'], ['stars', 'Звёзды', 'star'], ['me', 'Профиль', 'user']], TABS = TABS0;   // STARS_V1: вкладка игры
+  var TABS0 = [['home', 'Главная', 'home'], ['cal', 'Календарь', 'cal'], ['ops', 'Операции', 'box'], ['ded', 'Зачёты', 'ded'], ['adv', 'Предоплата', 'wallet'], ['stars', 'Звёзды', 'star'], ['me', 'Профиль', 'user']], TABS = TABS0;   // STARS_V1: вкладка игры
   function isForeman() { return !!(S.data && S.data.foreman); }   // FOREMAN_V1: вкладка «Бригада» только когда сервер прислал блок foreman
   function renderTabs() {
     clear(tabbar); TABS = isForeman() ? TABS0.slice(0, 5).concat([['brig', 'Бригада', 'trend']], TABS0.slice(5)) : TABS0; tabbar.style.gridTemplateColumns = 'repeat(' + TABS.length + ', 1fr)'; tabbar.classList.toggle('many', TABS.length > 6); tabbar.classList.toggle('many8', TABS.length > 7);
     TABS.forEach(function (t) {
       var n = t[0] === 'ded' ? waitingCount() + returnedCount() : 0, wn = t[0] === 'ded' ? waitingCount() : 0, rn = t[0] === 'ded' ? returnedCount() : 0;
-      tabbar.appendChild(h('a', { class: 'tab', href: '#/' + t[0], 'aria-current': (S.route === t[0] || (t[0] === 'home' && (S.route === 'promo' || S.route === 'jobs')) || (t[0] === 'me' && S.route === 'mydata')) ? 'page' : null, 'data-tab': t[0], 'aria-label': t[1] + (wn ? ', ждут объяснения: ' + wn : '') + (rn ? ', возвращено на доработку: ' + rn : '') },
+      tabbar.appendChild(h('a', { class: 'tab', href: '#/' + t[0], 'aria-current': (S.route === t[0] || (t[0] === 'home' && (S.route === 'promo' || S.route === 'jobs')) || (t[0] === 'me' && S.route === 'mydata')) ? 'page' : null, 'data-tab': t[0], 'aria-label': t[1] + (wn ? ', ждут пояснения: ' + wn : '') + (rn ? ', возвращено на доработку: ' + rn : '') },
         ico(t[2]), h('span', { text: t[1] }), n ? h('span', { class: 'cnt', 'aria-hidden': 'true', text: String(n) }) : null));
     });
   }
@@ -754,8 +754,8 @@
     document.title = (appClosed ? 'Вход временно закрыт' : 'Доступ закрыт') + ' · Мои выплаты';
     var v = h('main', { class: 'login blocked', id: 'main', 'data-testid': 'blocked-screen' }); root.appendChild(v);
     var why = S.blockReason === 'no_geo'
-      ? 'Нужно было разрешить геолокацию. Без неё вход закрыт. Обратитесь к бригадиру.'
-      : 'Обратитесь к бригадиру.';
+      ? 'Нужно было разрешить геолокацию. Без неё вход закрыт. Обратитесь к координатору.'
+      : 'Обратитесь к координатору.';
     v.appendChild(h('div', { class: 'brand' }, h('div', { class: 'logo' }, ico('lock', 'lg')), h('div', null, h('b', { text: 'Персональное Решение' }), h('span', { text: 'Кабинет исполнителя' }))));
     v.appendChild(h('div', { class: 'lockbox', role: 'alert', 'data-testid': 'blockbox' }, ico('lock', 'lg'), h('h1', { text: appClosed ? 'Вход временно закрыт' : 'Доступ закрыт' }), h('p', { text: appClosed ? 'Попробуйте позже.' : why })));
     if (!appClosed) v.appendChild(h('p', { class: 'blocked-note', text: 'Сохранённые на этом телефоне данные удалены.' }));
@@ -790,7 +790,7 @@
     btn = h('button', { class: 'btn', type: 'submit', 'data-testid': 'req-code' }, ico('send', 'sm'), 'Запросить код');
     btn.disabled = digits().length !== 10;
     var form = h('form', { class: 'gap16', novalidate: true, onsubmit: function (e) { e.preventDefault(); doReq(); } },
-      h('div', { class: 'field' }, h('label', { class: 'l', for: 'phone', text: 'Номер телефона' }), h('div', { class: 'phone' }, h('span', { class: 'pre', 'aria-hidden': 'true', text: '+7' }), inp), err, h('p', { class: 'help', id: 'ph-help', text: 'Тот номер, который вы сообщили бригадиру при оформлении.' })), L.geoErr ? geoNeed(L.geoErr, function () { doReq(true); }) : null, btn);
+      h('div', { class: 'field' }, h('label', { class: 'l', for: 'phone', text: 'Номер телефона' }), h('div', { class: 'phone' }, h('span', { class: 'pre', 'aria-hidden': 'true', text: '+7' }), inp), err, h('p', { class: 'help', id: 'ph-help', text: 'Тот номер, который вы сообщили координатору при регистрации.' })), L.geoErr ? geoNeed(L.geoErr, function () { doReq(true); }) : null, btn);
     function doReq(retry) {
       var d = digits(); if (d.length !== 10 || (btn.disabled && !retry)) return; L.notice = ''; L.reqUntil = 0;
       if (navigator.onLine === false) { err.textContent = 'Нет сети. Подключитесь к интернету и повторите.'; err.hidden = false; return; }
@@ -922,7 +922,7 @@
     var W = 320, H = 112, top = 8, bot = 18, n = shifts.length, max = 140, bw = Math.min(22, (W - 40) / n - 4), gap = n > 1 ? (W - 36 - bw * n) / (n - 1) : 0;
     var ns = 'http://www.w3.org/2000/svg', s = document.createElementNS(ns, 'svg');
     s.setAttribute('viewBox', '0 0 ' + W + ' ' + H); s.setAttribute('class', 'trend'); s.setAttribute('role', 'img'); s.setAttribute('data-testid', 'trend');
-    s.setAttribute('aria-label', 'График производительности по сменам: ' + shifts.map(function (x) { return dm(x.date) + ' — ' + pctS(perfOf(x)) + '%'; }).join(', '));
+    s.setAttribute('aria-label', 'Диаграмма объёма услуг по дням: ' + shifts.map(function (x) { return dm(x.date) + ' — ' + pctS(perfOf(x)) + '%'; }).join(', '));
     function el(t, a, txt) { var e = document.createElementNS(ns, t); for (var k in a) e.setAttribute(k, a[k]); if (txt) e.textContent = txt; s.appendChild(e); return e; }
     var y100 = top + (H - top - bot) * (1 - 100 / max);
     el('line', { x1: 32, x2: W, y1: y100, y2: y100, class: 'norm' }); el('text', { x: 28, y: y100 + 3, class: 'nl' }, '100%');
@@ -936,29 +936,30 @@
   function shiftRow(s) {
     var p = perfOf(s);
     return h('div', { class: 'srow' }, h('div', { class: 'sico ' + s.type }, ico(s.type === 'day' ? 'sun' : 'moon', 'sm')),
-      h('div', { class: 'd' }, dlong(s.date) + ', ' + dowOf(s.date).slice(0, 2).toLowerCase(), h('small', { text: (s.type === 'day' ? 'Дневная' : 'Ночная') + ' · ' + s.hours + ' ч · ' + (s.zone === 'HOURLY' ? 'часовые услуги' : num(s.units) + ' ед.' + (hzOf(s) ? ' · часовые ' + hrsTxt(s.hz.hours) : '')) })),
+      h('div', { class: 'd' }, dlong(s.date) + ', ' + dowOf(s.date).slice(0, 2).toLowerCase(), h('small', { text: (s.type === 'day' ? 'Дневное задание' : 'Ночное задание') + ' · ' + s.hours + ' ч · ' + (s.zone === 'HOURLY' ? 'часовые услуги' : num(s.units) + ' ед.' + (hzOf(s) ? ' · часовые ' + hrsTxt(s.hz.hours) : '')) })),
       h('div', { class: 'pct ' + pctClass(p), text: pctS(p) + '%' }));
   }
   function applyWidths(v) { // CSP запрещает inline style — размеры задаём через CSSOM
     v.querySelectorAll('.stackbar i[data-w]').forEach(function (b) { b.style.flex = b.getAttribute('data-w') + ' 1 0'; });
     v.querySelectorAll('.gauge i[data-w]').forEach(function (g) { g.style.width = g.getAttribute('data-w') + '%'; });
   }
+  function posLabel(u) { var p = String((u && u.position) || ''); return p === 'Администратор' || p === 'Партнёр' ? p : 'Исполнитель (НПД)'; }   // GPH_TEXT_V1: вид участия вместо «должности» из CRM (только подпись)
   function viewHome() {
     var c = S.calc[S.periodId], u = S.data.user, open = c.p.status === 'open', wait = c.p.status === 'closed', first = u.name.split(' ')[1] || u.name;
     var v = h('main', { class: 'view stack', id: 'main' });
-    v.appendChild(pageTop('Здравствуйте, ' + first, u.position + ' · ' + u.site));
+    v.appendChild(pageTop('Здравствуйте, ' + first, posLabel(u) + ' · ' + u.site));
     v.appendChild(h('div', null, periodBtn()));
     var w = waitingCount();
     if (w) v.appendChild(h('button', { class: 'alert', type: 'button', 'data-testid': 'home-alert', onclick: function () { S.dedFilter = 'all'; location.hash = '#/ded'; } }, ico('alert'),
-      h('div', null, h('b', { text: w + ' ' + plural(w, ['случай ждёт', 'случая ждут', 'случаев ждут']) + ' объяснения' }), h('span', { text: 'Для брака обязательны фото повреждения и объяснительная. Нажмите, чтобы заполнить.' + (explReturnedCount() ? ' Возвращено администратором: ' + explReturnedCount() + '.' : '') }))));
+      h('div', null, h('b', { text: w + ' ' + plural(w, ['случай ждёт', 'случая ждут', 'случаев ждут']) + ' пояснения' }), h('span', { text: 'Для брака обязательны фото повреждения и пояснение. Нажмите, чтобы заполнить.' + (explReturnedCount() ? ' Возвращено администратором: ' + explReturnedCount() + '.' : '') }))));
     var rc = returnedCount();
     if (rc) v.appendChild(h('button', { class: 'alert', type: 'button', 'data-testid': 'home-alert-returned', onclick: function () { S.dedFilter = 'all'; location.hash = '#/ded'; } }, ico('alert'),
-      h('div', null, h('b', { text: rc + ' ' + plural(rc, ['сообщение возвращено', 'сообщения возвращены', 'сообщений возвращено']) + ' на доработку' }), h('span', { text: 'Администратор просит дополнить объяснение. Нажмите, чтобы открыть.' }))));
+      h('div', null, h('b', { text: rc + ' ' + plural(rc, ['сообщение возвращено', 'сообщения возвращены', 'сообщений возвращено']) + ' на доработку' }), h('span', { text: 'Администратор просит дополнить пояснение. Нажмите, чтобы открыть.' }))));
     v.appendChild(h('section', { class: 'hero', 'aria-labelledby': 'hero-l', 'data-testid': 'hero' },
       h('div', { class: 'lbl', id: 'hero-l' }, open || wait ? 'К выплате' : 'Выплачено', h('span', { class: 'badge-lite', text: open ? 'период идёт' : wait ? 'период закрыт' : 'закрыт' })),
       h('div', { class: 'big num' }, h('span', { 'data-testid': 'payout', text: num(c.payout) }), h('small', { text: '₽' })),
       h('p', { class: 'note', text: open ? 'Ожидаемая выплата ' + dlong(c.p.payDate) + ' — сумма может измениться до конца периода' : wait ? 'Период закрыт, выплата ' + dlong(c.p.payDate) + ' — сумма уточняется при расчёте' : 'Выплата ' + dlong(c.p.payDate) }),
-      h('div', { class: 'eq' }, h('span', { class: 'num', text: 'Начислено ' + money(c.accrued) }), h('span', { class: 'num', text: 'Удержано ' + minus(c.withheld) }))));
+      h('div', { class: 'eq' }, h('span', { class: 'num', text: 'Вознаграждение ' + money(c.accrued) }), h('span', { class: 'num', text: 'Зачтено ' + minus(c.withheld) }))));
     v.appendChild(reportBtn('report-home'));
     v.appendChild(noteBtn('note-home')); noteList(v, 'home');   // NOTE_V1
     v.appendChild(advHomeCard());
@@ -968,11 +969,11 @@
     // разбор суммы
     var b = h('section', { class: 'card', 'aria-labelledby': 'br-h', id: 'breakdown', 'data-testid': 'breakdown' });
     b.appendChild(h('div', { class: 'card-h' }, h('h2', { id: 'br-h', text: 'Из чего сложилась сумма' })));
-    b.appendChild(h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Выработка по тарифу', h('small', { class: 'num', text: num(c.units) + ' ед. по тарифам операций · смен: ' + c.shifts.length })), h('div', { class: 'am num', 'data-testid': 'br-piece', text: money(c.hzHours ? c.tariff - c.hzT : c.tariff) })));
+    b.appendChild(h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Объём услуг по тарифу', h('small', { class: 'num', text: num(c.units) + ' ед. по тарифам операций · дней: ' + c.shifts.length })), h('div', { class: 'am num', 'data-testid': 'br-piece', text: money(c.hzHours ? c.tariff - c.hzT : c.tariff) })));
     if (c.hzHours) b.appendChild(h('div', { class: 'line', 'data-testid': 'br-hourly' }, h('div', { class: 'nm' }, 'Часовые услуги', h('small', { class: 'num', text: hrsTxt(c.hzHours) + ' × тариф заказчика за час · ' + dec(c.hzNh, 1) + ' нормо-ч' })), h('div', { class: 'am num', text: money(c.hzT) })));
-    b.appendChild(h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Ваша доля ' + Math.round(M.SHARE * 100) + '%', h('small', { text: 'Так считается начисление' })), h('div', { class: 'am num', text: '× ' + Math.round(M.SHARE * 100) + '%' })));
-    b.appendChild(h('div', { class: 'line total' }, h('div', { class: 'nm', text: 'Начислено' }), h('div', { class: 'am num', 'data-testid': 'accrued', text: money(c.accrued) })));
-    b.appendChild(h('div', { class: 'card-h sp' }, h('h3', { class: 'h3', text: 'Вычеты по видам' }), h('span', { class: 'am num', text: minus(c.own) })));
+    b.appendChild(h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Ваша доля ' + Math.round(M.SHARE * 100) + '%', h('small', { text: 'Так считается вознаграждение' })), h('div', { class: 'am num', text: '× ' + Math.round(M.SHARE * 100) + '%' })));
+    b.appendChild(h('div', { class: 'line total' }, h('div', { class: 'nm', text: 'Вознаграждение' }), h('div', { class: 'am num', 'data-testid': 'accrued', text: money(c.accrued) })));
+    b.appendChild(h('div', { class: 'card-h sp' }, h('h3', { class: 'h3', text: 'Уменьшения по видам' }), h('span', { class: 'am num', text: minus(c.own) })));
     if (c.own) {
       var bar = h('div', { class: 'stackbar', 'aria-hidden': 'true' });
       KINDS.forEach(function (k) { if (c.by[k]) bar.appendChild(h('i', { class: 'k-' + k, 'data-w': c.by[k] })); });
@@ -984,57 +985,57 @@
       b.appendChild(h('div', { class: 'line k-' + k, 'data-kind': k }, h('span', { class: 'swatch', 'aria-hidden': 'true' }), h('div', { class: 'nm' }, KIND[k].n, k === 'housing' ? hsInfoBtn() : null, h('small', { text: n + ' ' + plural(n, ['запись', 'записи', 'записей']) })), h('div', { class: 'am num', text: minus(c.by[k]) })));
     });
     if (c.carryIn) b.appendChild(h('div', { class: 'line' }, h('span', { class: 'swatch k-other', 'aria-hidden': 'true' }), h('div', { class: 'nm', text: 'Перенос с прошлого периода' }), h('div', { class: 'am num', text: minus(c.carryIn) })));
-    if (!c.own && !c.carryIn) b.appendChild(h('p', { class: 'cap', text: 'В этом периоде вычетов нет.' }));
+    if (!c.own && !c.carryIn) b.appendChild(h('p', { class: 'cap', text: 'В этом периоде зачётов нет.' }));
     var over = c.carryOut > 0, used = c.limit ? Math.min(100, c.withheld / c.limit * 100) : 0;
     b.appendChild(h('div', { class: 'limit', 'data-testid': 'limit-box' },
-      h('div', { class: 't' }, ico('lock', 'sm'), 'Защитный лимит удержаний'),
-      (CFG.deductShare >= 1 ? h('p', null, 'Удерживать можно не больше начисленного — сейчас это ', h('b', { class: 'num', text: money(c.limit) }), '.') : h('p', null, 'Из начисленного нельзя удержать больше ', h('b', { text: limitWords() }), ' — сейчас это ', h('b', { class: 'num', text: money(c.limit) }), '.')),
-      h('div', { class: 'gauge', role: 'img', 'aria-label': 'Удержано ' + money(c.withheld) + ' из лимита ' + money(c.limit) }, h('i', { class: over ? 'full' : '', 'data-w': used })),
-      h('div', { class: 'gl num' }, h('span', { text: 'Удержано ' + money(c.withheld) }), h('span', { text: 'Лимит ' + money(c.limit) })),
-      over ? h('p', { 'data-testid': 'carry-text' }, 'Вычетов набралось больше лимита, поэтому ', h('b', { class: 'num', text: money(c.carryOut) }), ' сейчас не списываются — они ', h('b', { text: 'переносятся на следующий период' }), ' и будут удержаны позже.')
-        : h('p', { 'data-testid': 'carry-text', text: 'Все вычеты укладываются в лимит — переносить ничего не нужно.' })));
+      h('div', { class: 't' }, ico('lock', 'sm'), 'Лимит зачётов'),
+      (CFG.deductShare >= 1 ? h('p', null, 'Зачесть можно не больше вознаграждения — сейчас это ', h('b', { class: 'num', text: money(c.limit) }), '.') : h('p', null, 'Из вознаграждения нельзя зачесть больше ', h('b', { text: limitWords() }), ' — сейчас это ', h('b', { class: 'num', text: money(c.limit) }), '.')),
+      h('div', { class: 'gauge', role: 'img', 'aria-label': 'Зачтено ' + money(c.withheld) + ' из лимита ' + money(c.limit) }, h('i', { class: over ? 'full' : '', 'data-w': used })),
+      h('div', { class: 'gl num' }, h('span', { text: 'Зачтено ' + money(c.withheld) }), h('span', { text: 'Лимит ' + money(c.limit) })),
+      over ? h('p', { 'data-testid': 'carry-text' }, 'Зачётов набралось больше лимита, поэтому ', h('b', { class: 'num', text: money(c.carryOut) }), ' сейчас не списываются — они ', h('b', { text: 'переносятся на следующий период' }), ' и будут зачтены позже.')
+        : h('p', { 'data-testid': 'carry-text', text: 'Все зачёты укладываются в лимит — переносить ничего не нужно.' })));
     b.appendChild(h('div', { class: 'line total final' }, h('div', { class: 'nm', text: 'К выплате' }), h('div', { class: 'am num', text: money(c.accrued) + ' − ' + money(c.withheld) + ' = ' + money(c.payout) })));
     v.appendChild(b);
     // производительность
     var pc = pctClass(c.perf), pf = h('section', { class: 'card', 'aria-labelledby': 'pf-h', 'data-testid': 'perf' });
-    pf.appendChild(h('div', { class: 'card-h' }, h('h2', { id: 'pf-h', text: 'Производительность' }), chip(pctText(c.perf), pc === 'good' ? 'ok' : pc === 'mid' ? 'warn' : 'bad')));
-    pf.appendChild(h('div', { class: 'perf-top' }, h('div', null, h('div', { class: 'perf-num num ' + pc, 'data-testid': 'perf-val', text: pctS(c.perf) + '%' }), h('div', { class: 'cap', text: 'факт к нормативу операций за период' + (c.hzHours ? ', с часовыми услугами в нормо-часах' : '') }))));
+    pf.appendChild(h('div', { class: 'card-h' }, h('h2', { id: 'pf-h', text: 'Объём услуг к плану' }), chip(pctText(c.perf), pc === 'good' ? 'ok' : pc === 'mid' ? 'warn' : 'bad')));
+    pf.appendChild(h('div', { class: 'perf-top' }, h('div', null, h('div', { class: 'perf-num num ' + pc, 'data-testid': 'perf-val', text: pctS(c.perf) + '%' }), h('div', { class: 'cap', text: 'факт к плановому объёму за период' + (c.hzHours ? ', с часовыми услугами в нормо-часах' : '') }))));
     if (c.shifts.length) {
       pf.appendChild(perfChart(c.shifts));
       pf.appendChild(h('div', { class: 'legend' }, h('span', null, h('i', { class: 'lg-good' }), '100% и выше'), h('span', null, h('i', { class: 'lg-mid' }), '50–99%'), h('span', null, h('i', { class: 'lg-low' }), 'ниже 50%')));
       var rows = c.shifts.slice().reverse(), shown = S.perfAll ? rows : rows.slice(0, 4), sl = h('div', { class: 'shifts', 'data-testid': 'shift-list' });
       shown.forEach(function (s) { sl.appendChild(shiftRow(s)); }); pf.appendChild(sl);
-      if (rows.length > 4) pf.appendChild(h('button', { class: 'link', type: 'button', 'aria-expanded': S.perfAll ? 'true' : 'false', 'data-testid': 'perf-toggle', onclick: function () { S.perfAll = !S.perfAll; render(); } }, S.perfAll ? 'Свернуть' : 'Показать все смены (' + rows.length + ')'));
-    } else pf.appendChild(emptyState('cal', 'В этом периоде смен нет', 'Когда появятся смены, здесь будет график.'));
+      if (rows.length > 4) pf.appendChild(h('button', { class: 'link', type: 'button', 'aria-expanded': S.perfAll ? 'true' : 'false', 'data-testid': 'perf-toggle', onclick: function () { S.perfAll = !S.perfAll; render(); } }, S.perfAll ? 'Свернуть' : 'Показать все дни (' + rows.length + ')'));
+    } else pf.appendChild(emptyState('cal', 'В этом периоде заданий нет', 'Когда появятся задания, здесь будет диаграмма.'));
     v.appendChild(pf);
     var gc = gapCard(c); if (gc) v.appendChild(gc);
     applyWidths(v); return v;
   }
   function gapRow(s) {
     var g = gapPay(s), known = hasGap(s), nu = normUnits(s);
-    return h('button', { class: 'srow tap gaprow', type: 'button', 'data-date': s.date, 'aria-label': dlong(s.date) + ': ' + num(s.units) + ' ед.' + (known ? ', по норме ' + num(nu) + ' ед., ' + (g ? 'недобор ' + money(g) : 'норма выполнена') : ', норматива нет') + '. Детали смены', onclick: function () { openShiftDetail(s); } },
+    return h('button', { class: 'srow tap gaprow', type: 'button', 'data-date': s.date, 'aria-label': dlong(s.date) + ': ' + num(s.units) + ' ед.' + (known ? ', по плану ' + num(nu) + ' ед., ' + (g ? 'отставание ' + money(g) : 'план выполнен') : ', плана нет') + '. Детали задания', onclick: function () { openShiftDetail(s); } },
       h('div', { class: 'sico ' + s.type }, ico(s.type === 'day' ? 'sun' : 'moon', 'sm')),
-      h('div', { class: 'd' }, dlong(s.date) + ', ' + dowOf(s.date).slice(0, 2).toLowerCase(), h('small', { class: 'num', text: num(s.units) + (known ? ' из ' + num(nu) + ' ед. по норме' : ' ед., норматива нет') + ' · заработано ' + money(Math.round(s.tsum * M.SHARE)) })),
-      h('div', { class: 'gapv num ' + (!known ? 'na' : g ? 'low' : 'good'), text: !known ? '–' : g ? minus(g) : 'норма' }));
+      h('div', { class: 'd' }, dlong(s.date) + ', ' + dowOf(s.date).slice(0, 2).toLowerCase(), h('small', { class: 'num', text: num(s.units) + (known ? ' из ' + num(nu) + ' ед. по плану' : ' ед., плана нет') + ' · вознаграждение ' + money(Math.round(s.tsum * M.SHARE)) })),
+      h('div', { class: 'gapv num ' + (!known ? 'na' : g ? 'low' : 'good'), text: !known ? '–' : g ? minus(g) : 'план' }));
   }
   function gapCard(c) {   // «Сколько вы недобираете»: заработок по факту и при 100% норматива по вашим же тарифам
     var g = gapCalc(c.shifts); if (!g.known || !g.shifts.length) return null;
     var share = Math.round(M.SHARE * 100), avg = g.units ? g.ptariff / g.units : 0, fill = g.full ? Math.min(100, g.earned / g.full * 100) : 100;
     var card = h('section', { class: 'card', 'aria-labelledby': 'gap-h', 'data-testid': 'gap' });
-    card.appendChild(h('div', { class: 'card-h' }, h('h2', { id: 'gap-h', text: 'Сколько вы недобираете' }), g.gap ? chip(g.under + ' ' + plural(g.under, ['смена', 'смены', 'смен']) + ' ниже нормы', 'warn') : chip('Норма выполнена', 'ok')));
+    card.appendChild(h('div', { class: 'card-h' }, h('h2', { id: 'gap-h', text: 'Резерв до планового объёма' }), g.gap ? chip(g.under + ' ' + plural(g.under, ['день', 'дня', 'дней']) + ' ниже плана', 'warn') : chip('План выполнен', 'ok')));
     card.appendChild(h('div', { class: 'perf-top' }, h('div', null, h('div', { class: 'perf-num num ' + (g.gap ? 'low' : 'good'), 'data-testid': 'gap-val', text: g.gap ? minus(g.gap) : money(0) }),
-      h('div', { class: 'cap', text: g.gap ? 'не добрано до 100% нормы за период' : 'недобора нет: смены на норме или выше' }))));
+      h('div', { class: 'cap', text: g.gap ? 'не хватило до 100% плана за период' : 'отставания нет: дни на плане или выше' }))));
     card.appendChild(h('div', { class: 'stats3 gapstats' },
-      h('div', { class: 'stat' }, h('b', { class: 'num', 'data-testid': 'gap-earned', text: money(g.earned) }), h('span', { text: 'заработано по факту' })),
-      h('div', { class: 'stat' }, h('b', { class: 'num', 'data-testid': 'gap-full', text: money(g.full) }), h('span', { text: 'при 100% нормы' })),
-      h('div', { class: 'stat' }, h('b', { class: 'num ' + pctClass(c.perf), text: pctS(c.perf) + '%' }), h('span', { text: 'выполнение нормы' }))));
-    card.appendChild(h('div', { class: 'gauge', role: 'img', 'aria-label': 'Заработано ' + money(g.earned) + ' из ' + money(g.full) + ' возможных при норме' }, h('i', { class: g.gap ? 'pg-mid' : 'pg-good', 'data-w': fill })));
-    card.appendChild(h('div', { class: 'gl num' }, h('span', { text: 'Факт ' + money(g.earned) }), h('span', { text: 'Норма ' + money(g.full) })));
+      h('div', { class: 'stat' }, h('b', { class: 'num', 'data-testid': 'gap-earned', text: money(g.earned) }), h('span', { text: 'вознаграждение по факту' })),
+      h('div', { class: 'stat' }, h('b', { class: 'num', 'data-testid': 'gap-full', text: money(g.full) }), h('span', { text: 'при 100% плана' })),
+      h('div', { class: 'stat' }, h('b', { class: 'num ' + pctClass(c.perf), text: pctS(c.perf) + '%' }), h('span', { text: 'выполнение плана' }))));
+    card.appendChild(h('div', { class: 'gauge', role: 'img', 'aria-label': 'Вознаграждение ' + money(g.earned) + ' из ' + money(g.full) + ' возможных при плане' }, h('i', { class: g.gap ? 'pg-mid' : 'pg-good', 'data-w': fill })));
+    card.appendChild(h('div', { class: 'gl num' }, h('span', { text: 'Факт ' + money(g.earned) }), h('span', { text: 'План ' + money(g.full) })));
     card.appendChild(h('p', { class: 'cap num', 'data-testid': 'gap-rate', text: 'Ваш средний тариф ' + rate(avg) + ' ₽ за ед., вам ' + share + '%: ' + rate(avg * M.SHARE) + ' ₽ за ед.' }));
     var rows = g.shifts.slice().reverse(), shown = S.gapAll ? rows : rows.slice(0, 4), sl = h('div', { class: 'shifts', 'data-testid': 'gap-list' });
     shown.forEach(function (s) { sl.appendChild(gapRow(s)); }); card.appendChild(sl);
-    if (rows.length > 4) card.appendChild(h('button', { class: 'link', type: 'button', 'aria-expanded': S.gapAll ? 'true' : 'false', 'data-testid': 'gap-toggle', onclick: function () { S.gapAll = !S.gapAll; render(); } }, S.gapAll ? 'Свернуть' : 'Показать все смены (' + rows.length + ')'));
-    card.appendChild(h('div', { class: 'tipbox', 'data-testid': 'gap-how' }, ico('info', 'sm'), h('span', { text: 'Как считается: за смену берём вашу сумму по тарифу и делим на выполнение нормы, так получается сумма при 100% нормы. Разница × ' + share + '% и есть недобор. Смены выше нормы недобор других смен не закрывают.' + (g.noNorm ? ' Смен без норматива: ' + g.noNorm + ', они в недобор не входят.' : '') })));
+    if (rows.length > 4) card.appendChild(h('button', { class: 'link', type: 'button', 'aria-expanded': S.gapAll ? 'true' : 'false', 'data-testid': 'gap-toggle', onclick: function () { S.gapAll = !S.gapAll; render(); } }, S.gapAll ? 'Свернуть' : 'Показать все дни (' + rows.length + ')'));
+    card.appendChild(h('div', { class: 'tipbox', 'data-testid': 'gap-how' }, ico('info', 'sm'), h('span', { text: 'Как считается: за день берём вашу сумму по тарифу и делим на выполнение плана, так получается сумма при 100% плана. Разница × ' + share + '% и есть отставание от плана. Дни выше плана не закрывают отставание других дней.' + (g.noNorm ? ' Дней без плана: ' + g.noNorm + ', они в отставание не входят.' : '') })));
     return card;
   }
 
@@ -1048,7 +1049,7 @@
   function viewCal() {
     var v = h('main', { class: 'view stack', id: 'main' }), ym = S.calMonth, y = +ym.slice(0, 4), m = +ym.slice(5), first = pd(ym + '-01'), dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
     var byDate = {}; S.data.shifts.forEach(function (s) { byDate[s.date] = s; });
-    v.appendChild(pageTop('Календарь смен', 'Ваши выходы на объект'));
+    v.appendChild(pageTop('Календарь заданий', 'Дни оказания услуг на объекте'));
     var done = S.data.shifts.filter(function (s) { return !s.planned && s.date.slice(0, 7) === ym; });
     var card = h('section', { class: 'card calcard', 'aria-label': 'Месяц' });
     card.appendChild(h('div', { class: 'cal-head' }, h('button', { class: 'iconbtn', type: 'button', 'aria-label': 'Предыдущий месяц', 'data-testid': 'cal-prev', disabled: ym <= M.periods[M.periods.length - 1].start.slice(0, 7), onclick: function () { S.calMonth = shiftMonth(ym, -1); S.calSel = null; render(); } }, ico('cl')),
@@ -1061,7 +1062,7 @@
     var sel = S.calSel || defaultSel(ym, byDate); S.calSel = sel;
     for (i = 1; i <= dim; i++) (function (day) {
       var ds = ym + '-' + ('0' + day).slice(-2), s = byDate[ds], cls = 'cell', label = dlong(ds) + ', ' + dowOf(ds).toLowerCase();
-      if (s) { cls += s.planned ? ' planned' : ' ' + sType(s); label += s.planned ? ': запланирована смена' : ': ' + (s.type === 'day' ? 'дневная' : 'ночная') + ' смена, ' + s.hours + ' ч, ' + (s.zone === 'HOURLY' ? 'часовые услуги' : s.units + ' ед.' + (hzOf(s) ? ', часовые услуги ' + hrsTxt(s.hz.hours) : '')); } else { cls += ' off'; label += ': выходной'; }
+      if (s) { cls += s.planned ? ' planned' : ' ' + sType(s); label += s.planned ? ': запланировано задание' : ': ' + (s.type === 'day' ? 'дневное' : 'ночное') + ' задание, ' + s.hours + ' ч, ' + (s.zone === 'HOURLY' ? 'часовые услуги' : s.units + ' ед.' + (hzOf(s) ? ', часовые услуги ' + hrsTxt(s.hz.hours) : '')); } else { cls += ' off'; label += ': нет задания'; }
       if (ds === S.data.today) { cls += ' today'; label += ', сегодня'; }
       if (ds === sel) cls += ' sel';
       g.appendChild(h('button', { class: cls, type: 'button', 'data-date': ds, 'aria-pressed': ds === sel ? 'true' : 'false', 'aria-label': label, onclick: function () { S.calSel = ds; render(); } },
@@ -1072,21 +1073,21 @@
     v.appendChild(card);
     var hzH = sum(done, function (s) { return hzOf(s) ? s.hz.hours : 0; }), hrs = sum(done, function (s) { return s.zone === 'HOURLY' ? 0 : s.hours; }) + hzH, un = sum(done, function (s) { return s.units; });
     v.appendChild(h('section', { class: 'card', 'aria-labelledby': 'ct-h', 'data-testid': 'cal-totals' }, h('div', { class: 'card-h' }, h('h2', { id: 'ct-h', text: 'Итого за ' + MON[m - 1] })),
-      h('div', { class: 'stats3' }, h('div', { class: 'stat' }, h('b', { class: 'num', 'data-testid': 't-shifts', text: String(done.length) }), h('span', { text: plural(done.length, ['смена', 'смены', 'смен']) })),
+      h('div', { class: 'stats3' }, h('div', { class: 'stat' }, h('b', { class: 'num', 'data-testid': 't-shifts', text: String(done.length) }), h('span', { text: plural(done.length, ['день', 'дня', 'дней']) })),
         h('div', { class: 'stat' }, h('b', { class: 'num', 'data-testid': 't-hours', text: String(Math.round(hrs * 100) / 100) }), h('span', { text: hzH ? 'часов, из них ' + (Math.round(hzH * 100) / 100) + ' ч часовые' : 'часов' })),
-        h('div', { class: 'stat' }, h('b', { class: 'num', 'data-testid': 't-units', text: num(un) }), h('span', { text: 'ед. выработки' })))));
+        h('div', { class: 'stat' }, h('b', { class: 'num', 'data-testid': 't-units', text: num(un) }), h('span', { text: 'ед. объёма' })))));
     var s = byDate[sel], dc = h('section', { class: 'card daycard', 'aria-labelledby': 'dc-h', 'data-testid': 'day-card' });
-    dc.appendChild(h('div', { class: 'card-h' }, h('h2', { id: 'dc-h', text: dowOf(sel) + ', ' + dlong(sel) }), s ? chip(s.planned ? 'Запланирована' : shiftName(s), s.planned ? 'gray' : sType(s) === 'day' ? 'day' : 'night', s.planned ? 'clock' : sType(s) === 'day' ? 'sun' : 'moon') : chip('Выходной', 'gray')));
-    if (!s) dc.appendChild(h('p', { class: 'cap', text: 'В этот день смены не было.' }));
-    else if (s.planned) dc.appendChild(h('p', { class: 'cap', text: 'Смена ещё не закрыта — выработка появится после подведения итогов.' }));
+    dc.appendChild(h('div', { class: 'card-h' }, h('h2', { id: 'dc-h', text: dowOf(sel) + ', ' + dlong(sel) }), s ? chip(s.planned ? 'Запланирована' : shiftName(s), s.planned ? 'gray' : sType(s) === 'day' ? 'day' : 'night', s.planned ? 'clock' : sType(s) === 'day' ? 'sun' : 'moon') : chip('Нет задания', 'gray')));
+    if (!s) dc.appendChild(h('p', { class: 'cap', text: 'В этот день задания не было.' }));
+    else if (s.planned) dc.appendChild(h('p', { class: 'cap', text: 'Задание ещё не принято — объём услуг появится после подведения итогов.' }));
     else { var p = Math.round(perfOf(s));
-      dc.appendChild(h('div', { class: 'kv' }, h('div', null, h('b', { class: 'num', text: hrsPlus(s) }), h('span', { text: 'Отработано' })), h('div', null, h('b', { class: 'num', text: num(s.units) }), h('span', { text: 'Выработка, ед.' })), h('div', null, h('b', { class: 'num ' + pctClass(p), 'data-testid': 'day-pct', text: pctS(p) + '%' }), h('span', { text: 'К норме' }))));
-      dc.appendChild(h('p', { class: 'cap mt', 'data-testid': 'day-zone', text: 'Участок ' + ZI[s.zone].name + ' · смена «' + shiftName(s) + '»' + (s.counted ? '' : ' · не засчитана') }));
+      dc.appendChild(h('div', { class: 'kv' }, h('div', null, h('b', { class: 'num', text: hrsPlus(s) }), h('span', { text: 'Оказано услуг' })), h('div', null, h('b', { class: 'num', text: num(s.units) }), h('span', { text: 'Объём услуг, ед.' })), h('div', null, h('b', { class: 'num ' + pctClass(p), 'data-testid': 'day-pct', text: pctS(p) + '%' }), h('span', { text: 'К плану' }))));
+      dc.appendChild(h('p', { class: 'cap mt', 'data-testid': 'day-zone', text: 'Участок ' + ZI[s.zone].name + ' · задание «' + shiftName(s) + '»' + (s.counted ? '' : ' · не засчитана') }));
       if (s.parts) dc.appendChild(partsBox(s));
       if (hzOf(s)) dc.appendChild(hzBox(s.hz, 'day-hourly'));
-      dc.appendChild(h('p', { class: 'cap num mt', text: 'Начислено за смену ≈ ' + money(Math.round(s.tsum * M.SHARE)) }));
-      if (hasGap(s)) dc.appendChild(h('p', { class: 'cap num', 'data-testid': 'day-gap', text: gapPay(s) ? 'Недобор до нормы ≈ ' + money(gapPay(s)) : 'Норма смены выполнена, недобора нет' }));
-      dc.appendChild(h('button', { class: 'btn secondary mt', type: 'button', 'data-testid': 'shift-detail', onclick: function () { openShiftDetail(s); } }, 'Детали смены')); }
+      dc.appendChild(h('p', { class: 'cap num mt', text: 'Вознаграждение за день ≈ ' + money(Math.round(s.tsum * M.SHARE)) }));
+      if (hasGap(s)) dc.appendChild(h('p', { class: 'cap num', 'data-testid': 'day-gap', text: gapPay(s) ? 'Отставание от плана ≈ ' + money(gapPay(s)) : 'Плановый объём выполнен, отставания нет' }));
+      dc.appendChild(h('button', { class: 'btn secondary mt', type: 'button', 'data-testid': 'shift-detail', onclick: function () { openShiftDetail(s); } }, 'Детали задания')); }
     v.appendChild(dc);
     return v;
   }
@@ -1097,13 +1098,13 @@
   var OPI = {}; M.OPS.forEach(function (o) { OPI[o.id] = o; });   // в боевом режиме заполняется из ответа сервера (applyLive)
   var ZI = {}; M.ZONES.forEach(function (z) { ZI[z.id] = z; });
   var NORM_SHIFT_H = M.HOURS_SHIFT || 11;   // в боевом режиме берётся из «Нормативов по участкам» (B3)
-  function opTone(p) { return p >= CFG.normHigh ? ['Выше нормы', 'ok', 'good'] : p >= CFG.normGood ? ['Норма', 'ok', 'good'] : p >= CFG.normLow ? ['Ниже нормы', 'warn', 'mid'] : ['Сильно ниже нормы', 'bad', 'low']; }
+  function opTone(p) { return p >= CFG.normHigh ? ['Выше плана', 'ok', 'good'] : p >= CFG.normGood ? ['План', 'ok', 'good'] : p >= CFG.normLow ? ['Ниже плана', 'warn', 'mid'] : ['Сильно ниже плана', 'bad', 'low']; }
   function mainPart(s) { return s.parts ? s.parts.slice().sort(function (a, b) { return b.u - a.u; })[0] : null; }   // HZ_UI_V2: подпись по основной (наибольшей) части даты
   function partType(x) { return /^ноч/i.test(String(x.s || '')) ? 'night' : 'day'; }
   function sType(s) { var m = mainPart(s); return m ? partType(m) : s.type; }
   function shiftName(s) { if (s.label) return s.label; var m = mainPart(s); if (!m) return s.type === 'day' ? 'День' : 'Ночь';
     return s.parts.map(function (x) { return partType(x) === 'day' ? 'День' : 'Ночь'; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).sort(function (a, b) { return (a === (partType(m) === 'day' ? 'День' : 'Ночь')) ? -1 : 1; }).join(' + '); }
-  function partsBox(s) { if (!s.parts) return null; var b = h('div', { class: 'card2box mt', 'data-testid': 'shift-parts' }, h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Состав дня', h('small', { text: 'строки «Выработки» за дату' }))));
+  function partsBox(s) { if (!s.parts) return null; var b = h('div', { class: 'card2box mt', 'data-testid': 'shift-parts' }, h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Состав дня', h('small', { text: 'строки объёма услуг за дату' }))));
     s.parts.slice().sort(function (a, b) { return b.u - a.u; }).forEach(function (x) { b.appendChild(h('div', { class: 'line' }, h('div', { class: 'nm' }, (partType(x) === 'day' ? 'День' : 'Ночь'), h('small', { class: 'num', text: num(x.u) + ' ед.' + (x.c ? '' : ' · без отметки «зачёт»') })), h('div', { class: 'am num', text: money(x.t) }))); }); return b; }
   function hrsPlus(s) { var hz = hzOf(s); return s.zone !== 'HOURLY' && hz ? dec(s.hours, 2) + ' ч + ' + hrsTxt(hz.hours) + ' часовые' : hrsTxt(s.hours); }
   function zoneAgg(shifts) {
@@ -1118,32 +1119,32 @@
   }
   function viewOps() {
     var c = S.calc[S.periodId], v = h('main', { class: 'view stack', id: 'main' });
-    v.appendChild(pageTop('Операции', 'Ваша выработка и нормативы'));
+    v.appendChild(pageTop('Операции', 'Ваш объём услуг и плановые объёмы'));
     v.appendChild(h('div', null, periodBtn()));
     var zs = zoneAgg(c.shifts), total = sum(zs, function (a) { return a.earned; });
-    v.appendChild(h('section', { class: 'card', 'aria-labelledby': 'ops-h', 'data-testid': 'ops-total' }, h('div', { class: 'card-h' }, h('h2', { id: 'ops-h', text: 'Заработано по выработке' }), chip(pctText(c.perf), pctClass(c.perf) === 'good' ? 'ok' : pctClass(c.perf) === 'mid' ? 'warn' : 'bad')),
-      h('div', { class: 'avail num', 'data-testid': 'ops-total-val', text: money(total) }), h('p', { class: 'help', text: 'Сумма по тарифу × ' + Math.round(M.SHARE * 100) + '% — это ваше начисление до вычетов (с точностью до рубля сходится с «Начислено» на главной: ' + money(c.accrued) + ').' })));
+    v.appendChild(h('section', { class: 'card', 'aria-labelledby': 'ops-h', 'data-testid': 'ops-total' }, h('div', { class: 'card-h' }, h('h2', { id: 'ops-h', text: 'Вознаграждение за объём услуг' }), chip(pctText(c.perf), pctClass(c.perf) === 'good' ? 'ok' : pctClass(c.perf) === 'mid' ? 'warn' : 'bad')),
+      h('div', { class: 'avail num', 'data-testid': 'ops-total-val', text: money(total) }), h('p', { class: 'help', text: 'Сумма по тарифу × ' + Math.round(M.SHARE * 100) + '% — это ваше вознаграждение до зачётов (с точностью до рубля сходится с «Вознаграждение» на главной: ' + money(c.accrued) + ').' })));
     v.appendChild(h('h2', { class: 'h3', text: 'Мой факт по участкам' }));
-    if (!zs.length) v.appendChild(emptyState('box', 'Выработки в периоде нет', 'Когда смены будут закрыты, здесь появится факт по участкам.'));
+    if (!zs.length) v.appendChild(emptyState('box', 'Объёма услуг в периоде нет', 'Когда задания будут приняты, здесь появится факт по участкам.'));
     else { var zl = h('div', { class: 'stack', 'data-testid': 'zone-list' }); zs.forEach(function (a) {
       if (a.hourly) { zl.appendChild(hourlyCard(a)); return; }
       var t = opTone(a.perf);
-      zl.appendChild(h('button', { class: 'card opcard', type: 'button', 'data-zone-card': a.id, 'aria-label': 'Участок ' + a.z.name + ': ' + num(a.units) + ' ед., ' + pctS(a.perf) + '% к нормативу, заработано ' + money(a.earned), onclick: function () { openZoneDetail(a); } },
+      zl.appendChild(h('button', { class: 'card opcard', type: 'button', 'data-zone-card': a.id, 'aria-label': 'Участок ' + a.z.name + ': ' + num(a.units) + ' ед., ' + pctS(a.perf) + '% к плану, вознаграждение ' + money(a.earned), onclick: function () { openZoneDetail(a); } },
         h('div', { class: 'row between' }, h('b', { class: 'opn', text: a.z.name }), chip(t[0], t[1])),
-        h('div', { class: 'opgrid' }, h('div', null, h('span', { text: 'Смен в зачёте' }), h('b', { class: 'num', text: String(a.shifts.length) })), h('div', null, h('span', { text: 'Выполнено' }), h('b', { class: 'num', text: num(a.units) + ' ед.' })),
-          h('div', null, h('span', { text: 'Средний тариф' }), h('b', { class: 'num', text: rate(a.avgTariff) + ' ₽/ед.' })), h('div', null, h('span', { text: 'Заработано' }), h('b', { class: 'num', text: money(a.earned) }))),
+        h('div', { class: 'opgrid' }, h('div', null, h('span', { text: 'Принятых заданий' }), h('b', { class: 'num', text: String(a.shifts.length) })), h('div', null, h('span', { text: 'Выполнено' }), h('b', { class: 'num', text: num(a.units) + ' ед.' })),
+          h('div', null, h('span', { text: 'Средний тариф' }), h('b', { class: 'num', text: rate(a.avgTariff) + ' ₽/ед.' })), h('div', null, h('span', { text: 'Вознаграждение' }), h('b', { class: 'num', text: money(a.earned) }))),
         h('div', { class: 'gauge', 'aria-hidden': 'true' }, h('i', { class: 'pg-' + t[2], 'data-w': Math.min(100, a.perf / 1.3) })),
-        h('div', { class: 'gl num' }, h('span', { text: 'Выполнение норматива: ' + pctS(a.perf) + '%' }), h('span', { text: 'По сменам ›' }))));
+        h('div', { class: 'gl num' }, h('span', { text: 'Выполнение плана: ' + pctS(a.perf) + '%' }), h('span', { text: 'По дням ›' }))));
     }); v.appendChild(zl); }
-    v.appendChild(h('h2', { class: 'h3', text: 'Нормативы и тарифы операций' }));
-    v.appendChild(h('p', { class: 'cap', text: 'Справочник «Нормативы по участкам»: с ним сверяется ваша выработка. Единицы учитываются по смене и участку, поэтому своего факта по каждой операции здесь нет.' }));
+    v.appendChild(h('h2', { class: 'h3', text: 'Плановые объёмы и тарифы операций' }));
+    v.appendChild(h('p', { class: 'cap', text: 'Справочник «Плановые объёмы по участкам»: с ним сверяется ваш объём услуг. Единицы учитываются по заданию и участку, поэтому своего факта по каждой операции здесь нет.' }));
     var lst = h('div', { class: 'stack', 'data-testid': 'ops-list' });
     M.ZONES.forEach(function (z) {
       var ops = M.OPS.filter(function (o) { return o.zone === z.id; });
       if (z.id === 'HOURLY' && !ops.length) return;   // справочника часовых тарифов нет — блок не показываем
       var box = h('div', { class: 'card2box refbox', 'data-zone': z.id }, h('div', { class: 'zone-h' }, h('h3', { class: 'h3', text: z.id === 'HOURLY' ? z.name + ' (тариф за час)' : 'Участок ' + z.name })));
       ops.forEach(function (o) {
-        box.appendChild(h('button', { class: 'refrow', type: 'button', 'data-op': o.id, 'aria-label': o.name + ': тариф ' + rate(o.tariff) + (o.perHour ? ' ₽ за час' : ' ₽ за единицу, ' + (o.normH > 0 ? 'норматив ' + o.normH + ' ед. в час' : 'норматива нет')), onclick: function () { openOpDetail(o); } },
+        box.appendChild(h('button', { class: 'refrow', type: 'button', 'data-op': o.id, 'aria-label': o.name + ': тариф ' + rate(o.tariff) + (o.perHour ? ' ₽ за час' : ' ₽ за единицу, ' + (o.normH > 0 ? 'план ' + o.normH + ' ед. в час' : 'плана нет')), onclick: function () { openOpDetail(o); } },
           h('span', { class: 'opn', text: o.name }), h('span', { class: 'num rv' }, h('b', { text: rate(o.tariff) + ' ₽' }), h('small', { text: normTxt(o) }))));
       });
       lst.appendChild(box);
@@ -1151,13 +1152,13 @@
     v.appendChild(lst);
     v.appendChild(h('section', { class: 'card', 'aria-labelledby': 'hw-h', 'data-testid': 'how-calc' }, h('h2', { id: 'hw-h', text: 'Как считается' }),
       h('div', { class: 'gap8 mt' },
-        h('p', { class: 'cap', text: 'Выработка по тарифу = единицы смены × тарифы операций (средний тариф зависит от того, какими операциями вы занимались).' }),
-        h('p', { class: 'cap', text: 'Начисление = выработка по тарифу × ' + Math.round(M.SHARE * 100) + '% (доля на ЗП). Вам за единицу — тариф × ' + Math.round(M.SHARE * 100) + '%.' }),
-        h('p', { class: 'cap', text: 'Норматив на смену = норматив (ед. в час) × ' + NORM_SHIFT_H + ' ч. Выполнение норматива = факт ÷ норматив смены («Производительность» в таблице).' }),
-        h('p', { class: 'cap', text: 'В зачёт идут смены с отметкой «Зачёт смены». Тарифы и нормативы берутся из справочника «Нормативы по участкам».' }),
-        h('p', { class: 'cap', 'data-testid': 'how-hourly', text: 'Часовые услуги (по табелю) = часы × тариф заказчика за час × ' + Math.round(M.SHARE * 100) + '%. В производительность они идут нормо-часами: сумма по тарифу ÷ 830 ₽ (столько стоит час работы на 100% нормы). Производительность дня = (нормо-часы сдельной работы + нормо-часы часовых услуг) ÷ ' + NORM_SHIFT_H + ' ч.' }),
-        h('div', { class: 'legend' }, h('span', null, h('i', { class: 'lg-good' }), '100% и выше — норма'), h('span', null, h('i', { class: 'lg-mid' }), '50–99% — ниже нормы'), h('span', null, h('i', { class: 'lg-low' }), 'ниже 50% — сильно ниже'), h('span', null, h('i', { class: 'lg-good' }), '115% и выше — выше нормы')),
-        h('div', { class: 'tipbox' }, ico('info', 'sm'), h('span', { text: 'Как выйти на норму: откройте участок и посмотрите смены — видно, когда темп просел и сколько единиц не хватило до нормы. Ошибки и пересорт не только снижают вычеты, но и отнимают время на перепроверку.' })))));
+        h('p', { class: 'cap', text: 'Объём услуг по тарифу = единицы за день × тарифы операций (средний тариф зависит от того, какими операциями вы занимались).' }),
+        h('p', { class: 'cap', text: 'Вознаграждение = объём услуг по тарифу × ' + Math.round(M.SHARE * 100) + '% (доля исполнителя). Вам за единицу — тариф × ' + Math.round(M.SHARE * 100) + '%.' }),
+        h('p', { class: 'cap', text: 'План на задание = план (ед. в час) × ' + NORM_SHIFT_H + ' ч. Выполнение плана = факт ÷ план на задание.' }),
+        h('p', { class: 'cap', text: 'В зачёт идут принятые задания. Тарифы и плановые объёмы берутся из справочника «Плановые объёмы по участкам».' }),
+        h('p', { class: 'cap', 'data-testid': 'how-hourly', text: 'Часовые услуги (по реестру) = часы × тариф заказчика за час × ' + Math.round(M.SHARE * 100) + '%. В объём к плану они идут нормо-часами: сумма по тарифу ÷ 830 ₽ (столько стоит час услуг на 100% плана). Объём к плану за день = (нормо-часы сдельных услуг + нормо-часы часовых услуг) ÷ ' + NORM_SHIFT_H + ' ч.' }),
+        h('div', { class: 'legend' }, h('span', null, h('i', { class: 'lg-good' }), '100% и выше — план'), h('span', null, h('i', { class: 'lg-mid' }), '50–99% — ниже плана'), h('span', null, h('i', { class: 'lg-low' }), 'ниже 50% — сильно ниже'), h('span', null, h('i', { class: 'lg-good' }), '115% и выше — выше плана')),
+        h('div', { class: 'tipbox' }, ico('info', 'sm'), h('span', { text: 'Как выйти на план: откройте участок и посмотрите дни — видно, когда темп просел и сколько единиц не хватило до плана. Ошибки и пересорт не только приводят к зачётам, но и отнимают время на перепроверку.' })))));
     applyWidths(v); return v;
   }
   function shiftRowLine(s, onTap) {
@@ -1170,28 +1171,28 @@
     var list = h('div', { 'data-testid': 'zone-days' }); a.shifts.slice().sort(function (x, y) { return x.date < y.date ? 1 : -1; }).forEach(function (s) { list.appendChild(shiftRowLine(s)); });
     var ops = M.OPS.filter(function (o) { return o.zone === z.id; });
     ctl = openSheet({ title: 'Участок ' + z.name, body: h('div', { class: 'gap16', 'data-testid': 'zone-detail' },
-      h('div', { class: 'row between' }, chip(t[0], t[1]), h('span', { class: 'cap num', text: 'Выполнение норматива: ' + pctS(a.perf) + '%' })),
-      h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Смен в зачёте' }), h('div', { class: 'am num', text: String(a.shifts.length) })),
+      h('div', { class: 'row between' }, chip(t[0], t[1]), h('span', { class: 'cap num', text: 'Выполнение плана: ' + pctS(a.perf) + '%' })),
+      h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Принятых заданий' }), h('div', { class: 'am num', text: String(a.shifts.length) })),
         h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Выполнено единиц' }), h('div', { class: 'am num', text: num(a.units) })),
-        h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Норматив за эти смены' }), h('div', { class: 'am num', text: num(a.norm) })),
-        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Выработка по тарифу', h('small', { class: 'num', text: 'средний тариф ' + rate(a.avgTariff) + ' ₽/ед.' })), h('div', { class: 'am num', text: money(a.tsum) })),
-        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Заработано', h('small', { class: 'num', text: money(a.tsum) + ' × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', 'data-testid': 'zone-earned', text: money(a.earned) }))),
-      need > 0 ? h('div', { class: 'tipbox warn' }, ico('info', 'sm'), h('span', { text: 'До нормы за период не хватает ' + num(need) + ' ед. ' + z.tip })) : h('div', { class: 'tipbox ok' }, ico('check', 'sm'), h('span', { text: 'Норматив выполнен. ' + z.tip })),
-      h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'По сменам (нажмите — детали смены)' }), list)),
+        h('div', { class: 'line' }, h('div', { class: 'nm', text: 'План за эти дни' }), h('div', { class: 'am num', text: num(a.norm) })),
+        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Объём услуг по тарифу', h('small', { class: 'num', text: 'средний тариф ' + rate(a.avgTariff) + ' ₽/ед.' })), h('div', { class: 'am num', text: money(a.tsum) })),
+        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Вознаграждение', h('small', { class: 'num', text: money(a.tsum) + ' × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', 'data-testid': 'zone-earned', text: money(a.earned) }))),
+      need > 0 ? h('div', { class: 'tipbox warn' }, ico('info', 'sm'), h('span', { text: 'До плана за период не хватает ' + num(need) + ' ед. ' + z.tip })) : h('div', { class: 'tipbox ok' }, ico('check', 'sm'), h('span', { text: 'План выполнен. ' + z.tip })),
+      h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'По дням (нажмите — детали задания)' }), list)),
       footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') });
     Array.prototype.forEach.call(list.children, function (row) { var sh = a.shifts.filter(function (x) { return x.date === row.getAttribute('data-date'); })[0]; row.classList.add('tap'); row.setAttribute('role', 'button'); row.tabIndex = 0;
       var go = function () { ctl.close(); setTimeout(function () { openShiftDetail(sh); }, 260); }; row.addEventListener('click', go); row.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } }); });
   }
   function hzBox(hz, tid) {   // HZ_UI_V2: один блок; итоговая строка — только если услуг несколько (иначе она повторяет сумму единственной услуги)
-    var items = hz.items || [], box = h('div', { class: 'card2box mt', 'data-testid': tid }, h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Часовые услуги (табель бригадира)', h('small', { class: 'num', text: hrsTxt(hz.hours) + ' · ' + dec(hz.nh, 2) + ' нормо-ч' })), items.length > 1 ? h('div', { class: 'am num', text: money(hz.tsum) }) : null));
+    var items = hz.items || [], box = h('div', { class: 'card2box mt', 'data-testid': tid }, h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Часовые услуги (реестр координатора)', h('small', { class: 'num', text: hrsTxt(hz.hours) + ' · ' + dec(hz.nh, 2) + ' нормо-ч' })), items.length > 1 ? h('div', { class: 'am num', text: money(hz.tsum) }) : null));
     items.forEach(function (it) { box.appendChild(h('div', { class: 'line', 'data-hz-item': '1' }, h('div', { class: 'nm' }, it.service, h('small', { class: 'num', text: hrsTxt(it.hours) + ' × ' + rateH(it.rate) + ' ₽/ч · вам ' + money(Math.round(it.tsum * M.SHARE)) })), h('div', { class: 'am num', text: money(it.tsum) }))); });
     return box;
   }
   function hourlyCard(a) {
-    return h('button', { class: 'card opcard', type: 'button', 'data-zone-card': 'HOURLY', 'aria-label': a.z.name + ': ' + hrsTxt(a.hours) + ', ' + dec(a.nh, 1) + ' нормо-часов, заработано ' + money(a.earned), onclick: function () { openHourlyDetail(a); } },
+    return h('button', { class: 'card opcard', type: 'button', 'data-zone-card': 'HOURLY', 'aria-label': a.z.name + ': ' + hrsTxt(a.hours) + ', ' + dec(a.nh, 1) + ' нормо-часов, вознаграждение ' + money(a.earned), onclick: function () { openHourlyDetail(a); } },
       h('div', { class: 'row between' }, h('b', { class: 'opn', text: a.z.name }), chip(dec(a.nh, 1) + ' нормо-ч', 'ok')),
       h('div', { class: 'opgrid' }, h('div', null, h('span', { text: 'Дней' }), h('b', { class: 'num', text: String(a.shifts.length) })), h('div', null, h('span', { text: 'Часов' }), h('b', { class: 'num', 'data-testid': 'hz-hours', text: hrsTxt(a.hours) })),
-        h('div', null, h('span', { text: 'Средний тариф' }), h('b', { class: 'num', text: rateH(a.avgTariff) + ' ₽/ч' })), h('div', null, h('span', { text: 'Заработано' }), h('b', { class: 'num', 'data-testid': 'hz-earned', text: money(a.earned) }))),
+        h('div', null, h('span', { text: 'Средний тариф' }), h('b', { class: 'num', text: rateH(a.avgTariff) + ' ₽/ч' })), h('div', null, h('span', { text: 'Вознаграждение' }), h('b', { class: 'num', 'data-testid': 'hz-earned', text: money(a.earned) }))),
       h('div', { class: 'gl num' }, h('span', { text: 'Вам за час в среднем ' + rate(a.avgTariff * M.SHARE) + ' ₽' }), h('span', { text: 'По дням ›' })));
   }
   function openHourlyDetail(a) {
@@ -1201,10 +1202,10 @@
         h('div', { class: 'd' }, dlong(s.date) + ', ' + dowOf(s.date).slice(0, 2).toLowerCase(), h('small', { class: 'num', text: hrsTxt(s.hz.hours) + ' · ' + dec(s.hz.nh, 2) + ' нормо-ч · ' + money(Math.round(s.hz.tsum * M.SHARE)) })), h('div', { class: 'pct', text: money(s.hz.tsum) })));
     });
     ctl = openSheet({ title: a.z.name, body: h('div', { class: 'gap16', 'data-testid': 'hz-detail' },
-      h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Часов по табелю' }), h('div', { class: 'am num', text: hrsTxt(a.hours) })),
+      h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Часов по реестру' }), h('div', { class: 'am num', text: hrsTxt(a.hours) })),
         h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Нормо-часы', h('small', { text: 'сумма по тарифу ÷ 830 ₽' })), h('div', { class: 'am num', text: dec(a.nh, 1) })),
         h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Сумма по тарифу', h('small', { class: 'num', text: 'средний тариф ' + rateH(a.avgTariff) + ' ₽/ч' })), h('div', { class: 'am num', text: money(a.tsum) })),
-        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Заработано', h('small', { class: 'num', text: money(a.tsum) + ' × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', 'data-testid': 'hz-detail-earned', text: money(a.earned) }))),
+        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Вознаграждение', h('small', { class: 'num', text: money(a.tsum) + ' × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', 'data-testid': 'hz-detail-earned', text: money(a.earned) }))),
       h('div', { class: 'tipbox' }, ico('info', 'sm'), h('span', { text: a.z.tip })),
       h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'По дням' }), list)),
       footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') });
@@ -1220,36 +1221,36 @@
       footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') }); return; }
     ctl = openSheet({ title: d.name, body: h('div', { class: 'gap16', 'data-testid': 'op-detail' },
       h('div', { class: 'cap', text: 'Участок ' + z.name + ' · вам за единицу ' + rate4(d.tariff * M.SHARE) + ' ₽' }),
-      h('div', { class: 'kv4' }, h('div', null, h('b', { class: 'num', text: rate(d.tariff) + ' ₽' }), h('span', { text: 'тариф за ед.' })), h('div', null, h('b', { class: 'num', text: d.normH > 0 ? String(d.normH) : '—' }), h('span', { text: 'ед. в час' })), h('div', null, h('b', { class: 'num', text: d.normH > 0 ? num(NORM_SHIFT_H * d.normH) : '—' }), h('span', { text: 'ед. за смену ' + NORM_SHIFT_H + ' ч' }))),
-      d.normH > 0 ? h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm' }, 'За 100% нормы за смену', h('small', { class: 'num', text: num(NORM_SHIFT_H * d.normH) + ' × ' + rate(d.tariff) + ' ₽ × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', 'data-testid': 'op-norm-pay', text: money(NORM_SHIFT_H * d.normH * d.tariff * M.SHARE) })),
-        h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Каждые +10 ед. выработки' }), h('div', { class: 'am num', text: '+' + money(10 * d.tariff * M.SHARE) }))) : h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Норматива по операции нет' }), h('div', { class: 'am num', text: 'оплата за единицу' })), h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Каждые +10 ед. выработки' }), h('div', { class: 'am num', text: '+' + money(10 * d.tariff * M.SHARE) }))),
-      h('div', { class: 'tipbox' }, ico('info', 'sm'), h('span', { text: 'Ваш факт считается по смене и участку (вкладка «Выработка»), а не по отдельной операции. Свой результат смотрите в разделе «Мой факт по участкам». ' + d.tip }))),
+      h('div', { class: 'kv4' }, h('div', null, h('b', { class: 'num', text: rate(d.tariff) + ' ₽' }), h('span', { text: 'тариф за ед.' })), h('div', null, h('b', { class: 'num', text: d.normH > 0 ? String(d.normH) : '—' }), h('span', { text: 'ед. в час' })), h('div', null, h('b', { class: 'num', text: d.normH > 0 ? num(NORM_SHIFT_H * d.normH) : '—' }), h('span', { text: 'ед. за задание ' + NORM_SHIFT_H + ' ч' }))),
+      d.normH > 0 ? h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm' }, 'За 100% плана за задание', h('small', { class: 'num', text: num(NORM_SHIFT_H * d.normH) + ' × ' + rate(d.tariff) + ' ₽ × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', 'data-testid': 'op-norm-pay', text: money(NORM_SHIFT_H * d.normH * d.tariff * M.SHARE) })),
+        h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Каждые +10 ед. объёма' }), h('div', { class: 'am num', text: '+' + money(10 * d.tariff * M.SHARE) }))) : h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Плана по операции нет' }), h('div', { class: 'am num', text: 'оплата за единицу' })), h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Каждые +10 ед. объёма' }), h('div', { class: 'am num', text: '+' + money(10 * d.tariff * M.SHARE) }))),
+      h('div', { class: 'tipbox' }, ico('info', 'sm'), h('span', { text: 'Ваш факт считается по заданию и участку, а не по отдельной операции. Свой результат смотрите в разделе «Мой факт по участкам». ' + d.tip }))),
       footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') });
   }
   function openShiftDetail(s) {
     var ctl, p = perfOf(s), t = opTone(p), z = ZI[s.zone], need = Math.max(0, Math.ceil(s.norm - s.units)), earned = Math.round(s.tsum * M.SHARE);
     if (s.zone === 'HOURLY') { ctl = openSheet({ title: dowOf(s.date) + ', ' + dlong(s.date), body: h('div', { class: 'gap16', 'data-testid': 'shift-detail-sheet' },   // день только с часовыми услугами
       h('div', { class: 'row between' }, chip(s.type === 'day' ? 'День' : 'Ночь', s.type === 'day' ? 'day' : 'night', s.type === 'day' ? 'sun' : 'moon'), chip(t[0] + ' · ' + pctS(p) + '%', t[1])),
-      h('div', { class: 'cap', text: z.name + ' · по табелю' }),
-      h('div', { class: 'stats3' }, h('div', { class: 'stat' }, h('b', { class: 'num', text: hrsTxt(s.hz.hours) }), h('span', { text: 'часов' })), h('div', { class: 'stat' }, h('b', { class: 'num', text: dec(s.hz.nh, 2) }), h('span', { text: 'нормо-ч' })), h('div', { class: 'stat' }, h('b', { class: 'num', text: money(earned) }), h('span', { text: 'начислено' }))),
+      h('div', { class: 'cap', text: z.name + ' · по реестру' }),
+      h('div', { class: 'stats3' }, h('div', { class: 'stat' }, h('b', { class: 'num', text: hrsTxt(s.hz.hours) }), h('span', { text: 'часов' })), h('div', { class: 'stat' }, h('b', { class: 'num', text: dec(s.hz.nh, 2) }), h('span', { text: 'нормо-ч' })), h('div', { class: 'stat' }, h('b', { class: 'num', text: money(earned) }), h('span', { text: 'вознаграждение' }))),
       hzBox(s.hz, 'shift-hourly'),
-      h('p', { class: 'cap num', text: 'Начислено = ' + money(s.tsum) + ' × ' + Math.round(M.SHARE * 100) + '% = ' + money(earned) + '. Производительность дня = ' + dec(s.hz.nh, 2) + ' нормо-ч ÷ ' + NORM_SHIFT_H + ' ч.' })),
+      h('p', { class: 'cap num', text: 'Вознаграждение = ' + money(s.tsum) + ' × ' + Math.round(M.SHARE * 100) + '% = ' + money(earned) + '. Объём к плану за день = ' + dec(s.hz.nh, 2) + ' нормо-ч ÷ ' + NORM_SHIFT_H + ' ч.' })),
       footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') }); return; }
     ctl = openSheet({ title: dowOf(s.date) + ', ' + dlong(s.date), body: h('div', { class: 'gap16', 'data-testid': 'shift-detail-sheet' },
       h('div', { class: 'row between' }, chip(shiftName(s), sType(s) === 'day' ? 'day' : 'night', sType(s) === 'day' ? 'sun' : 'moon'), chip(t[0] + ' · ' + pctS(p) + '%', t[1])),
-      h('div', { class: 'cap', text: 'Участок ' + z.name + (s.counted ? ' · смена засчитана' : ' · смена не засчитана') }),
-      h('div', { class: 'stats3' }, h('div', { class: 'stat' }, h('b', { class: 'num', text: num(s.units) }), h('span', { text: 'единиц' })), h('div', { class: 'stat' }, h('b', { class: 'num ' + pctClass(p), text: pctS(p) + '%' }), h('span', { text: 'к нормативу' })), h('div', { class: 'stat' }, h('b', { class: 'num', text: money(earned) }), h('span', { text: 'начислено' }))),
+      h('div', { class: 'cap', text: 'Участок ' + z.name + (s.counted ? ' · задание принято' : ' · задание не принято') }),
+      h('div', { class: 'stats3' }, h('div', { class: 'stat' }, h('b', { class: 'num', text: num(s.units) }), h('span', { text: 'единиц' })), h('div', { class: 'stat' }, h('b', { class: 'num ' + pctClass(p), text: pctS(p) + '%' }), h('span', { text: 'к плану' })), h('div', { class: 'stat' }, h('b', { class: 'num', text: money(earned) }), h('span', { text: 'вознаграждение' }))),
       h('div', { class: 'card2box', 'data-testid': 'shift-lines' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Выполнено единиц' }), h('div', { class: 'am num', text: num(s.units) })),
-        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Норматив смены', h('small', { text: 'факт ÷ производительность' })), h('div', { class: 'am num', text: num(s.norm) })),
-        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Выработка по тарифу', h('small', { class: 'num', text: 'средний тариф ' + rate(s.units ? pieceT(s) / s.units : 0) + ' ₽/ед.' })), h('div', { class: 'am num', text: money(pieceT(s)) })),
+        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'План на задание', h('small', { text: 'факт ÷ объём к плану' })), h('div', { class: 'am num', text: num(s.norm) })),
+        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Объём услуг по тарифу', h('small', { class: 'num', text: 'средний тариф ' + rate(s.units ? pieceT(s) / s.units : 0) + ' ₽/ед.' })), h('div', { class: 'am num', text: money(pieceT(s)) })),
         hzOf(s) ? h('div', { class: 'line', 'data-testid': 'shift-hz-line' }, h('div', { class: 'nm' }, '+ часовые услуги', h('small', { class: 'num', text: hrsTxt(s.hz.hours) + ' · подробно ниже' })), h('div', { class: 'am num', text: money(s.hz.tsum) })) : null,
-        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Начислено за смену', h('small', { class: 'num', text: money(s.tsum) + ' × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', text: money(earned) })),
-        hasGap(s) ? h('div', { class: 'line' }, h('div', { class: 'nm' }, 'При 100% нормы', h('small', { class: 'num', text: 'по тарифу ' + money(Math.max(s.tfull, s.tsum)) + ' × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', 'data-testid': 'shift-full', text: money(earned + gapPay(s)) })) : null,
-        hasGap(s) ? h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Недобор за смену', h('small', { text: 'сколько не хватило до полной оплаты по норме' })), h('div', { class: 'am num', 'data-testid': 'shift-gap', text: gapPay(s) ? minus(gapPay(s)) : money(0) })) : null),
+        h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Вознаграждение за задание', h('small', { class: 'num', text: money(s.tsum) + ' × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', text: money(earned) })),
+        hasGap(s) ? h('div', { class: 'line' }, h('div', { class: 'nm' }, 'При 100% плана', h('small', { class: 'num', text: 'по тарифу ' + money(Math.max(s.tfull, s.tsum)) + ' × ' + Math.round(M.SHARE * 100) + '%' })), h('div', { class: 'am num', 'data-testid': 'shift-full', text: money(earned + gapPay(s)) })) : null,
+        hasGap(s) ? h('div', { class: 'line' }, h('div', { class: 'nm' }, 'Отставание за задание', h('small', { text: 'сколько не хватило до вознаграждения по плану' })), h('div', { class: 'am num', 'data-testid': 'shift-gap', text: gapPay(s) ? minus(gapPay(s)) : money(0) })) : null),
       partsBox(s),
       hzOf(s) ? hzBox(s.hz, 'shift-hourly') : null,
-      need > 0 ? h('div', { class: 'tipbox warn' }, ico('info', 'sm'), h('span', { text: 'До нормы смены не хватило ' + num(need) + ' ед. ' + z.tip })) : h('div', { class: 'tipbox ok' }, ico('check', 'sm'), h('span', { text: 'Норматив смены выполнен. ' + z.tip })),
-      h('p', { class: 'cap', text: 'Данные смены — из вкладки «Выработка»: одна строка на смену и участок. Разбивка по отдельным операциям в таблице не ведётся.' })),
+      need > 0 ? h('div', { class: 'tipbox warn' }, ico('info', 'sm'), h('span', { text: 'До плана не хватило ' + num(need) + ' ед. ' + z.tip })) : h('div', { class: 'tipbox ok' }, ico('check', 'sm'), h('span', { text: 'План на задание выполнен. ' + z.tip })),
+      h('p', { class: 'cap', text: 'Данные задания — из реестра объёма услуг: одна строка на задание и участок. Разбивка по отдельным операциям в таблице не ведётся.' })),
       footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') });
   }
 
@@ -1361,7 +1362,7 @@
     return h('section', { class: 'stack', 'aria-labelledby': 'more-h', 'data-testid': 'more' }, h('h2', { class: 'h3', id: 'more-h', text: 'Ещё' }),
       h('div', { class: 'tiles' },
         tile('promo', 'gift', 'Акции и бонусы', act + ' ' + plural(act, ['активна', 'активны', 'активны']), function () { location.hash = '#/promo'; }),
-        tile('jobs', 'briefcase', 'Вакансии в компании', jobs + ' ' + plural(jobs, ['открыта', 'открыты', 'открыто']), function () { location.hash = '#/jobs'; }),
+        tile('jobs', 'briefcase', 'Новые задания', jobs + ' ' + plural(jobs, ['открыта', 'открыты', 'открыто']), function () { location.hash = '#/jobs'; }),
         tile('fb', 'paper', 'Анонимная обратная связь', 'без имени и телефона', openFeedback)));
   }
   function carLink() {   // переход в учёт такси на вкладку «Мой авто» (та же вкладка браузера; в демо taxi.html тоже в демо-режиме)
@@ -1394,7 +1395,7 @@
     var items = all.filter(function (p) { return f === 'all' || promoState(p).k === f; });
     if (!items.length) v.appendChild(emptyState('gift', 'Акций нет', 'В этой категории ничего нет.'));
     else { var l = h('div', { class: 'stack', 'data-testid': 'promo-list' }); items.forEach(function (p) { l.appendChild(promoCard(p)); }); v.appendChild(l); }
-    v.appendChild(h('p', { class: 'note-s', text: 'Акции и бонусы ведёт администратор. Выплата — в «Ведомости» за период, в котором выполнены условия.' }));
+    v.appendChild(h('p', { class: 'note-s', text: 'Акции и бонусы ведёт администратор. Выплата — в реестре выплат за период, в котором выполнены условия.' }));
     return v;
   }
   function openPromo(p) {
@@ -1405,7 +1406,7 @@
       h('div', { class: 'pbonus big num', text: p.bonus }), h('p', { text: p.desc }),
       h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Срок действия' }), h('div', { class: 'am num', text: dmy(p.from) + ' – ' + dmy(p.to) }))),
       h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'Условия' }), h('ul', { class: 'terms', 'data-testid': 'promo-terms' }, p.terms.map(function (t) { return h('li', { text: t }); }))),
-      st.k === 'ended' ? h('p', { class: 'cap', text: 'Акция завершена — новые начисления по ней не производятся.' }) : st.k === 'soon' ? h('p', { class: 'cap', text: 'Акция ещё не началась: смены до ' + dmy(p.from) + ' не учитываются.' }) : h('p', { class: 'cap', text: 'Если считаете, что условия выполнены, а бонуса нет, напишите бригадиру или администратору.' })),
+      st.k === 'ended' ? h('p', { class: 'cap', text: 'Акция завершена — новые начисления по ней не производятся.' }) : st.k === 'soon' ? h('p', { class: 'cap', text: 'Акция ещё не началась: задания до ' + dmy(p.from) + ' не учитываются.' }) : h('p', { class: 'cap', text: 'Если считаете, что условия выполнены, а бонуса нет, напишите координатору или администратору.' })),
       footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') });
   }
 
@@ -1423,10 +1424,10 @@
       car.el, h('button', { class: 'pc-main', type: 'button', 'aria-label': lbl }, inner));
   }
   function viewJobs() {
-    var v = h('main', { class: 'view stack', id: 'main' }); v.appendChild(backTop('Вакансии в компании', 'Внутренние вакансии — можно откликнуться'));
+    var v = h('main', { class: 'view stack', id: 'main' }); v.appendChild(backTop('Новые задания', 'Можно откликнуться'));
     var jobs = (S.data.jobs || M.jobs).slice().sort(function (x, y) { return (x.status === 'open' ? 0 : 1) - (y.status === 'open' ? 0 : 1); });
-    var l = h('div', { class: 'stack', 'data-testid': 'job-list' }); jobs.forEach(function (j) { l.appendChild(jobCard(j)); }); if (jobs.length) v.appendChild(l); else v.appendChild(emptyState('briefcase', 'Вакансий пока нет', 'Когда появятся внутренние вакансии, они будут здесь.'));
-    v.appendChild(h('p', { class: 'note-s', text: 'Вакансии ведёт администратор. Отклик увидит только он и HR — бригадир по вашему участку отклик не получает.' }));
+    var l = h('div', { class: 'stack', 'data-testid': 'job-list' }); jobs.forEach(function (j) { l.appendChild(jobCard(j)); }); if (jobs.length) v.appendChild(l); else v.appendChild(emptyState('briefcase', 'Предложений пока нет', 'Когда появятся предложения заданий, они будут здесь.'));
+    v.appendChild(h('p', { class: 'note-s', text: 'Предложения ведёт администратор. Отклик увидит только он — координатор по вашему участку отклик не получает.' }));
     return v;
   }
   function openJob(j) {
@@ -1437,9 +1438,9 @@
       : h('div', { class: 'stack' }, h('button', { class: 'btn', type: 'button', 'data-testid': 'job-apply', onclick: function () { ctl.close(true); openApply(j); } }, ico('send', 'sm'), 'Откликнуться'), h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть'));
     ctl = openSheet({ title: j.title, body: h('div', { class: 'gap16', 'data-testid': 'job-detail' },
       ph.length ? carousel(ph, { label: j.title, alt: j.title, onOpen: function (i) { openLightbox(ph, i, j.title); } }).el : null,
-      closed ? h('div', { class: 'tipbox' }, ico('info', 'sm'), h('span', { text: 'Вакансия закрыта — отклики не принимаются.' })) : null,
+      closed ? h('div', { class: 'tipbox' }, ico('info', 'sm'), h('span', { text: 'Предложение закрыто — отклики не принимаются.' })) : null,
       ap ? h('div', { class: 'tipbox ok', 'data-testid': 'job-applied' }, ico('check', 'sm'), h('span', { text: 'Вы откликнулись ' + dmy(ap.sentAt) + '. Статус: ' + APP_ST[ap.status][0] + '.' + (ap.comment ? ' Ваш комментарий: «' + ap.comment + '».' : '') })) : null,
-      h('div', { class: 'card2box' }, kv('Участок', j.zone), kv('График', j.schedule), kv('Оплата', j.pay)),
+      h('div', { class: 'card2box' }, kv('Участок', j.zone), kv('Время задания', j.schedule), kv('Оплата', j.pay)),
       h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'Требования' }), h('ul', { class: 'terms', 'data-testid': 'job-reqs' }, j.reqs.map(function (t) { return h('li', { text: t }); }))),
       h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'Кому написать' }), h('div', { class: 'casebox', 'data-testid': 'job-contact' }, h('b', { text: j.contact.name }), h('span', { text: j.contact.role }), h('span', { class: 'num', text: j.contact.how })))),
       footer: foot });
@@ -1453,7 +1454,7 @@
     send.addEventListener('click', function () {
       if (sending || !requireOnline()) return; sending = true; send.disabled = true; clear(send); send.appendChild(h('span', { class: 'spinner' })); send.appendChild(document.createTextNode(' Отправляем…'));
       delay(LAT + 300).then(function () { return backend.applyJob(j.id, text.value); }).then(function (r) {
-        if (!r.ok) { sending = false; send.disabled = false; clear(send); send.appendChild(ico('send', 'sm')); send.appendChild(document.createTextNode('Отправить отклик')); toast(r.error === 'already' ? 'Вы уже откликались на эту вакансию' : r.error === 'closed' ? 'Вакансия закрыта' : r.error === 'rate_limit' ? 'Не отправлено: слишком много откликов за час, подождите' : netMsg(r.error) ? 'Не отправлено: ' + netMsg(r.error) : 'Не отправлено (' + r.error + ')', 'bad'); return; }
+        if (!r.ok) { sending = false; send.disabled = false; clear(send); send.appendChild(ico('send', 'sm')); send.appendChild(document.createTextNode('Отправить отклик')); toast(r.error === 'already' ? 'Вы уже откликались на это предложение' : r.error === 'closed' ? 'Предложение закрыто' : r.error === 'rate_limit' ? 'Не отправлено: слишком много откликов за час, подождите' : netMsg(r.error) ? 'Не отправлено: ' + netMsg(r.error) : 'Не отправлено (' + r.error + ')', 'bad'); return; }
         ctl.close(true); toast('Отклик отправлен. Статус — «Отправлен»'); refresh();
       });
     });
@@ -1461,7 +1462,7 @@
       h('div', { class: 'card2box' }, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Кто откликается' }), h('div', { class: 'am', text: u.name })),
         h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Телефон для связи' }), h('div', { class: 'am num', 'data-testid': 'ap-phone', text: maskPhone(u.phone) })),
         h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Текущий участок' }), h('div', { class: 'am', text: u.site }))),
-      h('p', { class: 'cap', id: 'ap-h', text: 'Контакт берётся из профиля — заполнять ничего не нужно. Отклик увидит администратор/HR (вкладка «Отклики на вакансии»).' }),
+      h('p', { class: 'cap', id: 'ap-h', text: 'Контакт берётся из профиля — заполнять ничего не нужно. Отклик увидит администратор.' }),
       h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('label', { for: 'ap-text', text: 'Комментарий' }), h('span', { class: 'tag opt', text: 'по желанию' })), text, h('div', { class: 'row between' }, h('span', { class: 'help', text: 'Расскажите коротко, почему вам подходит.' }), cnt))),
       footer: h('div', { class: 'stack' }, send, h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Отмена')) });
   }
@@ -1486,7 +1487,7 @@
     var seg = h('div', { class: 'seg tp', role: 'radiogroup', 'aria-label': 'Тема', 'data-testid': 'fb-topic' });
     var text = h('textarea', { class: 'inp', id: 'fb-text', 'data-testid': 'fb-text', rows: '5', maxlength: String(CFG.anonMax), placeholder: 'Опишите ситуацию или идею. Без ФИО — вас не спрашивают, кто вы.', 'aria-describedby': 'fb-th' });
     var count = h('span', { class: 'help', id: 'fb-th', 'data-testid': 'fb-count' });
-    var slot = fileSlot({ id: 'fb', title: 'Фото (по желанию)', alt: 'Фото', max: 1, gallery: true, camLabel: 'Снять на камеру', galLabel: 'Из галереи', help: 'По желанию. Фото пережимается на телефоне — данные о месте и времени съёмки удаляются. Не снимайте лица и бейджи.' });
+    var slot = fileSlot({ id: 'fb', title: 'Фото (по желанию)', alt: 'Фото', max: 1, gallery: true, camLabel: 'Снять на камеру', galLabel: 'Из галереи', help: 'По желанию. Фото пережимается на телефоне — данные о месте и времени съёмки удаляются. Не снимайте лица и пропуска.' });
     var capQ = h('span', { 'data-testid': 'fb-q', text: '…' });
     var ans = h('input', { class: 'inp', type: 'text', inputmode: 'numeric', autocomplete: 'off', id: 'fb-ans', 'data-testid': 'fb-ans', maxlength: '3', 'aria-label': 'Ответ на проверку' });
     var hp = h('input', { type: 'text', name: 'website', class: 'sr-only', tabindex: '-1', autocomplete: 'off', 'aria-hidden': 'true', 'data-testid': 'fb-hp' });
@@ -1520,11 +1521,11 @@
     });
     var anonBox = h('section', { class: 'anonbox', 'data-testid': 'fb-how', 'aria-labelledby': 'fb-how-h' }, h('div', { class: 't', id: 'fb-how-h' }, ico('lock', 'sm'), 'Как обеспечена анонимность'),
       h('ul', { class: 'terms' },
-        h('li', { text: 'Сообщение уходит отдельным запросом без входа: в него не попадают ваш телефон, ФИО, табельный номер и токен сессии.' }),
+        h('li', { text: 'Сообщение уходит отдельным запросом без входа: в него не попадают ваш телефон, ФИО, ID исполнителя и токен сессии.' }),
         h('li', { text: 'Сервер не знает, кто вы, и не записывает IP-адрес и устройство. Хранятся тема, текст, фото и только дата, без времени.' }),
         h('li', { text: 'От спама защищает простая проверка, пауза перед отправкой и общий лимит в час — всё это не привязано к человеку. Счётчик «не больше ' + CFG.anonDayLimit + ' в день» хранится только на вашем телефоне.' }),
         h('li', { text: 'Фото пережимается на телефоне: данные о месте и времени съёмки удаляются.' }),
-        h('li', { text: 'Честно: если в тексте есть детали, которые знаете только вы (смена, дата, фамилии), автора можно догадаться. Ответа вы не получите — связи с вами нет.' })));
+        h('li', { text: 'Честно: если в тексте есть детали, которые знаете только вы (задание, дата, фамилии), автора можно догадаться. Ответа вы не получите — связи с вами нет.' })));
     function showThanks() {
       var q = anonQuota(), left = Math.max(0, CFG.anonDayLimit - q.n);
       ctl.body.replaceChildren(h('div', { class: 'thanks', 'data-testid': 'fb-thanks' }, h('div', { class: 'eic ok' }, ico('check', 'lg')), h('b', { text: 'Спасибо, отправлено' }),
@@ -1547,7 +1548,7 @@
   }
 
   /* ---------- вычеты ---------- */
-  function needText() { return 'Обязательно: фото и объяснительная'; }
+  function needText() { return 'Обязательно: фото и пояснение'; }
   function caseCard(c) {
     var k = KIND[c.kind], el = h('article', { class: 'card case k-' + c.kind, 'data-case': c.id, 'aria-label': k.n + ', ' + c.title + ', ' + money(c.amount) });
     el.appendChild(h('div', { class: 'hd' }, h('div', { class: 'kico' }, ico(k.ic)), h('div', { class: 'grow' }, h('div', { class: 'tt', text: c.title }), h('div', { class: 'meta', text: k.n + ' · ' + dmy(c.date) })), h('div', { class: 'amt num', text: minus(c.amount) })));
@@ -1558,7 +1559,7 @@
       if (c.expl.status === 'waiting') {
         if (ret) ft.appendChild(retBox(c.expl.returnedReason, 'expl-returned-' + c.id));
         ft.appendChild(h('div', { class: 'need' }, ico('info', 'sm'), h('span', { text: needText(c) })));
-        ft.appendChild(h('button', { class: 'btn', type: 'button', 'data-testid': 'explain-' + c.id, onclick: function () { openExplain(c); } }, ico('camera', 'sm'), ret ? 'Исправить и отправить снова' : 'Объяснить / приложить фото'));
+        ft.appendChild(h('button', { class: 'btn', type: 'button', 'data-testid': 'explain-' + c.id, onclick: function () { openExplain(c); } }, ico('camera', 'sm'), ret ? 'Исправить и отправить снова' : 'Пояснить / приложить фото'));
       } else ft.appendChild(h('button', { class: 'btn ghost', type: 'button', 'data-testid': 'view-' + c.id, onclick: function () { openExplView(c); } }, 'Посмотреть отправленное'));
       el.appendChild(ft);
     }
@@ -1567,24 +1568,24 @@
   }
   function viewDed() {
     var c = S.calc[S.periodId], v = h('main', { class: 'view stack', id: 'main' });
-    v.appendChild(pageTop('Вычеты', 'Брак, ошибки, авансы, проживание'));
+    v.appendChild(pageTop('Зачёты', 'Брак, ошибки, предоплаты, проживание'));
     v.appendChild(h('div', null, periodBtn()));
     v.appendChild(reportBtn('report-ded'));
     v.appendChild(noteBtn('note-ded')); noteList(v, 'ded');   // NOTE_V1
     var incs = (S.data.incidents || []).slice().sort(function (a, b) { return a.sentAt < b.sentAt ? 1 : -1; });
     if (incs.length && S.dedFilter === 'all') { var isec = h('section', { 'aria-labelledby': 'inc-h', class: 'stack' }, h('h2', { class: 'h3', id: 'inc-h', text: 'Мои сообщения о происшествиях (' + incs.length + ')' })); var il = h('div', { class: 'stack', 'data-testid': 'incident-list' }); incs.forEach(function (i) { il.appendChild(incCard(i)); }); isec.appendChild(il); v.appendChild(isec); }
     var all = c.cases.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
-    v.appendChild(h('div', { class: 'card' }, h('div', { class: 'sumline' }, h('span', { text: 'Всего вычетов в периоде' }), h('b', { class: 'num', 'data-testid': 'ded-total', text: minus(c.own) })),
-      c.carryOut ? h('p', { class: 'cap mt', text: 'Из начисленного удерживается не больше 50% — ' + money(c.carryOut) + ' переносится на следующий период.' }) : null));
+    v.appendChild(h('div', { class: 'card' }, h('div', { class: 'sumline' }, h('span', { text: 'Всего зачётов в периоде' }), h('b', { class: 'num', 'data-testid': 'ded-total', text: minus(c.own) })),
+      c.carryOut ? h('p', { class: 'cap mt', text: 'Из вознаграждения зачитывается не больше 50% — ' + money(c.carryOut) + ' переносится на следующий период.' }) : null));
     var f = h('div', { class: 'filters', role: 'group', 'aria-label': 'Фильтр по виду' });
-    var LBL = { all: 'Все', brak: 'Брак', error: 'Ошибки', advance: 'Авансы', housing: 'Проживание', other: 'Прочее' };
+    var LBL = { all: 'Все', brak: 'Брак', error: 'Ошибки', advance: 'Предоплаты', housing: 'Проживание', other: 'Прочее' };
     ['all'].concat(KINDS).forEach(function (k) {
       var n = k === 'all' ? all.length : all.filter(function (q) { return q.kind === k; }).length; if (k !== 'all' && !n) return;
       f.appendChild(h('button', { class: 'fbtn', type: 'button', 'aria-pressed': S.dedFilter === k ? 'true' : 'false', 'data-filter': k, onclick: function () { S.dedFilter = k; render(); } }, LBL[k], h('em', { text: String(n) })));
     });
     v.appendChild(f);
     var items = all.filter(function (q) { return S.dedFilter === 'all' || q.kind === S.dedFilter; });
-    if (!items.length) v.appendChild(emptyState('ded', all.length ? 'Ничего не найдено' : 'Вычетов нет', all.length ? 'В этой категории за период записей нет.' : 'За выбранный период удержаний не было — так держать!'));
+    if (!items.length) v.appendChild(emptyState('ded', all.length ? 'Ничего не найдено' : 'Зачётов нет', all.length ? 'В этой категории за период записей нет.' : 'За выбранный период зачётов не было — так держать!'));
     else { var lst = h('div', { class: 'stack', 'data-testid': 'case-list' }); items.forEach(function (q) { lst.appendChild(caseCard(q)); }); v.appendChild(lst); }
     return v;
   }
@@ -1671,27 +1672,27 @@
   }
 
   /* ---------- NOTE_V1: «Написать объяснительную» без брака/порчи (отстранение, опоздание…) — только запись, на выплаты не влияет ---------- */
-  var NOTE_REASONS = { suspend: 'Отстранение от работы', late: 'Опоздание', absent: 'Неявка', early: 'Ранний уход', other: 'Другое' };
+  var NOTE_REASONS = { suspend: 'Не допущен на объект', late: 'Задержка начала', absent: 'Не смог выйти на задание', early: 'Досрочное завершение', other: 'Другое' };
   var NOTE_MIN = 30, NOTE_DAYS = 14;
   var NOTE_ST = { sent: ['На проверке', 'warn'], accepted: ['Принято', 'ok'], returned: ['Возвращено', 'bad'] };
   function noteBtn(id) {
     return h('button', { class: 'report', type: 'button', 'data-testid': id, onclick: function () { openNote(null); } },
-      h('span', { class: 'ric' }, ico('file')), h('span', { class: 'rt' }, h('b', { text: 'Написать объяснительную' }), h('small', { text: 'Если отстранили от работы, опоздали и т.п. — без брака и удержаний' })), ico('cr', 'sm'));
+      h('span', { class: 'ric' }, ico('file')), h('span', { class: 'rt' }, h('b', { text: 'Сообщить о сложностях на объекте' }), h('small', { text: 'Не пустили на объект, задержка транспорта и т.п. — без брака и удержаний' })), ico('cr', 'sm'));
   }
   function noteList(v, where) {
     var all = S.data.notes || [], ns = where === 'home' ? all.slice(0, 3) : all.slice(); if (!ns.length) return;
-    var sec = h('section', { class: 'card', 'data-testid': 'note-list-' + where, 'aria-labelledby': 'note-h-' + where }, h('div', { class: 'card-h' }, h('h2', { id: 'note-h-' + where, text: 'Мои объяснительные (' + all.length + ')' })));
+    var sec = h('section', { class: 'card', 'data-testid': 'note-list-' + where, 'aria-labelledby': 'note-h-' + where }, h('div', { class: 'card-h' }, h('h2', { id: 'note-h-' + where, text: 'Мои сообщения о сложностях (' + all.length + ')' })));
     ns.forEach(function (n) {
       var st = NOTE_ST[n.status] || NOTE_ST.sent;
       sec.appendChild(h('div', { class: 'stack note-it', 'data-testid': 'note-item' },
-        h('div', { class: 'row between' }, h('b', { text: dmy(n.date) + ' · ' + (n.reasonText || NOTE_REASONS[n.reason] || '') }), chip(st[0], st[1])),
+        h('div', { class: 'row between' }, h('b', { text: dmy(n.date) + ' · ' + ((n.reason !== 'other' && NOTE_REASONS[n.reason]) || n.reasonText || NOTE_REASONS[n.reason] || '') }), chip(st[0], st[1])),
         where === 'ded' ? h('p', { class: 'help', text: n.text.length > 160 ? n.text.slice(0, 160) + '…' : n.text }) : null,
         n.answer ? h('p', { class: 'help', text: 'Комментарий: ' + n.answer }) : null,
         n.status === 'returned' ? h('button', { class: 'btn', type: 'button', 'data-testid': 'note-resend', onclick: function () { openNote(n); } }, ico('send', 'sm'), 'Исправить и отправить снова') : null));
     });
     v.appendChild(sec);
   }
-  var FM_NOTE_DEMO = [{ id: 'N_demo1', created: '2026-10-18 10:40', date: '2026-10-18', name: 'Демо Пётр Сергеевич', reason: 'Отстранение от работы', text: 'Отстранили в 10:30: не было пропуска на складе, привёз к 13:00, смену уже закрыли.', photos: 0, status: 'sent', statusText: 'Отправлено', answer: '', by: '' }];
+  var FM_NOTE_DEMO = [{ id: 'N_demo1', created: '2026-10-18 10:40', date: '2026-10-18', name: 'Демо Пётр Сергеевич', reason: 'Не допущен на объект', text: 'Не допустили на объект в 10:30: не было пропуска, привёз к 13:00, задание уже закрыли.', photos: 0, status: 'sent', statusText: 'Отправлено', answer: '', by: '' }];
   function fmNotesCard(v, f) {   // NOTE_V1
     var list = f.notes || (LIVE ? [] : FM_NOTE_DEMO); f.notes = list; if (!list.length) return;
     var wait = list.filter(function (x) { return x.status === 'sent'; }).length;
@@ -1728,7 +1729,7 @@
     var date = h('input', { class: 'inp', type: 'date', id: 'note-date', 'data-testid': 'note-date', value: dr.date && dr.date >= minD && dr.date <= today ? dr.date : today, min: minD, max: today });
     var sel = h('select', { class: 'inp', id: 'note-reason', 'data-testid': 'note-reason' }, h('option', { value: '', text: 'Выберите причину' }));
     Object.keys(NOTE_REASONS).forEach(function (k) { var o = h('option', { value: k, text: NOTE_REASONS[k] }); if (dr.reason === k) o.selected = true; sel.appendChild(o); });
-    var ta = h('textarea', { class: 'inp', id: 'note-text', 'data-testid': 'note-text', rows: '6', maxlength: '1000', placeholder: 'Что произошло, когда и почему. Например: «Отстранили в 10:30, потому что…»' }); ta.value = dr.text || '';
+    var ta = h('textarea', { class: 'inp', id: 'note-text', 'data-testid': 'note-text', rows: '6', maxlength: '1000', placeholder: 'Что произошло, когда и почему. Например: «Не допустили на объект в 10:30, потому что…»' }); ta.value = dr.text || '';
     var count = h('span', { 'data-testid': 'note-count' }), grid = h('div', { class: 'photos', role: 'list', 'aria-label': 'Добавленные фото' });
     var sendBtn = h('button', { class: 'btn', type: 'button', 'data-testid': 'note-send', disabled: true }), why = h('p', { class: 'note-s', role: 'status', 'data-testid': 'note-why' });
     function sendLabel() { clear(sendBtn); sendBtn.appendChild(ico('send', 'sm')); sendBtn.appendChild(document.createTextNode(prev ? 'Отправить снова' : 'Отправить')); }
@@ -1742,7 +1743,7 @@
       var t = ta.value.trim().length, okT = t >= NOTE_MIN, okR = !!NOTE_REASONS[sel.value], okD = !!date.value && date.value <= today && date.value >= minD, busy = photos.some(function (p) { return p.busy; });
       count.textContent = okT ? t + ' симв. ✓' : t + ' из ' + NOTE_MIN + ' симв. минимум';
       sendBtn.disabled = !(okT && okR && okD) || busy || sending;
-      var miss = []; if (!okD) miss.push('дата — не позже сегодня и не раньше ' + dmy(minD)); if (!okR) miss.push('выберите причину'); if (!okT) miss.push('напишите объяснительную (ещё ' + (NOTE_MIN - t) + ' симв.)');
+      var miss = []; if (!okD) miss.push('дата — не позже сегодня и не раньше ' + dmy(minD)); if (!okR) miss.push('выберите причину'); if (!okT) miss.push('напишите пояснение (ещё ' + (NOTE_MIN - t) + ' симв.)');
       why.textContent = busy ? 'Обрабатываем фото…' : miss.length ? 'Чтобы отправить: ' + miss.join(', ') + '.' : 'Всё готово — можно отправлять.';
       btnCam.disabled = btnGal.disabled = photos.length >= CFG.maxPhotos;
     }
@@ -1769,29 +1770,29 @@
     sendBtn.addEventListener('click', function () {
       if (sendBtn.disabled || !requireOnline()) return; sending = true; sendBtn.disabled = true; clear(sendBtn); sendBtn.appendChild(h('span', { class: 'spinner' })); sendBtn.appendChild(document.createTextNode(' Отправляем…'));
       delay(LAT + 200).then(function () { return backend.submitNote({ id: prev ? prev.id : '', date: date.value, reason: sel.value, text: ta.value, photos: photos.filter(function (p) { return !p.busy; }) }); }).then(function (r) {
-        if (!r.ok) { sending = false; sendLabel(); update(); toast('Не отправлено: ' + ({ text_short: 'объяснительная короче ' + NOTE_MIN + ' символов', future_date: 'дата в будущем', old_date: 'дата старше ' + NOTE_DAYS + ' дней', bad_date: 'неверная дата', type: 'выберите причину', already: 'уже отправлено', rate_limit: 'слишком много отправок за час', bad_file: 'файл не подошёл (нужны фото JPG/PNG)', too_big: 'файл слишком большой', too_many: 'слишком много фото' }[r.error] || netMsg(r.error) || 'ошибка'), 'bad'); return; }
+        if (!r.ok) { sending = false; sendLabel(); update(); toast('Не отправлено: ' + ({ text_short: 'пояснение короче ' + NOTE_MIN + ' символов', future_date: 'дата в будущем', old_date: 'дата старше ' + NOTE_DAYS + ' дней', bad_date: 'неверная дата', type: 'выберите причину', already: 'уже отправлено', rate_limit: 'слишком много отправок за час', bad_file: 'файл не подошёл (нужны фото JPG/PNG)', too_big: 'файл слишком большой', too_many: 'слишком много фото' }[r.error] || netMsg(r.error) || 'ошибка'), 'bad'); return; }
         if (!prev) store('pr.ndraft', {});
         photos.forEach(function (p) { if (p.url) URL.revokeObjectURL(p.url); });
-        ctl.close(true); toast('Объяснительная отправлена администратору'); refresh();
+        ctl.close(true); toast('Пояснение отправлено администратору'); refresh();
       }, function () { sending = false; sendLabel(); update(); toast('Не отправлено: нет связи с сервером, повторите', 'bad'); });
     });
     var body = h('div', null,
       prev && prev.answer ? retBox(prev.answer, 'note-returned') : null,
-      h('div', { class: 'reqbanner', 'data-testid': 'note-banner' }, ico('info'), h('div', null, h('b', { text: 'Это не брак и не порча' }), h('span', { text: 'Сумма не удерживается. Объяснительную увидит администратор.' }))),
+      h('div', { class: 'reqbanner', 'data-testid': 'note-banner' }, ico('info'), h('div', null, h('b', { text: 'Это не брак и не порча' }), h('span', { text: 'Сумма не зачитывается. Пояснение увидит администратор.' }))),
       h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('label', { for: 'note-date', text: 'Дата' }), h('span', { class: 'req', 'aria-hidden': 'true', text: '*' })), date, h('p', { class: 'help', text: 'Не позже сегодня и не раньше чем за ' + NOTE_DAYS + ' дней.' })),
       h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('label', { for: 'note-reason', text: 'Причина' }), h('span', { class: 'req', 'aria-hidden': 'true', text: '*' })), sel),
-      h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('label', { for: 'note-text', text: 'Объяснительная' }), h('span', { class: 'req', 'aria-hidden': 'true', text: '*' })), ta,
+      h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('label', { for: 'note-text', text: 'Пояснение' }), h('span', { class: 'req', 'aria-hidden': 'true', text: '*' })), ta,
         h('div', { class: 'row between' }, h('p', { class: 'help', text: 'Минимум ' + NOTE_MIN + ' символов.' }), h('p', { class: 'help num' }, count))),
       h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('span', { text: 'Фото / документ' }), h('span', { class: 'tag opt', text: 'По желанию' })),
         grid, h('div', { class: 'addrow' }, btnCam, btnGal), fCam, fGal, h('p', { class: 'help', text: 'Не больше ' + CFG.maxPhotos + ' фото.' })));
-    ctl = openSheet({ title: prev ? 'Объяснительная — исправить' : 'Объяснительная', body: body, footer: h('div', null, sendBtn, why), focus: function () { sel.focus(); } });
+    ctl = openSheet({ title: prev ? 'Пояснение — исправить' : 'Пояснение', body: body, footer: h('div', null, sendBtn, why), focus: function () { sel.focus(); } });
     drawPhotos(); update();
   }
 
   /* ---------- «Сообщить о порче / браке» ---------- */
   function reportBtn(id) {
     return h('button', { class: 'report', type: 'button', 'data-testid': id, onclick: openIncident },
-      h('span', { class: 'ric' }, ico('alert')), h('span', { class: 'rt' }, h('b', { text: 'Сообщить о порче / браке' }), h('small', { text: 'Фото, акт и объяснительная — сразу после случая' })), ico('cr', 'sm'));
+      h('span', { class: 'ric' }, ico('alert')), h('span', { class: 'rt' }, h('b', { text: 'Сообщить о порче / браке' }), h('small', { text: 'Фото, акт и пояснение — сразу после случая' })), ico('cr', 'sm'));
   }
   function openIncident() {
     if (!requireOnline()) return;
@@ -1834,9 +1835,9 @@
       checks.appendChild(check(ok.scene, ok.scene ? 'Фото места: ' + slots.scene.ready().length : 'Снимите место нарушения на камеру (минимум 1 фото)'));
       checks.appendChild(check(ok.damage, ok.damage ? 'Фото порчи: ' + slots.damage.ready().length : 'Добавьте фото порчи имущества (минимум 1)'));
       checks.appendChild(check(ok.act, ok.act ? 'Акт приложен: ' + slots.acts.ready().length : 'Приложите акт — фото или PDF (минимум 1 файл)'));
-      checks.appendChild(check(ok.text, ok.text ? 'Объяснительная написана' : 'Напишите объяснительную (ещё ' + (CFG.explMin - tl) + ' симв.)'));
+      checks.appendChild(check(ok.text, ok.text ? 'Пояснение написано' : 'Напишите пояснение (ещё ' + (CFG.explMin - tl) + ' симв.)'));
       Object.keys(ok).forEach(function (k) { tag(k, ok[k]); });
-      var miss = []; if (!ok.date) miss.push('исправьте дату'); if (!ok.type) miss.push('выберите тип'); if (!ok.desc) miss.push('опишите случай'); if (!ok.scene) miss.push('фото места'); if (!ok.damage) miss.push('фото порчи'); if (!ok.act) miss.push('акт'); if (!ok.text) miss.push('объяснительную');
+      var miss = []; if (!ok.date) miss.push('исправьте дату'); if (!ok.type) miss.push('выберите тип'); if (!ok.desc) miss.push('опишите случай'); if (!ok.scene) miss.push('фото места'); if (!ok.damage) miss.push('фото порчи'); if (!ok.act) miss.push('акт'); if (!ok.text) miss.push('пояснение');
       var all = Object.keys(ok).every(function (k) { return ok[k]; });
       sendBtn.disabled = !all || busy || sending;
       why.textContent = busy ? 'Обрабатываем файлы…' : miss.length ? 'Осталось заполнить: ' + miss.join(', ') + '.' : 'Всё готово — можно отправлять.';
@@ -1855,7 +1856,7 @@
     });
     function sec(tk, titleEl, content, hintId, extra) { return h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, titleEl, h('span', { class: 'req', 'aria-hidden': 'true', text: '*' }), tags[tk]), content, extra); }
     var body = h('div', null,
-      h('div', { class: 'reqbanner', 'data-testid': 'req-banner' }, ico('alert'), h('div', null, h('b', { text: 'Заполните всё — иначе «Отправить» не сработает' }), h('span', { text: 'Нужны: дата, тип, описание, фото места (с камеры), фото порчи, акт и объяснительная.' }))),
+      h('div', { class: 'reqbanner', 'data-testid': 'req-banner' }, ico('alert'), h('div', null, h('b', { text: 'Заполните всё — иначе «Отправить» не сработает' }), h('span', { text: 'Нужны: дата, тип, описание, фото места (с камеры), фото порчи, акт и пояснение.' }))),
       checks,
       sec('date', h('label', { for: 'inc-date', text: 'Дата нарушения' }), h('div', null, date, dateErrEl, h('p', { class: 'help', text: 'По умолчанию сегодня. Будущую дату указать нельзя.' }))),
       sec('type', h('span', { id: 'inc-type-l', text: 'Тип' }), seg),
@@ -1863,7 +1864,7 @@
       sec('scene', h('span', { text: 'Фото места / нарушения' }), slots.scene.el),
       sec('damage', h('span', { text: 'Фото порчи имущества' }), slots.damage.el),
       sec('act', h('span', { text: 'Акт (фото или PDF)' }), slots.acts.el),
-      sec('text', h('label', { for: 'inc-text', text: 'Объяснительная' }), h('div', null, text, h('div', { class: 'row between' }, h('p', { class: 'help', id: 'inc-text-h', text: 'Минимум ' + CFG.explMin + ' символов.' }), h('p', { class: 'help num' }, count)))));
+      sec('text', h('label', { for: 'inc-text', text: 'Пояснение' }), h('div', null, text, h('div', { class: 'row between' }, h('p', { class: 'help', id: 'inc-text-h', text: 'Минимум ' + CFG.explMin + ' символов.' }), h('p', { class: 'help num' }, count)))));
     ctl = openSheet({ title: 'Сообщить о порче / браке', body: body, footer: h('div', null, sendBtn, why), onClose: function () { Object.keys(slots).forEach(function (k) { slots[k].release(); }); } });
     update();
   }
@@ -1884,7 +1885,7 @@
       h('div', { class: 'ft' }, h('div', { class: 'row between' }, chip(st[0], st[1], INC_ST_IC[i.status] || 'clock'), h('span', { class: 'cap', text: 'Отправлено ' + dmy(i.sentAt) })),
         incAnswer(i, 'inc-answer-card'),
         h('p', { class: 'cap', text: incFilesLine(i) }),
-        h('button', { class: i.status === 'returned' ? 'btn' : 'btn ghost', type: 'button', 'data-testid': 'inc-open-' + i.id, onclick: function () { openIncView(i); } }, i.status === 'returned' ? 'Дополнить объяснение' : 'Открыть сообщение')));
+        h('button', { class: i.status === 'returned' ? 'btn' : 'btn ghost', type: 'button', 'data-testid': 'inc-open-' + i.id, onclick: function () { openIncView(i); } }, i.status === 'returned' ? 'Дополнить пояснение' : 'Открыть сообщение')));
   }
   function openIncView(i) {
     var st = INC_ST[i.status] || INC_ST.review, ctl, fix = i.status === 'returned', sending = false;
@@ -1915,9 +1916,9 @@
       h('div', { class: 'row between' }, chip(st[0], st[1], INC_ST_IC[i.status] || 'clock'), h('span', { class: 'cap', text: 'Отправлено ' + dmy(i.sentAt) })),
       incAnswer(i, 'inc-answer'),
       grp('Фото места / нарушения', i.scene, 'scene'), grp('Фото порчи имущества', i.damage, 'damage'), grp('Акт', i.acts, 'act'),
-      h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'Объяснительная' }), h('div', { class: 'quote', 'data-testid': 'v-text', text: i.text })),
+      h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'Пояснение' }), h('div', { class: 'quote', 'data-testid': 'v-text', text: i.text })),
       i.addendum ? h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'Ваше дополнение' }), h('div', { class: 'quote', 'data-testid': 'v-addendum', text: i.addendum })) : null,
-      fix ? h('div', { class: 'sec', 'data-testid': 'inc-fix' }, h('div', { class: 'sec-h' }, h('label', { for: 'inc-add', text: 'Дополнить объяснение' }), h('span', { class: 'req', 'aria-hidden': 'true', text: '*' })), ta,
+      fix ? h('div', { class: 'sec', 'data-testid': 'inc-fix' }, h('div', { class: 'sec-h' }, h('label', { for: 'inc-add', text: 'Дополнить пояснение' }), h('span', { class: 'req', 'aria-hidden': 'true', text: '*' })), ta,
         h('div', { class: 'row between' }, h('p', { class: 'help', id: 'inc-add-h', text: 'Фото и прежний текст остаются, администратор увидит ваше дополнение.' }), cnt)) : null),
       footer: fix ? h('div', null, send, why, h('button', { class: 'btn ghost mt', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть')) : h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') });
   }
@@ -1925,7 +1926,7 @@
   function openExplain(c) {
     if (!requireOnline()) return;
     var needPhoto = needPhotoOf(c), drafts = load('pr.drafts', {}), photos = [], sending = false, ctl;
-    var ta = h('textarea', { class: 'inp', id: 'ex-text', 'data-testid': 'ex-text', rows: '5', maxlength: '1000', 'aria-required': 'true', 'aria-describedby': 'ex-hint', placeholder: 'Что произошло, когда и почему. Например: «Короб задел погрузчик при повороте, сообщил бригадиру сразу».' });
+    var ta = h('textarea', { class: 'inp', id: 'ex-text', 'data-testid': 'ex-text', rows: '5', maxlength: '1000', 'aria-required': 'true', 'aria-describedby': 'ex-hint', placeholder: 'Что произошло, когда и почему. Например: «Короб задел погрузчик при повороте, сообщил координатору сразу».' });
     ta.value = drafts[c.id] || '';
     var count = h('span', { id: 'ex-count', 'data-testid': 'ex-count' }), grid = h('div', { class: 'photos', 'data-testid': 'ph-grid', role: 'list', 'aria-label': 'Добавленные фото' });
     var checks = h('ul', { class: 'checks', 'data-testid': 'ex-checks', 'aria-label': 'Что ещё нужно для отправки' });
@@ -1944,11 +1945,11 @@
       count.textContent = okT ? t + ' симв. ✓' : t + ' из ' + CFG.explMin + ' симв. минимум';
       clear(checks);
       if (needPhoto) checks.appendChild(check(nph > 0, nph > 0 ? 'Фото добавлено (' + nph + ')' : 'Добавьте фото повреждения (минимум 1)'));
-      checks.appendChild(check(okT, okT ? 'Объяснительная написана' : 'Напишите объяснительную (ещё ' + (CFG.explMin - t) + ' симв.)'));
+      checks.appendChild(check(okT, okT ? 'Пояснение написано' : 'Напишите пояснение (ещё ' + (CFG.explMin - t) + ' симв.)'));
       tagPh.className = 'tag ' + (needPhoto ? (nph ? 'done' : 'must') : 'opt'); tagPh.textContent = needPhoto ? (nph ? 'Готово' : 'Обязательно') : 'По желанию';
       tagTx.className = 'tag ' + (okT ? 'done' : 'must'); tagTx.textContent = okT ? 'Готово' : 'Обязательно';
       sendBtn.disabled = !(okT && okP) || busy || sending;
-      var miss = []; if (!okP) miss.push('добавьте фото'); if (!okT) miss.push('напишите объяснительную (ещё ' + (CFG.explMin - t) + ' симв.)');
+      var miss = []; if (!okP) miss.push('добавьте фото'); if (!okT) miss.push('напишите пояснение (ещё ' + (CFG.explMin - t) + ' симв.)');
       why.textContent = busy ? 'Обрабатываем фото…' : miss.length ? 'Чтобы отправить: ' + miss.join(' и ') + '.' : 'Всё готово — можно отправлять.';
       ta.setAttribute('aria-invalid', !okT && t > 0 ? 'true' : 'false');
       btnCam.disabled = btnGal.disabled = photos.length >= CFG.maxPhotos;
@@ -1977,22 +1978,22 @@
     sendBtn.addEventListener('click', function () {
       if (sendBtn.disabled || !requireOnline()) return; sending = true; sendBtn.disabled = true; clear(sendBtn); sendBtn.appendChild(h('span', { class: 'spinner' })); sendBtn.appendChild(document.createTextNode(' Отправляем…'));
       delay(LAT + 200).then(function () { return backend.submitExplanation(c.id, ta.value, photos.filter(function (p) { return !p.busy; })); }).then(function (r) {
-        if (!r.ok) { sending = false; sendLabel(); update(); toast('Не отправлено: ' + ({ text_short: 'объяснительная слишком короткая', photo_required: 'нужно фото повреждения', already: 'уже отправлено', rate_limit: 'слишком много отправок за час', bad_file: 'файл не подошёл (нужны фото JPG/PNG)', too_big: 'файл слишком большой' }[r.error] || netMsg(r.error) || 'ошибка'), 'bad'); return; }
+        if (!r.ok) { sending = false; sendLabel(); update(); toast('Не отправлено: ' + ({ text_short: 'пояснение слишком короткое', photo_required: 'нужно фото повреждения', already: 'уже отправлено', rate_limit: 'слишком много отправок за час', bad_file: 'файл не подошёл (нужны фото JPG/PNG)', too_big: 'файл слишком большой' }[r.error] || netMsg(r.error) || 'ошибка'), 'bad'); return; }
         var d = load('pr.drafts', {}); delete d[c.id]; store('pr.drafts', d);
         photos.forEach(function (p) { if (p.url) URL.revokeObjectURL(p.url); });
-        ctl.close(true); toast('Объяснительная' + (photos.length ? ' и фото отправлены' : ' отправлена') + ' администратору'); refresh();
+        ctl.close(true); toast('Пояснение' + (photos.length ? ' и фото отправлены' : ' отправлена') + ' администратору'); refresh();
       });
     });
     var body = h('div', null,
       h('div', { class: 'casebox' }, h('b', { text: c.title }), h('span', { class: 'num', text: KIND[c.kind].n + ' · ' + dmy(c.date) + ' · ' + minus(c.amount) })),
       c.expl && c.expl.returned ? retBox(c.expl.returnedReason, 'ex-returned') : null,
-      h('div', { class: 'reqbanner', 'data-testid': 'req-banner' }, ico('alert'), h('div', null, h('b', { text: needPhoto ? 'Обязательно: фото и объяснительная' : 'Обязательно: объяснительная' }), h('span', { text: needPhoto ? 'Кнопка «Отправить» станет активной, когда приложено хотя бы одно фото повреждения и написано объяснение.' : 'Фото можно приложить по желанию.' }))),
+      h('div', { class: 'reqbanner', 'data-testid': 'req-banner' }, ico('alert'), h('div', null, h('b', { text: needPhoto ? 'Обязательно: фото и пояснение' : 'Обязательно: пояснение' }), h('span', { text: needPhoto ? 'Кнопка «Отправить» станет активной, когда приложено хотя бы одно фото повреждения и написано объяснение.' : 'Фото можно приложить по желанию.' }))),
       checks,
       h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('span', { text: needPhoto ? 'Фото повреждения' : 'Фото' }), needPhoto ? h('span', { class: 'req', 'aria-hidden': 'true', text: '*' }) : null, tagPh),
         grid, h('div', { class: 'addrow' }, btnCam, btnGal), fCam, fGal, h('p', { class: 'help', text: 'Снимите повреждение крупным планом. Фото уменьшается автоматически (до 1280 px). Не больше ' + CFG.maxPhotos + ' штук.' })),
-      h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('label', { for: 'ex-text', text: 'Объяснительная' }), h('span', { class: 'req', 'aria-hidden': 'true', text: '*' }), tagTx), ta,
+      h('div', { class: 'sec' }, h('div', { class: 'sec-h' }, h('label', { for: 'ex-text', text: 'Пояснение' }), h('span', { class: 'req', 'aria-hidden': 'true', text: '*' }), tagTx), ta,
         h('div', { class: 'row between' }, h('p', { class: 'help', id: 'ex-hint', text: 'Минимум ' + CFG.explMin + ' символов: что случилось и почему.' }), h('p', { class: 'help num' }, count))));
-    ctl = openSheet({ title: 'Объяснить / приложить фото', body: body, footer: h('div', null, sendBtn, why), focus: function () { ta.value ? ta.focus() : (needPhoto ? btnCam.focus() : ta.focus()); } });
+    ctl = openSheet({ title: 'Пояснить / приложить фото', body: body, footer: h('div', null, sendBtn, why), focus: function () { ta.value ? ta.focus() : (needPhoto ? btnCam.focus() : ta.focus()); } });
     drawPhotos(); update();
   }
   function openExplView(c) {
@@ -2000,11 +2001,11 @@
     var ph = h('div', { class: 'photos', role: 'list' });
     (e.photos || []).forEach(function (p, i) { ph.appendChild(h('figure', { class: 'ph-item', role: 'listitem' }, h('img', { src: p.thumb, alt: 'Приложенное фото ' + (i + 1) }), h('span', { class: 'sz num', text: p.w + '×' + p.h }))); });
     if (!(e.photos || []).length && e.photoCount) ph.appendChild(h('p', { class: 'cap', 'data-testid': 'expl-photo-count', text: 'Приложено фото: ' + e.photoCount + ' (хранятся у администратора).' }));
-    ctl = openSheet({ title: 'Отправленное объяснение', body: h('div', { class: 'gap16' },
+    ctl = openSheet({ title: 'Отправленное пояснение', body: h('div', { class: 'gap16' },
       h('div', { class: 'casebox' }, h('b', { text: c.title }), h('span', { class: 'num', text: KIND[c.kind].n + ' · ' + dmy(c.date) + ' · ' + minus(c.amount) })),
       h('div', { class: 'row between' }, chip(st[0], st[1], 'check'), h('span', { class: 'cap', text: 'Отправлено ' + dmy(e.sentAt) })),
       h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'Фото' }), (e.photos || []).length || e.photoCount ? ph : h('p', { class: 'cap', text: 'Фото не прикладывалось (для этого случая не требуется).' })),
-      h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'Объяснительная' }), h('div', { class: 'quote', 'data-testid': 'expl-quote', text: e.text }))),
+      h('div', { class: 'sec' }, h('div', { class: 'sec-h', text: 'Пояснение' }), h('div', { class: 'quote', 'data-testid': 'expl-quote', text: e.text }))),
       footer: h('button', { class: 'btn ghost', type: 'button', onclick: function () { ctl.close(); } }, 'Закрыть') });
   }
 
@@ -2125,12 +2126,12 @@
   /* ---------- аванс (еженедельный) ---------- */
   function whyLines(i) {
     var L = [];
-    if (i.earned === 0) L.push(['Ещё не заработано', 'Доступная сумма растёт с каждой отработанной сменой.']);
-    if (i.riskN) L.push(['Удержано под ' + i.riskN + ' ' + plural(i.riskN, ['незакрытый случай', 'незакрытых случая', 'незакрытых случаев']) + ': −' + money(i.risk), 'Случаи порчи/брака без объяснения или без проверки резервируются, пока не закрыты.']);
-    if (i.carry) L.push(['Перенос долга с прошлого периода: −' + money(i.carry), 'Он сначала погашается из аванса.']);
+    if (i.earned === 0) L.push(['Вознаграждения ещё нет', 'Доступная сумма растёт с каждым принятым днём услуг.']);
+    if (i.riskN) L.push(['Зарезервировано под ' + i.riskN + ' ' + plural(i.riskN, ['незакрытый случай', 'незакрытых случая', 'незакрытых случаев']) + ': −' + money(i.risk), 'Случаи порчи/брака без пояснения или без проверки резервируются, пока не закрыты.']);
+    if (i.carry) L.push(['Перенос долга с прошлого периода: −' + money(i.carry), 'Он сначала погашается из предоплаты.']);
     if (i.binding === 'limit' && i.capLimit <= 0) L.push(['Лимит недели исчерпан', 'Новый лимит откроется в понедельник.']);
-    else if (i.binding === 'limit' && i.available > 0) L.push(['Упёрлись в лимит недели ' + money(i.limit), 'Заработано достаточно, но недельный потолок ограничивает сумму.']);
-    if (i.earned > 0 && i.capEarn > 0 && i.binding === 'earn' && !i.riskN && !i.carry) L.push(['Аванс — ' + Math.round(CFG.advShare * 100) + '% от заработанного за неделю', 'Остальное выплатят при расчёте за период.']);
+    else if (i.binding === 'limit' && i.available > 0) L.push(['Упёрлись в лимит недели ' + money(i.limit), 'Вознаграждения достаточно, но недельный потолок ограничивает сумму.']);
+    if (i.earned > 0 && i.capEarn > 0 && i.binding === 'earn' && !i.riskN && !i.carry) L.push(['Предоплата — ' + Math.round(CFG.advShare * 100) + '% от вознаграждения за неделю', 'Остальное выплатят при расчёте за период.']);
     return L;
   }
   function advMoneyRow(k, v, tid, strong) { return h('div', { class: 'arow' + (strong ? ' strong' : '') }, h('span', { text: k }), h('b', { class: 'num', 'data-testid': tid, text: v })); }
@@ -2143,28 +2144,28 @@
       bar,
       h('div', { class: 'legend' }, h('span', null, h('i', { class: 'lg-ord' }), 'заказано ' + money(i.ordered)), h('span', null, h('i', { class: 'lg-av' }), 'доступно ' + money(avW)), h('span', null, h('i', { class: 'lg-rest' }), 'недоступно')));
     if (!compact) {
-      el.appendChild(h('div', { class: 'arows' }, advMoneyRow('Заработано за неделю', money(i.earned), 'adv-earned'), advMoneyRow('Лимит недели', money(lim), 'adv-limit'), advMoneyRow('Уже заказано', money(i.ordered), 'adv-ordered'), advMoneyRow('Доступно сейчас', money(i.available), 'adv-avail-row', true)));
+      el.appendChild(h('div', { class: 'arows' }, advMoneyRow('Вознаграждение за неделю', money(i.earned), 'adv-earned'), advMoneyRow('Лимит недели', money(lim), 'adv-limit'), advMoneyRow('Уже заказано', money(i.ordered), 'adv-ordered'), advMoneyRow('Доступно сейчас', money(i.available), 'adv-avail-row', true)));
     }
     el.appendChild(h('div', { class: 'dates' }, h('div', null, ico('wallet', 'sm'), h('span', { 'data-testid': 'adv-pay', text: 'Выдача: суббота, ' + dlong(w.pay) })), h('div', null, ico('clock', 'sm'), h('span', { 'data-testid': 'adv-deadline', text: 'Заказ принимается до пятницы ' + hh(CFG.advDeadlineHour) + (compact ? '' : ' (' + dlong(w.deadline) + ')') }))));
     return el;
   }
   function advHomeCard() {
     var i = advInfo(S.data, S.calc);
-    return h('section', { class: 'card advhome', 'aria-labelledby': 'ah-h', 'data-testid': 'adv-home' }, h('div', { class: 'card-h' }, h('h2', { id: 'ah-h', text: 'Аванс на неделю' }), chip(dm(i.w.wk) + ' – ' + dm(i.w.wkEnd), 'gray')),
+    return h('section', { class: 'card advhome', 'aria-labelledby': 'ah-h', 'data-testid': 'adv-home' }, h('div', { class: 'card-h' }, h('h2', { id: 'ah-h', text: 'Предоплата за неделю' }), chip(dm(i.w.wk) + ' – ' + dm(i.w.wkEnd), 'gray')),
       advSummary(i, true),
-      h('div', { class: 'row adv-foot' }, h('span', { class: 'cap grow num', text: 'Заработано за неделю ' + money(i.earned) + ' · лимит ' + money(i.limit) }), h('a', { class: 'link', href: '#/adv', 'data-testid': 'adv-home-link' }, i.closed ? 'Подробнее' : 'Заказать')));
+      h('div', { class: 'row adv-foot' }, h('span', { class: 'cap grow num', text: 'Вознаграждение за неделю ' + money(i.earned) + ' · лимит ' + money(i.limit) }), h('a', { class: 'link', href: '#/adv', 'data-testid': 'adv-home-link' }, i.closed ? 'Подробнее' : 'Запросить')));
   }
   function viewAdv() {
     var d = S.data, info = advInfo(d, S.calc), v = h('main', { class: 'view stack', id: 'main' }), online = navigator.onLine !== false, w = info.w;
     var active = info.active, editing = !!S.advEdit && !!active && !info.closed;
     var fi = editing ? advInfo(d, S.calc, active.id) : info;      // при изменении заказа его сумма возвращается в доступное
-    v.appendChild(pageTop('Аванс', 'Еженедельный, выдача по субботам'));
+    v.appendChild(pageTop('Предоплата', 'Раз в неделю, перевод по субботам'));
     var card = h('section', { class: 'card', 'aria-labelledby': 'av-h', 'data-testid': 'adv-card' }, h('div', { class: 'card-h' }, h('h2', { id: 'av-h', text: 'Неделя ' + dm(w.wk) + ' – ' + dm(w.wkEnd) }), chip(info.closed ? 'Приём закрыт' : 'Приём открыт', info.closed ? 'bad' : 'ok', info.closed ? 'lock' : 'check')), advSummary(info, false));
     var why = whyLines(info);
     if (why.length) { var wb = h('div', { class: 'why', 'data-testid': 'adv-why' }, h('div', { class: 't' }, ico('info', 'sm'), info.available < info.limit ? 'Почему доступно меньше лимита' : 'Как это считается'));
       why.forEach(function (x) { wb.appendChild(h('p', null, h('b', { text: x[0] }), h('span', { text: x[1] }))); }); card.appendChild(wb); }
     card.appendChild(h('details', { class: 'calc', 'data-testid': 'adv-calc' }, h('summary', { text: 'Расчёт по шагам' }),
-      h('div', { class: 'arows num' }, advMoneyRow('Заработано за неделю × ' + Math.round(CFG.advShare * 100) + '%', money(info.earnCap)), advMoneyRow('− резерв под незакрытые случаи', minus(info.risk)), advMoneyRow('− перенос долга', minus(info.carry)), advMoneyRow('− уже заказано', minus(info.ordered)), advMoneyRow('= по выработке', money(Math.max(0, info.capEarn))),
+      h('div', { class: 'arows num' }, advMoneyRow('Вознаграждение за неделю × ' + Math.round(CFG.advShare * 100) + '%', money(info.earnCap)), advMoneyRow('− резерв под незакрытые случаи', minus(info.risk)), advMoneyRow('− перенос долга', minus(info.carry)), advMoneyRow('− уже заказано', minus(info.ordered)), advMoneyRow('= по объёму услуг', money(Math.max(0, info.capEarn))),
         advMoneyRow('Лимит недели − заказано', money(Math.max(0, info.capLimit))), advMoneyRow('Меньшее, вниз до ' + CFG.advStep + ' ₽', money(info.available), 'adv-calc-final', true))));
     v.appendChild(card);
     // --- активная заявка ---
@@ -2174,7 +2175,7 @@
         h('div', { class: 'avail num', text: money(active.amount) }), h('p', { class: 'cap', text: 'Выдача в субботу, ' + dlong(active.payDate || w.pay) + (active.comment ? ' · «' + active.comment + '»' : '') }), payLine(active, 'adv-active-pay'),
         info.closed ? h('p', { class: 'help', text: 'Приём закрыт — изменить или отменить заказ уже нельзя.' })
           : h('div', { class: 'btnrow mt' }, h('button', { class: 'btn secondary', type: 'button', 'data-testid': 'adv-edit', onclick: function () { S.advEdit = true; render(); } }, 'Изменить'), h('button', { class: 'btn danger', type: 'button', 'data-testid': 'adv-cancel', onclick: function () {
-            confirmDlg({ title: 'Отменить заказ аванса?', yes: 'Да, отменить', no: 'Нет, оставить', danger: true, body: [h('p', { class: 'cap', text: 'Заказ на ' + money(active.amount) + ' будет отменён. Новый можно оформить до пятницы ' + hh(CFG.advDeadlineHour) + '.' })] }).then(function (ok) {
+            confirmDlg({ title: 'Отменить запрос предоплаты?', yes: 'Да, отменить', no: 'Нет, оставить', danger: true, body: [h('p', { class: 'cap', text: 'Заказ на ' + money(active.amount) + ' будет отменён. Новый можно оформить до пятницы ' + hh(CFG.advDeadlineHour) + '.' })] }).then(function (ok) {
               if (!ok) return; delay(LAT).then(function () { return backend.cancelAdvance(active.id); }).then(function (r) { toast(r.ok ? 'Заказ отменён' : 'Не удалось отменить: ' + (r.error === 'closed' ? 'приём закрыт' : netMsg(r.error) || 'ошибка' + (r.error ? ' (' + r.error + ')' : '')), r.ok ? 'ok' : 'bad'); refresh(); }); }); } }, 'Отменить заказ'))));
     }
     // --- форма / закрыто ---
@@ -2183,16 +2184,16 @@
         h('p', { class: 'cap', text: 'Заказы на эту неделю принимались до пятницы ' + dlong(w.deadline) + ', ' + hh(CFG.advDeadlineHour) + '.' + (active ? ' Ваш заказ на ' + money(active.amount) + ' будет обработан к выдаче в субботу.' : ' Заказа на эту неделю не было.') }),
         h('div', { class: 'tipbox' }, ico('clock', 'sm'), h('span', { 'data-testid': 'adv-next', text: 'Следующее окно: с понедельника ' + dlong(w.nextWk) + ' до пятницы ' + dlong(w.nextDeadline) + ', ' + hh(CFG.advDeadlineHour) + '. Выдача в субботу, ' + dlong(w.nextPay) + '.' }))));
     } else if (!active || editing) {
-      var blocked = !online ? 'Нет сети — заказать аванс можно только онлайн.' : fi.available < CFG.advMin ? (fi.earned === 0 ? 'Пока ничего не заработано за эту неделю — аванс станет доступен после первой смены.' : 'Сейчас доступно меньше ' + money(CFG.advMin) + ' — причины указаны выше. Сумма вырастет после новых смен или закрытия случаев.') : null;
+      var blocked = !online ? 'Нет сети — запросить предоплату можно только онлайн.' : fi.available < CFG.advMin ? (fi.earned === 0 ? 'Пока за эту неделю нет вознаграждения — предоплата станет доступна после первого дня услуг.' : 'Сейчас доступно меньше ' + money(CFG.advMin) + ' — причины указаны выше. Сумма вырастет после новых дней услуг или закрытия случаев.') : null;
       var pay, form = h('form', { class: 'card gap16', novalidate: true, 'aria-labelledby': 'rq-h', 'data-testid': 'adv-form' });
-      form.appendChild(h('h2', { id: 'rq-h', text: editing ? 'Изменить заказ' : 'Заказать аванс' }));
+      form.appendChild(h('h2', { id: 'rq-h', text: editing ? 'Изменить заказ' : 'Запросить предоплату' }));
       var inp = h('input', { class: 'inp', id: 'adv-amt', 'data-testid': 'adv-amount', type: 'text', inputmode: 'numeric', autocomplete: 'off', placeholder: '0', 'aria-describedby': 'adv-err adv-help', disabled: !!blocked });
       var err = h('div', { class: 'err', id: 'adv-err', role: 'alert', hidden: true, 'data-testid': 'adv-err' });
-      var rng = !blocked ? h('input', { class: 'range', type: 'range', min: String(CFG.advMin), max: String(fi.available), step: String(CFG.advStep), value: String(editing ? Math.min(active.amount, fi.available) : CFG.advMin), 'aria-label': 'Сумма аванса, ползунок', 'data-testid': 'adv-range' }) : null;
+      var rng = !blocked ? h('input', { class: 'range', type: 'range', min: String(CFG.advMin), max: String(fi.available), step: String(CFG.advStep), value: String(editing ? Math.min(active.amount, fi.available) : CFG.advMin), 'aria-label': 'Сумма предоплаты, ползунок', 'data-testid': 'adv-range' }) : null;
       var left = h('b', { class: 'num', 'data-testid': 'adv-left' });
       var ta = h('textarea', { class: 'inp', id: 'adv-cm', 'data-testid': 'adv-comment', rows: '2', maxlength: String(CFG.commentMax), placeholder: 'Например: на оплату жилья', disabled: !!blocked }); if (editing) ta.value = active.comment || '';
       var cnt = h('span', { class: 'num', text: ta.value.length + ' / ' + CFG.commentMax });
-      var btn = h('button', { class: 'btn', type: 'submit', 'data-testid': 'adv-submit', disabled: true }, ico('wallet', 'sm'), editing ? 'Сохранить изменения' : 'Заказать аванс');
+      var btn = h('button', { class: 'btn', type: 'submit', 'data-testid': 'adv-submit', disabled: true }, ico('wallet', 'sm'), editing ? 'Сохранить изменения' : 'Запросить предоплату');
       function amt() { return +(inp.value.replace(/\D/g, '') || 0); }
       function validate(show) {
         var a = amt(), e = '';
@@ -2222,11 +2223,11 @@
       form.addEventListener('submit', function (e) {
         e.preventDefault(); if (!validate(true) || !requireOnline()) return;
         var a = amt();
-        confirmDlg({ title: editing ? 'Изменить заказ аванса?' : 'Отправить заказ на аванс?', yes: editing ? 'Да, изменить' : 'Да, заказать', no: 'Отмена', body: [
+        confirmDlg({ title: editing ? 'Изменить запрос предоплаты?' : 'Отправить запрос на предоплату?', yes: editing ? 'Да, изменить' : 'Да, заказать', no: 'Отмена', body: [
           h('div', { class: 'casebox' }, h('b', { class: 'num', 'data-testid': 'confirm-amount', text: money(a) }), h('span', { text: 'Выдача в субботу, ' + dlong(w.pay) + (ta.value.trim() ? ' · ' + ta.value.trim() : '') })),
           pay.label() ? h('p', { class: 'cap', 'data-testid': 'confirm-pay', text: 'Выплата на карту: ' + pay.label() }) : null,
           h('p', { class: 'cap num', 'data-testid': 'confirm-left', text: 'После заказа останется доступно: ' + money(fi.available - a) + '.' }),
-          h('p', { class: 'cap', text: 'Заказ можно изменить или отменить до пятницы ' + hh(CFG.advDeadlineHour) + '. Аванс не гарантирован: итог сверяется при расчёте.' })] })
+          h('p', { class: 'cap', text: 'Заказ можно изменить или отменить до пятницы ' + hh(CFG.advDeadlineHour) + '. Предоплата не гарантирована: итог сверяется при расчёте.' })] })
           .then(function (ok) {
             if (!ok) return; btn.disabled = true;
             delay(LAT).then(function () { return editing ? backend.updateAdvance(active.id, a, ta.value.trim(), pay.value()) : backend.createAdvance(a, ta.value.trim(), pay.value()); }).then(function (r) {
@@ -2237,9 +2238,9 @@
       });
       v.appendChild(form);
     }
-    v.appendChild(h('p', { class: 'fine', 'data-testid': 'adv-fine', text: 'Аванс не гарантирован: итоговая сумма сверяется при расчёте, вычеты за брак и ущерб удерживаются.' }));
+    v.appendChild(h('p', { class: 'fine', 'data-testid': 'adv-fine', text: 'Предоплата не гарантирована: итоговая сумма сверяется при расчёте, суммы за брак и ущерб зачитываются.' }));
     var hist = h('section', { class: 'card', 'aria-labelledby': 'hs-h', 'data-testid': 'adv-history' }, h('div', { class: 'card-h' }, h('h2', { id: 'hs-h', text: 'История заказов' })));
-    if (!d.advances.length) hist.appendChild(emptyState('wallet', 'Заказов пока нет', 'Когда закажете аванс, он появится здесь.'));
+    if (!d.advances.length) hist.appendChild(emptyState('wallet', 'Заказов пока нет', 'Когда запросите предоплату, она появится здесь.'));
     else { var ul = h('div', { class: 'gap16', role: 'list' });
       d.advances.slice().sort(function (a, b) { return (a.date + a.time) < (b.date + b.time) ? 1 : -1; }).forEach(function (a) {
         var st = ADV_ST[a.status];
@@ -2254,11 +2255,11 @@
   function viewMe() {
     var u = S.data.user, pref = load('pr.theme', 'auto'), v = h('main', { class: 'view stack', id: 'main' });
     v.appendChild(pageTop('Профиль'));
-    v.appendChild(h('section', { class: 'card', 'aria-label': 'Данные исполнителя' }, h('div', { class: 'row prof' }, h('div', { class: 'avatar', 'aria-hidden': 'true', text: u.name.split(' ').slice(0, 2).map(function (x) { return x[0]; }).join('') }), h('div', { class: 'grow' }, h('h2', { 'data-testid': 'me-name', text: u.name }), h('p', { class: 'cap', text: u.position }))),
-      h('div', null, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Табельный №' }), h('div', { class: 'am num', text: u.id })),
+    v.appendChild(h('section', { class: 'card', 'aria-label': 'Данные исполнителя' }, h('div', { class: 'row prof' }, h('div', { class: 'avatar', 'aria-hidden': 'true', text: u.name.split(' ').slice(0, 2).map(function (x) { return x[0]; }).join('') }), h('div', { class: 'grow' }, h('h2', { 'data-testid': 'me-name', text: u.name }), h('p', { class: 'cap', text: posLabel(u) }))),
+      h('div', null, h('div', { class: 'line' }, h('div', { class: 'nm', text: 'ID исполнителя' }), h('div', { class: 'am num', text: u.id })),
         h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Телефон' }), h('div', { class: 'am num', text: maskPhone(u.phone) })),
         h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Объект' }), h('div', { class: 'am', text: u.site })),
-        h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Работодатель' }), h('div', { class: 'am', text: u.employer })))));
+        h('div', { class: 'line' }, h('div', { class: 'nm', text: 'Заказчик' }), h('div', { class: 'am', text: u.employer })))));
     var seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Тема оформления' });
     [['auto', 'Авто'], ['light', 'Светлая'], ['dark', 'Тёмная']].forEach(function (x) { seg.appendChild(h('button', { type: 'button', 'aria-pressed': pref === x[0] ? 'true' : 'false', 'data-theme-set': x[0], onclick: function () { setTheme(x[0]); render(); } }, x[1])); });
     v.appendChild(moreTiles());
@@ -2327,7 +2328,7 @@
     v.appendChild(h('section', { class: 'card gap8', 'aria-labelledby': 'md2' }, h('h2', { id: 'md2', text: 'Срок хранения' }),
       h('p', { 'data-testid': 'mydata-term', text: 'Фото и файлы хранятся 12 месяцев с даты записи, затем переносятся в архив для удаления. Остальные данные хранятся, пока вы работаете у оператора.' })));
     v.appendChild(h('section', { class: 'card gap8', 'aria-labelledby': 'md3' }, h('h2', { id: 'md3', text: 'Как отозвать согласие или удалить данные' }),
-      h('p', { 'data-testid': 'mydata-revoke', text: 'Обратитесь к бригадиру склада. Он примет заявку на отзыв согласия или удаление ваших данных.' })));
+      h('p', { 'data-testid': 'mydata-revoke', text: 'Обратитесь к координатору. Он примет заявку на отзыв согласия или удаление ваших данных.' })));
     var st = cs.required ? (cs.ok ? 'Вы дали согласие (версия текста ' + cs.version + (cs.at ? ', ' + dmy(cs.at) : '') + ').' : 'Согласие не дано.') : 'Сейчас приложение не запрашивает согласие.';
     v.appendChild(h('section', { class: 'card gap8', 'aria-labelledby': 'md4' }, h('h2', { id: 'md4', text: 'Ваше согласие' }), h('p', { 'data-testid': 'mydata-status', text: st }),
       (function () { var d = h('details', { class: 'consent-details', 'data-testid': 'mydata-text' }, h('summary', { text: 'Показать текст согласия' })); CONSENT_TEXT.forEach(function (t) { d.appendChild(h('p', { class: 'cap', text: t })); }); return d; })()));
@@ -2490,7 +2491,7 @@
   }
   /* ---------- V2_IMPROVEMENTS_V1: «Где вырасти», брак по людям, явка, ползунок и прогноз сотрудника, «Оспорить штраф», акты Консоли ---------- */
   var V2_ERR = { forbidden: 'Нет доступа.', rate_limit: 'Слишком часто. Попробуйте позже.', bad_date: 'Дата вне периода или в будущем.', bad_shift: 'Выберите смену.', bad_employee: 'Сотрудник не найден.', bad_reason: 'Укажите причину.',
-    bad_comment: 'Напишите, почему вы не согласны (от 3 символов).', bad_case: 'Этот штраф нельзя оспорить.', already: 'Спор по этому штрафу уже на рассмотрении.', busy: 'Сервер занят, попробуйте ещё раз.', not_configured: 'Связь с Консолью не настроена.', unavailable: 'Консоль сейчас недоступна.' };
+    bad_comment: 'Напишите, почему вы не согласны (от 3 символов).', bad_case: 'Это удержание нельзя оспорить.', already: 'Спор по этому удержанию уже на рассмотрении.', busy: 'Сервер занят, попробуйте ещё раз.', not_configured: 'Связь с Консолью не настроена.', unavailable: 'Консоль сейчас недоступна.' };
   var V2D = { att: [], disputes: [], gone: [] };   // демо: записи в памяти
   function v2Demo(action, b) {
     if (action === 'fmNoteDecide') return { ok: true, status: b.to, statusText: b.to === 'accepted' ? 'Принято' : 'Возвращено', by: 'Бригадир' };   // NOTE_V1 (демо)
@@ -2594,7 +2595,7 @@
   function v2EmpSlider(c) {
     var act = Math.round((c.perf || 0) * 10) / 10; if (!(act > 0) || !(c.accrued > 0)) return null;
     var stu = S.data.statements && S.data.statements[c.p.id], units = (stu && stu.units) || c.units, per = c.accrued / act, upu = units ? units / act : 0, MAX = 150, raf = 0, idle = 0;
-    var rng = h('input', { type: 'range', class: 'fs-rng', min: '0', max: String(MAX), step: '0.1', value: String(act), 'data-testid': 'v2-es-range', 'aria-label': 'Моя производительность, %' });
+    var rng = h('input', { type: 'range', class: 'fs-rng', min: '0', max: String(MAX), step: '0.1', value: String(act), 'data-testid': 'v2-es-range', 'aria-label': 'Мой объём к плану, %' });
     var pct = h('b', { class: 'fs-pct', 'data-testid': 'v2-es-pct' }), pay = h('div', { class: 'fs-pay', 'data-testid': 'v2-es-pay' }), diff = h('div', { class: 'fs-diff', 'data-testid': 'v2-es-diff' });
     var marks = h('div', { class: 'fs-marks', 'aria-hidden': 'true' }), you = h('span', { class: 'fs-you', text: 'сейчас' });
     [[50, '50%'], [100, '100%'], [120, '120%']].forEach(function (m) { var s = h('span', { class: 'fs-mk', text: m[1] }); s.style.left = (m[0] / MAX * 100) + '%'; marks.appendChild(s); });
@@ -2602,7 +2603,7 @@
     function show(p, real) {
       var val = real ? c.accrued : per * p, d = val - c.accrued;
       pct.textContent = v2Pct(p); pay.textContent = money(val);
-      diff.textContent = real ? 'начислено сейчас · двигайте ползунок' : (d >= 0 ? '+' : '−') + money(Math.abs(d)) + (upu ? ' · ≈' + num(Math.round(upu * p)) + ' ед.' : '');
+      diff.textContent = real ? 'вознаграждение сейчас · двигайте ползунок' : (d >= 0 ? '+' : '−') + money(Math.abs(d)) + (upu ? ' · ≈' + num(Math.round(upu * p)) + ' ед.' : '');
       diff.className = 'fs-diff' + (real ? '' : d > 0 ? ' pos' : d < 0 ? ' neg' : ''); rng.setAttribute('aria-valuetext', pct.textContent + ', ' + pay.textContent);
     }
     function back() {
@@ -2616,9 +2617,9 @@
     rng.addEventListener('keydown', function () { clearTimeout(idle); cancelAnimationFrame(raf); });
     rng.addEventListener('keyup', function () { clearTimeout(idle); idle = setTimeout(back, 1200); });
     show(act, true);
-    return h('section', { class: 'card fs v2', 'data-testid': 'v2-es' }, h('div', { class: 'card-h' }, h('h2', { text: 'Сколько я мог бы заработать' })),
-      h('div', { class: 'fs-top' }, h('div', null, h('span', { class: 'cap', text: 'Производительность ' }), pct), pay), diff, h('div', { class: 'fs-track' }, rng, marks),
-      h('p', { class: 'cap', 'data-testid': 'v2-es-cap', text: 'Каждый +1% производительности ≈ +' + money(per) + ' к начислению за период. Отпустите — ползунок вернётся на ваше значение.' }));
+    return h('section', { class: 'card fs v2', 'data-testid': 'v2-es' }, h('div', { class: 'card-h' }, h('h2', { text: 'Вознаграждение при другом объёме' })),
+      h('div', { class: 'fs-top' }, h('div', null, h('span', { class: 'cap', text: 'Объём услуг к плану ' }), pct), pay), diff, h('div', { class: 'fs-track' }, rng, marks),
+      h('p', { class: 'cap', 'data-testid': 'v2-es-cap', text: 'Каждый +1% объёма к плану ≈ +' + money(per) + ' к вознаграждению за период. Отпустите — ползунок вернётся на ваше значение.' }));
   }
   // 6. прогноз выплаты; дата — только если задана PAYOUT_DATE
   function v2Forecast(c) {
@@ -2626,14 +2627,14 @@
     var stm = S.data.statements && S.data.statements[c.p.id], n = (stm && stm.shifts) || c.shifts.filter(function (x) { return !x.planned; }).length, avg = n ? c.accrued / n : 0;
     var s = h('section', { class: 'card v2', 'data-testid': 'v2-fc' }, h('div', { class: 'card-h' }, h('h2', { text: 'Прогноз выплаты' })));
     function line(l, r, tid, cls) { s.appendChild(h('div', { class: 'line' + (cls ? ' ' + cls : ''), 'data-testid': tid || null }, h('div', { class: 'nm', text: l }), h('div', { class: 'am num', text: r }))); }
-    line('Начислено', money(c.accrued));
+    line('Вознаграждение', money(c.accrued));
     var fines = (c.by.brak || 0) + (c.by.error || 0); if (fines) line('Брак и ошибки', minus(fines));
-    if (c.by.advance) line('Аванс', minus(c.by.advance)); if (c.by.housing) line('Проживание', minus(c.by.housing)); if (c.by.other) line('Прочее', minus(c.by.other));
-    if (c.withheld !== c.own && c.own) line('Удержано с учётом лимита', minus(c.withheld));
+    if (c.by.advance) line('Предоплата', minus(c.by.advance)); if (c.by.housing) line('Проживание', minus(c.by.housing)); if (c.by.other) line('Прочее', minus(c.by.other));
+    if (c.withheld !== c.own && c.own) line('Зачтено с учётом лимита', minus(c.withheld));
     line('К выплате сейчас', money(c.payout), 'v2-fc-pay', 'total');
-    if (avg > 0) { line('Ещё 1 смена (≈' + money(avg) + ')', '≈ ' + money(c.payout + avg), 'v2-fc-1'); line('Ещё 2 смены', '≈ ' + money(c.payout + 2 * avg), 'v2-fc-2'); }
+    if (avg > 0) { line('Ещё 1 день услуг (≈' + money(avg) + ')', '≈ ' + money(c.payout + avg), 'v2-fc-1'); line('Ещё 2 дня услуг', '≈ ' + money(c.payout + 2 * avg), 'v2-fc-2'); }
     var pd = CFG.payoutDate; if (pd) line('Дата выплаты', dlong(pd), 'v2-fc-date');
-    s.appendChild(h('p', { class: 'cap', text: 'Оценка: средняя смена периода = начислено ÷ ' + n + ' ' + plural(n, ['смена', 'смены', 'смен']) + '. Итог — по ведомости после закрытия периода.' }));
+    s.appendChild(h('p', { class: 'cap', text: 'Оценка: средний день услуг = вознаграждение ÷ ' + n + ' ' + plural(n, ['день', 'дня', 'дней']) + '. Итог — по акту после закрытия периода.' }));
     return s;
   }
   /* HOUSING_RULE_V1: попап «Стоимость проживания с октября». Параметры — из S.data.housingRule (бэкенд, Настройки!G21:G24), иначе значения по умолчанию */
@@ -2654,25 +2655,25 @@
     var personal = pthr !== r.thr, over = n > pthr, left = pthr - n;
     var pct = Math.min(100, n / pthr * 100);
     function tier(on, t, v, s) { return h('div', { class: 'hs-tier' + (on ? ' on' : '') }, h('div', null, h('b', { text: t }), h('small', { text: s })), h('div', { class: 'hs-v num', text: v })); }
-    var hint = (personal ? 'Вы приехали ' + +arr.slice(8) + '-го, поэтому ваш порог в ' + mon + ' — ' + pthr + ' ' + plural(pthr, ['смена', 'смены', 'смен']) + '. ' : '') + (over ? 'В ' + mon + ' у вас больше ' + pthr + ' смен — всё проживание за месяц считается по ' + r.hi + ' ₽ за смену.'
-      : left === 0 ? 'Вы ровно на пороге. Ещё одна смена в этом месяце — и всё проживание за месяц будет по ' + r.hi + ' ₽ за смену.'
-      : 'Сейчас проживание стоит ' + r.lo + ' ₽ за смену. Если выйдете ещё на ' + (left + 1) + ' ' + plural(left + 1, ['смену', 'смены', 'смен']) + ' в этом месяце, всё проживание за месяц будет по ' + r.hi + ' ₽ за смену.');
+    var hint = (personal ? 'Вы приехали ' + +arr.slice(8) + '-го, поэтому ваш порог в ' + mon + ' — ' + pthr + ' ' + plural(pthr, ['день', 'дня', 'дней']) + '. ' : '') + (over ? 'В ' + mon + ' у вас больше ' + pthr + ' дней — всё проживание за месяц считается по ' + r.hi + ' ₽ за день услуг.'
+      : left === 0 ? 'Вы ровно на пороге. Ещё один день услуг в этом месяце — и всё проживание за месяц будет по ' + r.hi + ' ₽ за день услуг.'
+      : 'Сейчас проживание стоит ' + r.lo + ' ₽ за день услуг. Если окажете услуги ещё ' + (left + 1) + ' ' + plural(left + 1, ['день', 'дня', 'дней']) + ' в этом месяце, всё проживание за месяц будет по ' + r.hi + ' ₽ за день услуг.');
     var ex = 20 * r.lo, ex2 = 30 * r.hi;
     var body = h('div', { class: 'gap12 hs' },
-      h('p', { text: 'С 1 октября 2026 года стоимость проживания зависит от того, сколько смен вы отработали за календарный месяц. Чем больше смен, тем дешевле проживание.' }),
-      tier(!over, 'До ' + r.thr + ' смен в месяц включительно', r.lo + ' ₽', 'за каждую смену'),
-      tier(over, 'Больше ' + r.thr + ' смен в месяц', r.hi + ' ₽', 'за все смены этого месяца'),
-      h('p', { class: 'hs-warn', 'data-testid': 'hs-warn', text: 'Ставка ' + r.lo + ' ₽ за смену применяется, если вы прервёте период оказания услуг, указанный в задании в приложении «Консоль».' }),
-      h('p', { class: 'cap hs-arr', 'data-testid': 'hs-arr', text: 'Если вы приехали не с начала месяца, порог считается пропорционально дням. Например, приехали 16-го — если отработаете больше ' + Math.round(r.thr * 16 / 31) + ' ' + plural(Math.round(r.thr * 16 / 31), ['смены', 'смен', 'смен']) + ', всё проживание за месяц будет по ' + r.hi + ' ₽ за смену.' }),
-      h('p', { class: 'hs-note', 'data-testid': 'hs-note', text: 'В дни выходных и больничного проживание не удерживается — оно считается только за отработанные смены.' }),
+      h('p', { text: 'С 1 октября 2026 года стоимость проживания зависит от того, сколько дней вы оказывали услуги за календарный месяц. Чем больше дней, тем дешевле проживание.' }),
+      tier(!over, 'До ' + r.thr + ' дней в месяц включительно', r.lo + ' ₽', 'за каждый день услуг'),
+      tier(over, 'Больше ' + r.thr + ' дней в месяц', r.hi + ' ₽', 'за все дни услуг этого месяца'),
+      h('p', { class: 'hs-warn', 'data-testid': 'hs-warn', text: 'Ставка ' + r.lo + ' ₽ за день услуг применяется, если вы прервёте период оказания услуг, указанный в задании в приложении «Консоль».' }),
+      h('p', { class: 'cap hs-arr', 'data-testid': 'hs-arr', text: 'Если вы приехали не с начала месяца, порог считается пропорционально дням. Например, приехали 16-го — если окажете услуги больше ' + Math.round(r.thr * 16 / 31) + ' ' + plural(Math.round(r.thr * 16 / 31), ['дня', 'дней', 'дней']) + ', всё проживание за месяц будет по ' + r.hi + ' ₽ за день услуг.' }),
+      h('p', { class: 'hs-note', 'data-testid': 'hs-note', text: 'В дни без заданий проживание не удерживается — оно считается только за дни оказания услуг.' }),
       h('div', { class: 'hs-prog', 'data-testid': 'hs-prog' },
-        h('div', { class: 'hs-pt' }, h('b', { class: 'num', text: n + ' из ' + pthr }), h('span', { text: ' смен в ' + mon })),
+        h('div', { class: 'hs-pt' }, h('b', { class: 'num', text: n + ' из ' + pthr }), h('span', { text: ' дней в ' + mon })),
         h('div', { class: 'hs-bar' + (over ? ' done' : ''), role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(pthr), 'aria-valuenow': String(Math.min(n, pthr)) }, (function () { var e = h('i'); e.style.width = pct + '%'; return e; })()),
         h('p', { class: 'cap', text: hint })),
       h('div', { class: 'hs-ex' }, h('b', { text: 'Пример' }),
-        h('p', { text: '20 смен за месяц: 20 × ' + r.lo + ' ₽ = ' + money(ex) + '.' }),
-        h('p', { text: '30 смен за месяц: 30 × ' + r.hi + ' ₽ = ' + money(ex2) + ' — смен больше, а за проживание вы платите меньше.' })),
-      h('p', { class: 'cap', text: 'Смены считаются отдельно за каждый календарный месяц. Сумма за проживание вычитается из выплаты, как и раньше. До октября действует прежняя цена — ' + r.hi + ' ₽ за смену.' }));
+        h('p', { text: '20 дней за месяц: 20 × ' + r.lo + ' ₽ = ' + money(ex) + '.' }),
+        h('p', { text: '30 дней за месяц: 30 × ' + r.hi + ' ₽ = ' + money(ex2) + ' — дней больше, а за проживание вы платите меньше.' })),
+      h('p', { class: 'cap', text: 'Дни считаются отдельно за каждый календарный месяц. Сумма за проживание вычитается из выплаты, как и раньше. До октября действует прежняя цена — ' + r.hi + ' ₽ за день услуг.' }));
     var sh = openSheet({ title: 'Стоимость проживания с октября', dialog: true, body: body,
       footer: h('button', { class: 'btn', type: 'button', 'data-testid': 'hs-ok', onclick: function () { sh.close(); } }, 'Понятно'),
       onClose: function () { try { localStorage.setItem(hsKey(), '1'); } catch (e) {} } });
@@ -2682,14 +2683,14 @@
   function hsInfoBtn() { return h('button', { class: 'hs-i', type: 'button', 'aria-label': 'Как считается проживание', 'data-testid': 'hs-info', onclick: function (e) { e.stopPropagation(); hsOpen(); } }, 'i'); }
   function v2HomeCards(v, c) { var a = v2Forecast(c), b = v2EmpSlider(c); if (a) v.appendChild(a); if (b) v.appendChild(b); hsMaybe(); }
   // 8. «Оспорить штраф»
-  var DSP_ST = { open: ['На рассмотрении', 'warn', 'clock'], removed: ['Штраф снят', 'ok', 'check'], rejected: ['Спор отклонён', 'bad', 'x'] };
+  var DSP_ST = { open: ['На рассмотрении', 'warn', 'clock'], removed: ['Удержание отменено', 'ok', 'check'], rejected: ['Спор отклонён', 'bad', 'x'] };
   function v2DisputeOf(id) { var a = (S.data.disputes || []).filter(function (x) { return x.caseId === id; }); return a[a.length - 1] || null; }
   function v2OpenDispute(c) {
     var ta = h('textarea', { class: 'inp', rows: '4', maxlength: '500', 'data-testid': 'dsp-text', placeholder: 'Почему вы не согласны? Например: коробка пришла мятой, есть фото у кладовщика.' });
     var btn = h('button', { class: 'btn', type: 'button', 'data-testid': 'dsp-send' }, 'Отправить на рассмотрение'), sh;
     btn.addEventListener('click', function () { var t = ta.value.trim(); if (t.length < 3) { toast(V2_ERR.bad_comment, 'warn'); return; } btn.disabled = true;
       v2Send('disputeAdd', { caseId: c.id, comment: t }).then(function (r) { btn.disabled = false; if (r) { S.data.disputes = r.disputes; sh.close(); toast('Спор отправлен — админ рассмотрит и ответит в Telegram'); render(); } }); });
-    sh = openSheet({ title: 'Оспорить штраф', body: h('div', null, h('div', { class: 'fo-it' }, h('div', null, c.title, h('div', { class: 's', text: KIND[c.kind].n + ' · ' + dmy(c.date) })), h('b', { text: money(c.amount) })), h('label', { class: 'cap', text: 'Комментарий' }), ta), footer: btn });
+    sh = openSheet({ title: 'Оспорить удержание', body: h('div', null, h('div', { class: 'fo-it' }, h('div', null, c.title, h('div', { class: 's', text: KIND[c.kind].n + ' · ' + dmy(c.date) })), h('b', { text: money(c.amount) })), h('label', { class: 'cap', text: 'Комментарий' }), ta), footer: btn });
   }
   function v2CaseDispute(el, c) {
     if (c.kind !== 'brak' && c.kind !== 'error') return;
@@ -3242,7 +3243,7 @@
   }
   // STARS_V1: вкладка «Звёзды» — баланс, рейтинг, вход в игру (сама игра — stars/, логика и ответы на сервере)
   function viewStars() {
-    var v = h('main', { class: 'view stack', id: 'main', 'data-testid': 'stars-view' }); v.appendChild(pageTop('Звёзды', 'Игра «Кто хочет стать звездой склада?»'));
+    var v = h('main', { class: 'view stack', id: 'main', 'data-testid': 'stars-view' }); v.appendChild(pageTop('Звёзды', 'Викторина исполнителя'));
     if (S.stars && Date.now() - (S.starsAt || 0) > 60000) S.stars = null;
     var I = S.stars, card = h('section', { class: 'card stars-card' });
     if (!LIVE) card.appendChild(h('p', { class: 'note-s', text: 'Игра работает только в рабочем режиме приложения.' }));
@@ -3253,14 +3254,14 @@
       card.appendChild(h('p', { class: 'note-s', text: I.playedToday ? 'Сегодня вы уже сыграли — следующая игра завтра.' : I.active ? 'У вас есть незаконченная игра.' : 'Сегодняшняя игра доступна: 10 вопросов, 1 верный ответ = 1 ⭐.' }));
     }
     card.appendChild(h('a', { class: 'btn', href: 'stars/', 'data-testid': 'stars-play', text: I && I.playedToday ? 'Открыть игру' : '▶ Играть' }));
-    card.appendChild(h('div', { class: 'stars-links' }, h('a', { class: 'btn secondary', href: 'stars/#ex', 'data-testid': 'stars-ex', text: 'Обмен' }), h('a', { class: 'btn secondary', href: 'stars/#rate', text: 'Рейтинг' })));
+    card.appendChild(h('div', { class: 'stars-links' }, h('a', { class: 'btn secondary', href: 'stars/#ex', 'data-testid': 'stars-ex', text: 'Обмен' }), h('a', { class: 'btn secondary', href: 'stars/#rate', text: 'Результаты' })));
     v.appendChild(card);
-    if (I && I.rating && I.rating.length) { var l = h('section', { class: 'card' }, h('h2', { text: 'Рейтинг месяца' })); I.rating.slice(0, 5).forEach(function (r) { l.appendChild(h('div', { class: 'stars-row' + (r.me ? ' me' : '') }, h('span', { text: (['🥇', '🥈', '🥉'][r.place - 1] || r.place + '.') + ' ' + r.name + (r.me ? ' (вы)' : '') }), h('b', { text: '⭐ ' + r.stars }))); }); v.appendChild(l); }
-    v.appendChild(h('p', { class: 'note-s', text: 'Штраф за ошибку — только звёздами, из выплат деньги за игру не удерживаются. Обмен до ' + (I && I.cfg ? I.cfg.cap.toLocaleString('ru-RU') : '5 000') + ' ₽ в месяц, после одобрения админом.' }));
+    if (I && I.rating && I.rating.length) { var l = h('section', { class: 'card' }, h('h2', { text: 'Таблица результатов месяца' })); I.rating.slice(0, 5).forEach(function (r) { l.appendChild(h('div', { class: 'stars-row' + (r.me ? ' me' : '') }, h('span', { text: (['🥇', '🥈', '🥉'][r.place - 1] || r.place + '.') + ' ' + r.name + (r.me ? ' (вы)' : '') }), h('b', { text: '⭐ ' + r.stars }))); }); v.appendChild(l); }
+    v.appendChild(h('p', { class: 'note-s', text: 'За ошибку списываются только звёзды, из выплат деньги за игру не удерживаются. Обмен до ' + (I && I.cfg ? I.cfg.cap.toLocaleString('ru-RU') : '5 000') + ' ₽ в месяц, после одобрения админом.' }));
     return v;
   }
   var VIEWS = { home: viewHome, ops: viewOps, cal: viewCal, ded: viewDed, adv: viewAdv, me: viewMe, promo: viewPromo, jobs: viewJobs, mydata: viewMyData, brig: viewBrig, stars: viewStars };
-  var TITLES = { promo: 'Акции и бонусы', jobs: 'Вакансии', mydata: 'Мои данные', brig: 'Бригада', stars: 'Звёзды' };
+  var TITLES = { promo: 'Акции и бонусы', jobs: 'Предложения заданий', mydata: 'Мои данные', brig: 'Бригада', stars: 'Звёзды' };
   function render() {
     if (!session()) return renderLogin();
     if (S.consent && !S.consent.ok) return renderConsent();
@@ -3316,7 +3317,7 @@
           h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-paid-less', onclick: function () { admin.paid(a.id, Math.max(100, a.amount - 500)); } }, 'Выдано на 500 ₽ меньше')));
       });
       if (session()) s.cases.filter(function (c) { return c.expl && c.expl.status === 'sent'; }).forEach(function (c) { box.appendChild(h('div', { class: 'devrow' }, 'Объяснение: ' + c.title.slice(0, 28), h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-accept', onclick: function () { admin.accept(c.id); } }, 'Принять'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-return', onclick: function () { admin.returnExpl(c.id, 'Фото нечёткое. Снимите повреждение крупнее и приложите ещё одно.'); } }, 'Вернуть'))); });
-      if (session()) s.incidents.filter(function (i) { return i.status === 'review'; }).forEach(function (i) { box.appendChild(h('div', { class: 'devrow' }, 'Происшествие: ' + i.desc.slice(0, 26), h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-accept', onclick: function () { admin.acceptIncident(i.id); } }, 'Принять'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-return', onclick: function () { admin.decideIncident(i.id, 'returned', 'Не видно номер паллеты на фото. Добавьте, когда и кого вы уведомили.'); } }, 'Вернуть'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-reject', onclick: function () { admin.decideIncident(i.id, 'rejected', 'Это не ваша смена, случай передан другому сотруднику.'); } }, 'Отклонить'))); });
+      if (session()) s.incidents.filter(function (i) { return i.status === 'review'; }).forEach(function (i) { box.appendChild(h('div', { class: 'devrow' }, 'Происшествие: ' + i.desc.slice(0, 26), h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-accept', onclick: function () { admin.acceptIncident(i.id); } }, 'Принять'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-return', onclick: function () { admin.decideIncident(i.id, 'returned', 'Не видно номер паллеты на фото. Добавьте, когда и кого вы уведомили.'); } }, 'Вернуть'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-inc-reject', onclick: function () { admin.decideIncident(i.id, 'rejected', 'Это не ваше задание, случай передан другому исполнителю.'); } }, 'Отклонить'))); });
       if (session()) s.applications.filter(function (x) { return x.status === 'sent' || x.status === 'viewed'; }).slice(0, 2).forEach(function (x) { box.appendChild(h('div', { class: 'devrow' }, 'Отклик: ' + x.jobId, h('br'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-app-invite', onclick: function () { admin.application(x.id, 'invited'); } }, 'Пригласить'))); });
       box.appendChild(h('div', { class: 'devrow' }, h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-block', onclick: function () { admin.block(); refresh(); } }, 'Заблокировать доступ'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-unblock', onclick: function () { admin.unblockAll(); toast('Доступ возвращён'); } }, 'Вернуть доступ')));
       box.appendChild(h('div', { class: 'devrow' }, h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-unlock', onclick: function () { admin.unlock(); toast('Лимиты входа сброшены'); } }, 'Сбросить лимиты входа'), h('button', { class: 'devbtn', type: 'button', 'data-testid': 'adm-reset', onclick: function () { admin.reset(); } }, 'Сбросить демо')));
