@@ -151,7 +151,7 @@ function bindLkk(c){var t=$('#lkkt');if(!t)return;t.onchange=function(){var on=t
 function gphText(t){t=String(t==null?'':t);if(!t)return'';return t
  .replace(/вахта\/смены/gi,'период оказания услуг')
  .replace(/после окончания вахты/gi,'после окончания периода оказания услуг')
- .replace(/\bвахт[аыуе]?\b/gi,'период оказания услуг')
+ .replace(/(^|[^А-Яа-яЁё0-9])вахт[аыуе]?(?=[^А-Яа-яЁё]|$)/gi,'$1период оказания услуг')
  .replace(/до работы/gi,'до объекта')
  .replace(/на работу/gi,'на объект')
  .replace(/за сч[её]т компании/gi,'за счёт заказчика')
@@ -169,8 +169,8 @@ function gphText(t){t=String(t==null?'':t);if(!t)return'';return t
  .replace(/вышел на смену/gi,'начал оказание услуг')
  .replace(/выход на смену/gi,'начало оказания услуг')
  .replace(/на смену/gi,'на объект')
- .replace(/(\d+)\s*смен\b/gi,'$1 выходов на объект')
- .replace(/\bсмен[аыуе]?\b/gi,'выходов на объект')
+ .replace(/(\d+)\s*смен(?=[^А-Яа-яЁёA-Za-z]|$)/gi,'$1 выходов на объект')
+ .replace(/(^|[^А-Яа-яЁё0-9])смен[аыуе]?(?=[^А-Яа-яЁё]|$)/gi,'$1выходов на объект')
  .replace(/\s{2,}/g,' ').replace(/\s+,/g,',').trim()}
 function routeFields(c){var s=siteInfo(c),ph=s.phone||'',ct=s.contact||'',docs=['Паспорт','СНИЛС','ИНН','справка о постановке на учёт в качестве плательщика НПД («Мой налог»)'];if(/погрузчик|трактор/i.test(c.vacancy||''))docs.push('права тракториста');
  return{fio:c.fio||'',phone:c.phone?'+'+c.phone:'',vacancy:gphText(c.vacancy||''),site:gphText(short(c.site||c.object)||''),address:gphText(s.address||''),plan:c.plan?fd(c.plan):'',meet:gphText([ct,ph].filter(String).join(' ')),travel:gphText(s.travel||''),housing:gphText(s.housingAddr||''),resp:c.resp||'',docs:docs.join(', ')}}
@@ -245,7 +245,7 @@ function addGeneric(kind){sheet(formHtml(kind));$('#cl').onclick=function(){$('#
 function addCand(){addGeneric('c')}function addLead(){addGeneric('l')}
 document.querySelectorAll('#tabs button').forEach(function(b){b.onclick=function(){tab=b.dataset.t;render();scrollTo(0,0)}});
 $('#logout').onclick=logout;$('#refresh').onclick=hardUpdate;
-var VER=20;function hardUpdate(){toast('Обновляю приложение');var p=[];if(window.caches)p.push(caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x)}))}));if('serviceWorker'in navigator)p.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister()}))}));Promise.all(p).catch(function(){}).then(function(){location.replace(location.pathname+'?u='+Date.now())})}
+var VER=21;function hardUpdate(){toast('Обновляю приложение');var p=[];if(window.caches)p.push(caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x)}))}));if('serviceWorker'in navigator)p.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister()}))}));Promise.all(p).catch(function(){}).then(function(){location.replace(location.pathname+'?u='+Date.now())})}
 function checkVer(){fetch('index.html?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.text()}).then(function(t){var m=t.match(/app\.js\?v=(\d+)/);if(m&&+m[1]>VER&&sessionStorage.mgrUpd!==m[1]){sessionStorage.mgrUpd=m[1];hardUpdate()}}).catch(function(){})}
 if('serviceWorker'in navigator){var hadC=!!navigator.serviceWorker.controller,rl=false;navigator.serviceWorker.addEventListener('controllerchange',function(){if(hadC&&!rl){rl=true;location.reload()}});navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(r){r.update()}).catch(function(){})}
 checkVer();document.addEventListener('visibilitychange',function(){if(!document.hidden)checkVer()});
