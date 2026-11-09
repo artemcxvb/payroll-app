@@ -11,7 +11,7 @@ function short(s){return String(s||'').replace(/\s*\(\s*склад Лемано 
 function toast(t){var e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(e._t);e._t=setTimeout(function(){e.hidden=true},2500)}
 function grp(s){return OUT.test(s)?'out':REJ.test(s)?'rej':'work'}
 function stCls(s){var g=grp(s);return g==='out'?'ok':g==='rej'?'bad':''}
-function lkkOn(c){var v=String(c&&c.lkk||'').trim();return!!v&&!/^false|0|нет|no$/i.test(v)}
+function lkkOn(c){var v=String(c&&c.lkk||'').trim().toLowerCase();return!!v&&v!=='false'&&v!=='0'&&v!=='нет'&&v!=='no'}
 function lkkText(c){if(!lkkOn(c))return'';var v=String(c.lkk);return v==='true'?'да':v}
 function siteInfo(c){return siteOf(c.site)||siteOf(c.object)||{}}
 function api(body){body.token=localStorage.mgrToken||'';return fetch(CFG.apiUrl,{method:'POST',body:JSON.stringify(body)}).then(function(r){return r.json()}).then(function(j){if(j.error==='auth'){localStorage.removeItem('mgrToken');login();throw new Error('auth')}return j})}
@@ -220,7 +220,7 @@ function addGeneric(kind){sheet(formHtml(kind));$('#cl').onclick=function(){$('#
 function addCand(){addGeneric('c')}function addLead(){addGeneric('l')}
 document.querySelectorAll('#tabs button').forEach(function(b){b.onclick=function(){tab=b.dataset.t;render();scrollTo(0,0)}});
 $('#logout').onclick=logout;$('#refresh').onclick=hardUpdate;
-var VER=17;function hardUpdate(){toast('Обновляю приложение');var p=[];if(window.caches)p.push(caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x)}))}));if('serviceWorker'in navigator)p.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister()}))}));Promise.all(p).catch(function(){}).then(function(){location.replace(location.pathname+'?u='+Date.now())})}
+var VER=18;function hardUpdate(){toast('Обновляю приложение');var p=[];if(window.caches)p.push(caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x)}))}));if('serviceWorker'in navigator)p.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister()}))}));Promise.all(p).catch(function(){}).then(function(){location.replace(location.pathname+'?u='+Date.now())})}
 function checkVer(){fetch('index.html?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.text()}).then(function(t){var m=t.match(/app\.js\?v=(\d+)/);if(m&&+m[1]>VER&&sessionStorage.mgrUpd!==m[1]){sessionStorage.mgrUpd=m[1];hardUpdate()}}).catch(function(){})}
 if('serviceWorker'in navigator){var hadC=!!navigator.serviceWorker.controller,rl=false;navigator.serviceWorker.addEventListener('controllerchange',function(){if(hadC&&!rl){rl=true;location.reload()}});navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(r){r.update()}).catch(function(){})}
 checkVer();document.addEventListener('visibilitychange',function(){if(!document.hidden)checkVer()});
