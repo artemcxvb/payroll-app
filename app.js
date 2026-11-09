@@ -465,7 +465,7 @@
     return post(APPC.backendUrl, b).then(function (r) {
       if (isLoginClosed(r) && session()) { rememberHours({ from: r.from, to: r.to, off: false }); logout(closedNotice()); return r; }   // сервер закрыт на ночь: сессия стирается, данные не показываем
       if (r && r.error === 'auth' && session()) { var ck = clockState(session()); logout(ck === 'closed' ? closedNotice() : ck === 'stale' ? staleNotice() : null); if (!ck) toast('Сессия закончилась — войдите снова', 'warn'); }
-      if (r && r.error === 'blocked' && session()) onBlocked();
+      if (r && r.error === 'blocked' && session()) { S.blockReason = r.reason || ''; onBlocked(); }
       if (r && r.error === 'consent' && session()) { openStack.slice().forEach(function (c) { c.close(true); }); S.consent = { ok: false, version: r.version, required: true }; S.data = null; S.calc = null; render(); }   // версия текста сменилась, пока приложение было открыто
       return r; });
   }
@@ -741,7 +741,8 @@
   var L = { step: 'phone', phone: '', timer: null, readyAt: 0 };
   /* ---------- «Доступ закрыт»: бригадир заблокировал номер (ответ сервера 'blocked' на уже вошедшем) ---------- */
   function onBlocked() {
-    localStorage.removeItem(SESSK); localStorage.removeItem(CK); localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.card'); localStorage.removeItem('pr.iadd');   // сессия и сохранённые данные стираются
+    localStorage.removeItem(SESSK); localStorage.removeItem(CK);
+    if (S.blockReason !== 'app_closed') { localStorage.removeItem('pr.drafts'); localStorage.removeItem('pr.idraft'); localStorage.removeItem('pr.card'); localStorage.removeItem('pr.iadd'); }   // сессия и сохранённые данные стираются; APP_LOGIN_CLOSED_V1: при общем закрытии черновики остаются
     openStack.slice().forEach(function (c) { c.close(true); });
     S.data = null; S.calc = null; S.stale = false; S.consent = null; S.blocked = true; clearInterval(L.timer); L = { step: 'phone', phone: '', timer: null, readyAt: 0 };
     if (location.hash !== '#/login') location.hash = '#/login';
@@ -749,14 +750,15 @@
   }
   function renderBlocked() {
     tabbar.hidden = true; $('#offline').hidden = true; clear(root); clearInterval(L.timer);
-    document.title = 'Доступ закрыт · Мои выплаты';
+    var appClosed = S.blockReason === 'app_closed';   // APP_LOGIN_CLOSED_V1
+    document.title = (appClosed ? 'Вход временно закрыт' : 'Доступ закрыт') + ' · Мои выплаты';
     var v = h('main', { class: 'login blocked', id: 'main', 'data-testid': 'blocked-screen' }); root.appendChild(v);
     var why = S.blockReason === 'no_geo'
       ? 'Нужно было разрешить геолокацию. Без неё вход закрыт. Обратитесь к бригадиру.'
       : 'Обратитесь к бригадиру.';
     v.appendChild(h('div', { class: 'brand' }, h('div', { class: 'logo' }, ico('lock', 'lg')), h('div', null, h('b', { text: 'Персональное Решение' }), h('span', { text: 'Кабинет исполнителя' }))));
-    v.appendChild(h('div', { class: 'lockbox', role: 'alert', 'data-testid': 'blockbox' }, ico('lock', 'lg'), h('h1', { text: 'Доступ закрыт' }), h('p', { text: why })));
-    v.appendChild(h('p', { class: 'blocked-note', text: 'Сохранённые на этом телефоне данные удалены.' }));
+    v.appendChild(h('div', { class: 'lockbox', role: 'alert', 'data-testid': 'blockbox' }, ico('lock', 'lg'), h('h1', { text: appClosed ? 'Вход временно закрыт' : 'Доступ закрыт' }), h('p', { text: appClosed ? 'Попробуйте позже.' : why })));
+    if (!appClosed) v.appendChild(h('p', { class: 'blocked-note', text: 'Сохранённые на этом телефоне данные удалены.' }));
     v.appendChild(h('p', { class: 'foot', text: LIVE ? 'Данные видны только вам' : 'Демо-прототип · все данные вымышлены' }));
     devRender();
   }
@@ -849,6 +851,7 @@
       delay(LAT).then(function () { return backend.verify(L.phone, c); }).then(function (r) {
         busy = false;
         if (r.ok) { clearInterval(L.timer); location.hash = '#/home'; boot(); return; }
+        if (r.error === 'blocked') { clearInterval(L.timer); S.blockReason = r.reason || ''; S.blocked = true; return renderBlocked(); }   // APP_LOGIN_CLOSED_V1
         if (r.error === 'closed') { clear(go); go.appendChild(document.createTextNode('Войти')); go.disabled = false; showErr(closedMsg(r)); return; }   // не неверная попытка: поля не очищаем
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         if (r.error === 'network' || r.error === 'server') { clear(go); go.appendChild(document.createTextNode('Войти')); go.disabled = false; showErr('Нет связи с сервером. Повторите.'); return; }

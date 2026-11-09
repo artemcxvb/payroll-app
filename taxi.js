@@ -435,7 +435,7 @@
     var p = LIVE ? post(b) : delay(LAT).then(function () { return demoCall(action, b); });
     return p.then(function (r) {
       if (r && r.error === 'auth' && session()) { endSession(); toast('Сессия закончилась — войдите снова', 'warn'); }
-      if (r && r.error === 'blocked' && session()) { endSession(); toast(ERR.blocked, 'bad'); }
+      if (r && r.error === 'blocked' && session()) { endSession(); toast(r.reason === 'app_closed' ? 'Вход временно закрыт. Попробуйте позже.' : ERR.blocked, 'bad'); }   // APP_LOGIN_CLOSED_V1
       if (r && r.error === 'disabled') { endSession(); S.disabled = true; renderLogin(); }
       return r;
     });
@@ -538,7 +538,7 @@
         clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…'));
         var q = { phone: L.phone, purpose: 'taxi' }; if (LIVE) { q.lat = g.lat; q.lon = g.lon; if (g.accuracy !== undefined) q.accuracy = g.accuracy; } return call('codeRequest', q);
       }) : withGeo({ purpose: 'taxi', phone: L.phone, name: L.name }).then(function (d) { clear(btn); btn.appendChild(h('span', { class: 'spinner' })); btn.appendChild(document.createTextNode(' Отправляем…')); geoHint.hidden = true; return call('adminCodeRequest', d); })).then(function (r) {
-        if (emp && r.error === 'blocked') { fail(r.reason === 'no_geo' ? 'Нужно разрешить геолокацию — доступ закрыт. Обратитесь к бригадиру.' : ERR.blocked); return; }
+        if (emp && r.error === 'blocked') { fail(r.reason === 'app_closed' ? 'Вход временно закрыт. Попробуйте позже.' : r.reason === 'no_geo' ? 'Нужно разрешить геолокацию — доступ закрыт. Обратитесь к бригадиру.' : ERR.blocked); return; }
         if (emp && (r.error === 'geo' || r.error === 'bad_geo')) { L.geoErr = r.reason || 'unavailable'; fail(''); err.hidden = true; showGeoNeed(L.geoErr); return; }
         if (emp) { L.geoErr = ''; showGeoNeed(''); }
         if (r.error === 'locked') { L.step = 'code'; L.lockUntil = r.until; return renderLogin(); }
@@ -600,7 +600,7 @@
         }
         var q = { phone: L.phone, purpose: 'taxi' }; if (LIVE) { q.lat = g.lat; q.lon = g.lon; if (g.accuracy !== undefined) q.accuracy = g.accuracy; } return call('codeRequest', q);
       }) : withGeo({ purpose: 'taxi', phone: L.phone, name: L.name }).then(function (d) { return call('adminCodeRequest', d); })).then(function (r) {
-        if (r.error === 'blocked') { clearInterval(L.timer); toast(r.reason === 'no_geo' ? 'Нужно разрешить геолокацию — доступ закрыт. Обратитесь к бригадиру.' : ERR.blocked, 'bad'); L.step = 'start'; return renderLogin(); }
+        if (r.error === 'blocked') { clearInterval(L.timer); toast(r.reason === 'app_closed' ? 'Вход временно закрыт. Попробуйте позже.' : r.reason === 'no_geo' ? 'Нужно разрешить геолокацию — доступ закрыт. Обратитесь к бригадиру.' : ERR.blocked, 'bad'); L.step = 'start'; return renderLogin(); }
         if (r.error === 'geo' || r.error === 'bad_geo') { clearInterval(L.timer); L.step = 'start'; L.geoErr = r.reason || 'unavailable'; return renderLogin(); }
         if (r.error === 'locked') { L.lockUntil = r.until; return renderLogin(); }
         if (!r.ok) { if (r.error === 'req_limit') L.left = 0; toast(errText(r), 'bad'); tick(); return; }
