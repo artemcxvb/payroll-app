@@ -117,3 +117,11 @@ h2.scr{margin:4px 0 12px;font-size:20px;font-weight:700;letter-spacing:-.02em;co
 .docnums{margin:10px 0;padding:10px 12px;border-radius:12px;background:#f4f7fb;border:1px solid #d7e0ea;font-size:13px;font-weight:600;color:#1e2a4a;line-height:1.45}
 .docnums.empty{font-weight:500;color:#6b7280}
 .sub.dn{font-size:12px;color:#3d4fd8;margin-top:4px;word-break:break-word}
+
+.badge{position:absolute;top:4px;right:calc(50% - 22px);min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#e11d48;color:#fff;font-size:10px;font-weight:700;font-style:normal;line-height:16px;text-align:center}
+.badge.inl{position:static;display:inline-block;vertical-align:middle;margin-left:6px;right:auto;top:auto}
+.okmsg{background:#e7f7ee;border:1px solid #b9e4c9;color:#146c36;border-radius:10px;padding:12px;font-weight:600}
+.ucard .uacts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.ucard .uacts .btn{width:auto;margin:0;min-height:40px;padding:0 14px;flex:1}
+.urole{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;flex:1 1 100%}
+.urole select{flex:1;min-height:40px}
