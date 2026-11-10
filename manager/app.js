@@ -287,7 +287,7 @@ function usersV(){if(!D.user||D.user.role!=='admin'){tab='more';return render()}
   var pending=u.status==='Ожидает', blocked=u.status==='Заблокирован', ok=u.status==='Одобрен';
   return'<div class="card ucard" data-u="'+u.row+'"><div class="it"><div><div class="nm">'+esc(u.name)+(pending?' <i class="badge inl">!</i>':'')+'</div><div class="sub">'+esc(u.phone||'без телефона')+(u.hint?' · пожелание: '+esc(u.hint):'')+'</div><div class="sub">'+esc(u.roleLabel||'')+' · '+esc(u.date||'')+(u.updated&&u.updated!==u.date?' · изм. '+esc(u.updated):'')+'</div></div><span class="st '+stUser(u.status)+'">'+esc(u.status)+'</span></div>'+
   '<div class="uacts">'+(pending?'<label class="urole">Роль <select id="ur'+u.row+'"><option value="recruiter" selected>Менеджер</option><option value="admin">Администратор</option></select></label><button type="button" class="btn" data-op="approve" data-row="'+u.row+'">Одобрить</button><button type="button" class="btn s" data-op="reject" data-row="'+u.row+'">Отклонить</button>':'')+
-  (ok?'<button type="button" class="btn s" data-op="block" data-row="'+u.row+'">Заблокировать</button>':'')+
+  (ok&&u.name!==D.user.name?'<button type="button" class="btn s" data-op="block" data-row="'+u.row+'">Заблокировать</button>':'')+
   (blocked?'<button type="button" class="btn" data-op="unblock" data-row="'+u.row+'">Разблокировать</button>':'')+
   '</div></div>'}).join('')+(a.length?'':'<div class="card">Пока нет пользователей</div>');
  bindBack();
@@ -354,7 +354,7 @@ function addGeneric(kind){sheet(formHtml(kind));$('#cl').onclick=function(){$('#
 function addCand(){addGeneric('c')}function addLead(){addGeneric('l')}
 document.querySelectorAll('#tabs button').forEach(function(b){b.onclick=function(){tab=b.dataset.t;render();scrollTo(0,0)}});
 $('#logout').onclick=logout;$('#refresh').onclick=hardUpdate;
-var VER=30;function hardUpdate(){toast('Обновляю приложение');var p=[];if(window.caches)p.push(caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x)}))}));if('serviceWorker'in navigator)p.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister()}))}));Promise.all(p).catch(function(){}).then(function(){location.replace(location.pathname+'?u='+Date.now())})}
+var VER=31;function hardUpdate(){toast('Обновляю приложение');var p=[];if(window.caches)p.push(caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x)}))}));if('serviceWorker'in navigator)p.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister()}))}));Promise.all(p).catch(function(){}).then(function(){location.replace(location.pathname+'?u='+Date.now())})}
 function checkVer(){fetch('index.html?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.text()}).then(function(t){var m=t.match(/app\.js\?v=(\d+)/);if(m&&+m[1]>VER&&sessionStorage.mgrUpd!==m[1]){sessionStorage.mgrUpd=m[1];hardUpdate()}}).catch(function(){})}
 if('serviceWorker'in navigator){var hadC=!!navigator.serviceWorker.controller,rl=false;navigator.serviceWorker.addEventListener('controllerchange',function(){if(hadC&&!rl){rl=true;location.reload()}});navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(r){r.update()}).catch(function(){})}
 checkVer();document.addEventListener('visibilitychange',function(){if(!document.hidden)checkVer()});
