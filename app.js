@@ -5,7 +5,7 @@
   'use strict';
   var M = window.MOCK, CFG = M.config;
   CFG.cardRequired = (window.APP_CONFIG || {}).mode !== 'live' && (window.APP_CONFIG || {}).cardDemo !== false;   // демо: банк и карта обязательны (cardDemo:false отключает); в боевом режиме ответ сервера (ADV_CARD_REQUIRED)
-  var APPC = window.APP_CONFIG || {}, BOT_URL = /^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{4,31}$/.test(String(APPC.loginBotUrl || '')) ? APPC.loginBotUrl : 'https://t.me/black8c61u1h_bot', BOT_NAME = '@' + BOT_URL.replace(/^.*\//, ''), LIVE = APPC.mode === 'live' && /^https:\/\//.test(APPC.backendUrl || '');   // demo по умолчанию, пока нет URL бэкенда
+  var APPC = window.APP_CONFIG || {}, BOT_URL = /^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{4,31}$/.test(String(APPC.loginBotUrl || '')) ? APPC.loginBotUrl : 'https://t.me/tableworks_bot', BOT_NAME = '@' + BOT_URL.replace(/^.*\//, ''), LIVE = APPC.mode === 'live' && /^https:\/\//.test(APPC.backendUrl || '');   // demo по умолчанию, пока нет URL бэкенда
   var qs = new URLSearchParams(location.search);
   var LAT = LIVE ? 0 : qs.has('lat') ? +qs.get('lat') : 450;       // задержка «сети», мс (в боевом режиме — настоящая сеть)
   if (LIVE) { ['users', 'shifts', 'cases', 'incidents', 'promos', 'jobs', 'applications', 'advances'].forEach(function (k) { M[k] = []; }); M.OPS.length = 0; }   // демо-данных в боевом режиме нет
