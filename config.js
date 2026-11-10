@@ -1,7 +1,7 @@
 /* Конфигурация приложения. По умолчанию — демо (вымышленные данные, «сервер» в localStorage браузера).
    Боевой режим включается только когда заданы mode: 'live' И backendUrl (адрес Web App из DEPLOY.md). Секретов здесь нет. */
 window.APP_CONFIG = {
-  loginBotUrl: 'https://t.me/tableworks_bot',   // бот личных кодов входа (только https://t.me/<имя>; иначе используется значение по умолчанию)
+  loginBotUrl: 'https://t.me/black8c61u1h_bot',   // бот личных кодов входа (только https://t.me/<имя>; иначе используется значение по умолчанию)
   loginHours: { from: 0, to: 24 }, /* OPEN_NOW temporary; server LOGIN_HOURS_OFF preferred */   // часы работы приложения по Москве (с 9:00 до 20:00); после 20:00 все выходят автоматически. Сервер присылает свои часы при входе, они главнее; без этой строки подразумеваются 9 и 20
   mode: 'live',          // 'demo' | 'live'
   backendUrl: 'https://script.google.com/macros/s/AKfycbzRKLoTEp4TvrldINzxuq6fg1uYmPktgeGztA_NE6ujLUpeFSbTn7xDLSp2XNFEUW6PzA/exec',        // https://script.google.com/macros/s/…/exec — основной бэкенд (вход, данные, аванс, происшествия…)
