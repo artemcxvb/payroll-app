@@ -8,7 +8,7 @@
   'use strict';
   var APPC = window.APP_CONFIG || {}, LIVE = APPC.mode === 'live' && /^https:\/\//.test(APPC.backendUrl || '');
   var qs = new URLSearchParams(location.search), LAT = LIVE ? 0 : qs.has('lat') ? +qs.get('lat') : 150;
-  var WHOK = 'pr.admin.who', SESSK = 'pr.admin.session', EMPK = 'pr.taxi.session', DEMOK = 'pr.taxi.demo', THEMEK = 'pr.theme', LASTK = 'pr.taxi.last', NBSP = '\u00a0', DEMO_CODE = '4821', BOT_URL = /^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{4,31}$/.test(String(APPC.loginBotUrl || '')) ? APPC.loginBotUrl : 'https://t.me/tableworks_bot', BOT_NAME = '@' + BOT_URL.replace(/^.*\//, '');
+  var WHOK = 'pr.admin.who', SESSK = 'pr.admin.session', EMPK = 'pr.taxi.session', DEMOK = 'pr.taxi.demo', THEMEK = 'pr.theme', LASTK = 'pr.taxi.last', NBSP = '\u00a0', DEMO_CODE = '4821', BOT_URL = /^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{4,31}$/.test(String(APPC.loginBotUrl || '')) ? APPC.loginBotUrl : 'https://t.me/black8c61u1h_bot', BOT_NAME = '@' + BOT_URL.replace(/^.*\//, '');
 
   /* ---------- настройки (правятся здесь; на сервере список маршрутов задаётся в Code.gs: TAXI_ROUTES_ или Script Property TAXI_ROUTES) ---------- */
   var OTHER = 'Другое';
@@ -917,7 +917,7 @@
   }
   function budgetCard(b) {   // TAXI_BUDGET_TILES_V1: плитки как «Поездок / Общая сумма»: Выделено, Потрачено, Остаток (красный ниже порога), В среднем в день; всегда с даты бюджета, период не влияет
     var bn = b.site ? 'Бюджет такси «' + b.site + '»' : 'Бюджет такси (общий)', bc = b.site ? '/budget ' + b.site + ' ' : '/budget ' + (S.sites[0] || '') + ' ';
-    if (!b.set) return h('div', { class: 'card tx-budget none', 'data-testid': 'budget', 'data-site': b.site || '' }, h('div', { class: 'l', text: bn }), h('div', { class: 's', 'data-testid': 'budget-sub', text: 'Бюджет не задан. Отправьте боту @tableworks_bot команду ' + bc + '10000.' }));
+    if (!b.set) return h('div', { class: 'card tx-budget none', 'data-testid': 'budget', 'data-site': b.site || '' }, h('div', { class: 'l', text: bn }), h('div', { class: 's', 'data-testid': 'budget-sub', text: 'Бюджет не задан. Отправьте боту @black8c61u1h_bot команду ' + bc + '10000.' }));
     var neg = function (n) { return n < 0 ? '−' + money(-n) : money(n); };
     var left = h('div', { class: 'card sumcard tx-bleft' + (b.low ? ' low' : ''), 'data-testid': 'b-left' }, h('div', { class: 'n num', 'data-testid': 'budget-bal', text: neg(b.balance) }), h('div', { class: 'l', text: 'Остаток' }),
       h('div', { class: 's', 'data-testid': 'budget-sub', text: 'Выделено ' + money(b.allocated) + ' · потрачено ' + money(b.spent) + (b.low ? ' · меньше ' + money(b.threshold) : '') }));
@@ -926,7 +926,7 @@
       left,
       h('div', { class: 'sumgrid tx-sum' }, sumCard('Выделено', money(b.allocated), 'с ' + dmy(b.since).slice(0, 5), 'b-alloc'), sumCard('Потрачено', money(b.spent), 'с даты бюджета', 'b-spent'),
         b.perDay !== undefined ? sumCard('В среднем в день', money(b.perDay), 'с ' + dmy(b.since).slice(0, 5) + ' по сегодня', 'b-perday') : null),
-      isAdmin() ? h('p', { class: 'help tx-bhint', text: b.site ? 'Пополнить: боту @tableworks_bot ' + bc + '+5000, задать заново: ' + bc + '10000.' : 'Старый общий бюджет (до площадок). Задайте бюджет площадки: ' + bc + '10000.' }) : null);
+      isAdmin() ? h('p', { class: 'help tx-bhint', text: b.site ? 'Пополнить: боту @black8c61u1h_bot ' + bc + '+5000, задать заново: ' + bc + '10000.' : 'Старый общий бюджет (до площадок). Задайте бюджет площадки: ' + bc + '10000.' }) : null);
   }
   function leftAfter(b, date) {   // остаток после дня (по данным сервера); null для дней до даты бюджета
     if (!b || !b.set || !b.byDay || date < b.since) return null;
@@ -974,7 +974,7 @@
     var give = h('button', { class: 'btn', type: 'button', 'data-testid': 'adv-give', onclick: function () { advGive(people); } }, ico('plus', 'sm'), 'Выдать на такси');
     return h('section', { class: 'card tx-adv', 'data-testid': 'adv-admin', 'aria-label': 'Подотчёт на такси' },
       h('div', { class: 'row between tx-bhead' }, h('h2', { text: 'Подотчёт на такси' }), h('span', { class: 'cap', text: list.length + ' ' + plural(list.length, ['человек', 'человека', 'человек']) })),
-      list.length ? h('div', { class: 'sumgrid tx-sum tx-advgrid' }, sumCard('Выдано', money(tot.a), 'на руках у людей', 'adv-t-issued', 'blue'), sumCard('Потрачено', money(tot.s), 'по чекам', 'adv-t-spent', 'orange'), sumCard('Осталось', sMoney(r2(tot.l)), 'у всех', 'adv-t-left', tot.l < 0 ? 'red' : 'green')) : h('p', { class: 'help', text: 'Пока никому не выдано. Нажмите «Выдать на такси» или отправьте боту @tableworks_bot: /vydat 79001234567 3000.' }),
+      list.length ? h('div', { class: 'sumgrid tx-sum tx-advgrid' }, sumCard('Выдано', money(tot.a), 'на руках у людей', 'adv-t-issued', 'blue'), sumCard('Потрачено', money(tot.s), 'по чекам', 'adv-t-spent', 'orange'), sumCard('Осталось', sMoney(r2(tot.l)), 'у всех', 'adv-t-left', tot.l < 0 ? 'red' : 'green')) : h('p', { class: 'help', text: 'Пока никому не выдано. Нажмите «Выдать на такси» или отправьте боту @black8c61u1h_bot: /vydat 79001234567 3000.' }),
       list.length ? rows : null,
       h('div', { class: 'tx-actions' }, give), h('p', { class: 'help', text: 'Из бота: /vydat <телефон или ФИО> <сумма> [комментарий], список — /podotchet. Красным — остаток меньше ' + money(adv.low || 500) + ' или перерасход.' }));
   }
