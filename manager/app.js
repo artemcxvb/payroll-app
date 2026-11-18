@@ -281,7 +281,7 @@ function siteOf(n){n=String(n||'').trim();if(!n)return null;var list=D.sites||[]
 function brief(n,showEmpty){var x=siteOf(n);if(!x)return'';var a=[['Объект',x.object],['Заказчик',x.customer],['Адрес',x.address],['Виды услуг',x.vacancies],['Описание',x.descr],['График оказания услуг',x.schedule],['Ставка',x.rate?x.rate+' ₽/выход':''],['Требования',x.req],['Гражданство',x.citizenship],['Пол',x.gender],['Возраст',x.age],['Питание',x.food],['Проживание',x.housing],['Адрес проживания',x.housingAddr],['СИЗ',x.ppe],['Проезд',x.travel],['Контакт',[x.contact,x.phone].filter(String).join(' ')]].map(function(p){return[p[0],p[1]?gphText(p[1]):'']});
  if(!showEmpty)a=a.filter(function(p){return p[1]});
  if(!a.length)return'';
- return'<div class="brief">'+a.map(function(p){return'<b>'+p[0]+':</b> '+(p[1]?esc(p[1]):'<span class="empty">— не заполнено</span>')}).join('\n')+'</div>'}
+ return'<div class="brief">'+a.map(function(p){var v=p[1]?esc(p[1]):'<span class="empty">— не заполнено</span>';if(p[1]&&p[0]==='Требования'){v=v.replace(/(обязательно\s+наличие\s+медкнижки|медкнижк\w*)/gi,'<mark class="req-hl">$1</mark>');v='<span class="req-line">'+v+'</span>'}return'<b>'+p[0]+':</b> '+v}).join('\n')+'</div>'}
 
 function stUser(s){return s==='Одобрен'?'ok':s==='Ожидает'?'w':s==='Заблокирован'||s==='Отклонён'?'bad':''}
 function usersV(){if(!D.user||D.user.role!=='admin'){tab='more';return render()}
@@ -358,7 +358,7 @@ function addGeneric(kind){sheet(formHtml(kind));$('#cl').onclick=function(){$('#
 function addCand(){addGeneric('c')}function addLead(){addGeneric('l')}
 document.querySelectorAll('#tabs button').forEach(function(b){b.onclick=function(){tab=b.dataset.t;render();scrollTo(0,0)}});
 $('#logout').onclick=logout;$('#refresh').onclick=hardUpdate;
-var VER=37;function hardUpdate(){toast('Обновляю приложение');var p=[];if(window.caches)p.push(caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x)}))}));if('serviceWorker'in navigator)p.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister()}))}));Promise.all(p).catch(function(){}).then(function(){location.replace(location.pathname+'?u='+Date.now())})}
+var VER=38;function hardUpdate(){toast('Обновляю приложение');var p=[];if(window.caches)p.push(caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x)}))}));if('serviceWorker'in navigator)p.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister()}))}));Promise.all(p).catch(function(){}).then(function(){location.replace(location.pathname+'?u='+Date.now())})}
 function checkVer(){fetch('index.html?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.text()}).then(function(t){var m=t.match(/app\.js\?v=(\d+)/);if(m&&+m[1]>VER&&sessionStorage.mgrUpd!==m[1]){sessionStorage.mgrUpd=m[1];hardUpdate()}}).catch(function(){})}
 if('serviceWorker'in navigator){var hadC=!!navigator.serviceWorker.controller,rl=false;navigator.serviceWorker.addEventListener('controllerchange',function(){if(hadC&&!rl){rl=true;location.reload()}});navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(r){r.update()}).catch(function(){})}
 checkVer();document.addEventListener('visibilitychange',function(){if(!document.hidden)checkVer()});
