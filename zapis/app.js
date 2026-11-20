@@ -1,12 +1,19 @@
 /* Запись исполнителей на выходы (ZAPIS_APP_V1) */
 (function(){
-var VER=3, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
-var D=null, tab='slots', F={site:'',date:''}, role='', $ = function(s){return document.querySelector(s)};
+var VER=4, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
+var D=null, tab='slots', F={site:'',date:''}, role='', loadSeq=0, $ = function(s){return document.querySelector(s)};
 var TOKEN='zapisToken', KIND='zapisKind';
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function fd(s){if(!s)return'—';var p=String(s).split('-');return p.length===3?p[2]+'.'+p[1]+'.'+p[0]:s}
-function today(){var x=new Date();return x.getFullYear()+'-'+('0'+(x.getMonth()+1)).slice(-2)+'-'+('0'+x.getDate()).slice(-2)}
+function today(){
+  try{
+    return new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  }catch(e){
+    var u=new Date(Date.now()+3*3600e3);
+    return u.getUTCFullYear()+'-'+('0'+(u.getUTCMonth()+1)).slice(-2)+'-'+('0'+u.getUTCDate()).slice(-2);
+  }
+}
 function addDays(ymd,n){var p=ymd.split('-'),d=new Date(+p[0],+p[1]-1,+p[2]+n);return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
 function toast(t){var e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(e._t);e._t=setTimeout(function(){e.hidden=true},2500)}
 function fmtLen(min){min=Math.round(+min||0);var h=Math.floor(min/60),m=min%60;if(h&&m)return h+' ч '+m+' мин';if(h)return h+' ч';return m+' мин'}
@@ -20,7 +27,7 @@ function gph(s){s=String(s==null?'':s);if(!s)return s;
  return s}
 function hlReq(s){s=gph(s);var e=esc(s);return e.replace(/медкнижк[а-яё]*|ЛМК/gi,function(m){return'<mark class="req-hl">'+m+'</mark>'})}
 function closeSheet(){$('#sheet').hidden=true;$('#shBody').innerHTML=''}
-function openSheet(html){$('#shBody').innerHTML=html;$('#sheet').hidden=false}
+function openSheet(html){$('#shBody').innerHTML='<button type="button" class="sh-x" id="shclose" aria-label="Закрыть">×</button>'+html;$('#sheet').hidden=false;var x=$('#shclose');if(x)x.onclick=closeSheet}
 function skel(){return'<div class="card"><div class="sk sk-t"></div><div class="sk sk-b"></div><div class="sk sk-s"></div></div><div class="card"><div class="sk sk-b"></div><div class="sk"></div></div>'}
 
 function errText(e){
@@ -52,10 +59,31 @@ function errText(e){
   })[e]||('Ошибка: '+(e||'неизвестно'))
 }
 
-function api(body){
+function netErr(){return 'Нет связи. Нажмите ещё раз — сервер иногда запускается дольше обычного.'}
+function api(body, opts){
+  opts=opts||{};
   body.token=localStorage[TOKEN]||'';
-  return fetch(CFG.apiUrl,{method:'POST',body:JSON.stringify(body)}).then(function(r){return r.json()}).then(function(j){
-    if(j.error==='auth'){localStorage.removeItem(TOKEN);localStorage.removeItem(KIND);login();throw new Error('auth')}
+  var timeout=opts.timeout||25000, retries=opts.retries==null?1:opts.retries, seq=opts.seq;
+  function once(attempt){
+    var ctrl=typeof AbortController!=='undefined'?new AbortController():null;
+    var timer=setTimeout(function(){if(ctrl)ctrl.abort();}, timeout);
+    return fetch(CFG.apiUrl,{method:'POST',body:JSON.stringify(body),signal:ctrl?ctrl.signal:undefined}).then(function(r){
+      return r.text().then(function(t){
+        var j; try{j=JSON.parse(t)}catch(e){throw new Error('bad_response')}
+        return j;
+      });
+    }).finally(function(){clearTimeout(timer)}).catch(function(e){
+      if(e&&e.message==='auth')throw e;
+      if(attempt<retries){
+        if(opts.onRetry)opts.onRetry(attempt+1);
+        return once(attempt+1);
+      }
+      throw e&&e.name==='AbortError'?new Error('timeout'):(e||new Error('net'));
+    });
+  }
+  return once(0).then(function(j){
+    if(seq && seq!==loadSeq){var err=new Error('stale'); err.stale=true; throw err}
+    if(j&&j.error==='auth'){localStorage.removeItem(TOKEN);localStorage.removeItem(KIND);login();throw new Error('auth')}
     return j;
   });
 }
@@ -79,23 +107,28 @@ function setNav(){
 
 function load(){
   if(!LIVE){$('#view').innerHTML='<div class="card">Приложение доступно только в боевом режиме.</div>';return}
-  $('#view').innerHTML=skel();
-  var kind=localStorage[KIND];
+  var seq=++loadSeq, kind=localStorage[KIND];
   var action=kind==='admin'?'adminZapisData':'contractorData';
-  api({action:action}).then(function(j){
+  closeSheet();
+  $('#view').innerHTML=skel()+'<p class="cnt" id="ldhint">Загрузка… если сервер отвечает дольше 15 секунд, подождите или нажмите «Обновить».</p>';
+  api({action:action},{seq:seq,onRetry:function(){var h=$('#ldhint');if(h)h.textContent='Сервер отвечает дольше обычного, пробуем ещё раз…'}}).then(function(j){
+    if(seq!==loadSeq)return;
     if(!j.ok)throw new Error(j.error||'load');
     D=j; role=j.role||kind||'contractor';
     $('#who').textContent=(j.user&&j.user.name)||'';
     $('#logout').style.display='';
     setNav(); render();
   }).catch(function(e){
-    if(e.message==='auth')return;
-    $('#view').innerHTML='<div class="card">Ошибка загрузки: '+esc(e.message)+'</div>';
+    if(e&&(e.stale||e.message==='stale'||e.message==='auth'))return;
+    if(seq!==loadSeq)return;
+    $('#view').innerHTML='<div class="card"><b>Не удалось загрузить данные</b><p class="hint">'+esc(netErr())+'</p><button class="btn" id="retry">Повторить</button></div>';
+    var b=$('#retry'); if(b)b.onclick=function(){load()};
   });
 }
 
 function logout(){
   if(!confirm('Выйти из аккаунта?'))return;
+  loadSeq++; closeSheet();
   [TOKEN,KIND,'zapisCache'].forEach(function(k){localStorage.removeItem(k)});
   D=null; role=''; tab='slots';
   $('#tabs').style.display='none'; $('#who').textContent=''; $('#logout').style.display='none';
@@ -109,11 +142,12 @@ function login(mode){
     $('#view').innerHTML='<div class="login card"><h3>Вход администратора</h3><label>Имя</label><input id="ln" autocomplete="username"><label>PIN (4–6 цифр, если требуется)</label><input id="lp" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" pattern="[0-9]{4,6}"><button class="btn" id="lb">Войти</button><button type="button" class="btn s" id="lback">Вход исполнителя</button><div id="le" class="cnt"></div></div>';
     $('#lback').onclick=function(){login('contractor')};
     $('#lb').onclick=function(){
-      fetch(CFG.apiUrl,{method:'POST',body:JSON.stringify({action:'login',name:$('#ln').value,pin:$('#lp').value})}).then(function(r){return r.json()}).then(function(j){
-        if(!j.ok){$('#le').textContent=j.error==='bad_pin'||!j.error?'Неверное имя или PIN':errText(j.error);return}
-        if(!j.user||j.user.role!=='admin'){$('#le').textContent='Этот вход только для администратора';return}
+      var b=$('#lb'); b.disabled=true; $('#le').textContent='Входим…';
+      api({action:'login',name:$('#ln').value,pin:$('#lp').value},{retries:1}).then(function(j){
+        if(!j.ok){$('#le').textContent=j.error==='bad_pin'||!j.error?'Неверное имя или PIN':errText(j.error);b.disabled=false;return}
+        if(!j.user||j.user.role!=='admin'){$('#le').textContent='Этот вход только для администратора';b.disabled=false;return}
         localStorage[TOKEN]=j.token; localStorage[KIND]='admin'; load();
-      }).catch(function(){$('#le').textContent='Нет связи'});
+      }).catch(function(){$('#le').textContent=netErr();b.disabled=false});
     };
     return;
   }
@@ -123,11 +157,12 @@ function login(mode){
     $('#rb').onclick=function(){
       var pin=$('#rpin').value, pin2=$('#rpin2').value;
       if(!/^\d{4,6}$/.test(pin)||pin!==pin2){$('#le').textContent=pin!==pin2?'PIN не совпадают':'PIN должен содержать 4–6 цифр';return}
-      fetch(CFG.apiUrl,{method:'POST',body:JSON.stringify({action:'contractorRegister',name:$('#rn').value,fio:$('#rn').value,phone:$('#rp').value,pin:pin,pin2:pin2})}).then(function(r){return r.json()}).then(function(j){
-        if(!j.ok){$('#le').textContent=errText(j.error);return}
+      var b=$('#rb'); b.disabled=true; $('#le').textContent='Отправляем…';
+      api({action:'contractorRegister',name:$('#rn').value,fio:$('#rn').value,phone:$('#rp').value,pin:pin,pin2:pin2},{retries:1}).then(function(j){
+        if(!j.ok){$('#le').textContent=errText(j.error);b.disabled=false;return}
         $('#view').innerHTML='<div class="login card"><div class="okmsg">Заявка отправлена. Статус «Ожидает» — вход будет доступен после одобрения администратора.</div><button class="btn" id="lback">Назад ко входу</button></div>';
         $('#lback').onclick=function(){login('contractor')};
-      }).catch(function(){$('#le').textContent='Нет связи'});
+      }).catch(function(){$('#le').textContent=netErr();b.disabled=false});
     };
     return;
   }
@@ -135,10 +170,11 @@ function login(mode){
   $('#lreg').onclick=function(){login('reg')};
   $('#ladm').onclick=function(){login('admin')};
   $('#lb').onclick=function(){
-    fetch(CFG.apiUrl,{method:'POST',body:JSON.stringify({action:'contractorLogin',phone:$('#lpn').value,pin:$('#lp').value})}).then(function(r){return r.json()}).then(function(j){
-      if(!j.ok){$('#le').textContent=errText(j.error);return}
+    var b=$('#lb'); b.disabled=true; $('#le').textContent='Входим…';
+    api({action:'contractorLogin',phone:$('#lpn').value,pin:$('#lp').value},{retries:1}).then(function(j){
+      if(!j.ok){$('#le').textContent=errText(j.error);b.disabled=false;return}
       localStorage[TOKEN]=j.token; localStorage[KIND]='contractor'; load();
-    }).catch(function(){$('#le').textContent='Нет связи'});
+    }).catch(function(){$('#le').textContent=netErr();b.disabled=false});
   };
 }
 
@@ -289,7 +325,7 @@ function openSlotForm(s){
     '<button class="btn" id="ssave">'+(edit?'Сохранить':'Создать')+'</button><button class="btn s" id="shx">Отмена</button>');
   $('#ssite').onchange=prefillsFromSite;
   if(!edit)prefillsFromSite();
-  $('#sdate')&&($('#sdate').onchange=function(){if($('#wdays'))$('#wdays').innerHTML=weekBoxes(this.value)});
+  if($('#sdate')){var syncW=function(){if($('#wdays'))$('#wdays').innerHTML=weekBoxes($('#sdate').value||today())};$('#sdate').onchange=syncW;$('#sdate').oninput=syncW;}
   $('#shx').onclick=closeSheet;
   $('#ssave').onclick=function(){
     var body=readSlotForm();
@@ -427,6 +463,10 @@ function render(){
 
 $('#logout').onclick=logout;
 $('#refresh').onclick=function(){if(localStorage[TOKEN])load();else login()};
-if('serviceWorker' in navigator)try{navigator.serviceWorker.register('sw.js?v='+VER)}catch(e){}
+if($('#sheet'))$('#sheet').addEventListener('click',function(e){if(e.target===this)closeSheet()});
+function hardUpdate(){toast('Обновляю приложение');var p=[];if(window.caches)p.push(caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x)}))}));if('serviceWorker'in navigator)p.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister()}))}));Promise.all(p).catch(function(){}).then(function(){location.replace(location.pathname+'?v='+Date.now())})}
+function checkVer(){fetch('index.html?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.text()}).then(function(t){var m=t.match(/app\.js\?v=(\d+)/);if(m&&+m[1]>VER&&sessionStorage.zapisUpd!==m[1]){sessionStorage.zapisUpd=m[1];hardUpdate()}}).catch(function(){})}
+if('serviceWorker'in navigator){var hadC=!!navigator.serviceWorker.controller,rl=false;navigator.serviceWorker.addEventListener('controllerchange',function(){if(hadC&&!rl){rl=true;location.reload()}});navigator.serviceWorker.register('sw.js?v='+VER,{updateViaCache:'none'}).then(function(r){r.update()}).catch(function(){})}
+checkVer();document.addEventListener('visibilitychange',function(){if(!document.hidden)checkVer()});
 if(localStorage[TOKEN])load();else login('contractor');
 })();
