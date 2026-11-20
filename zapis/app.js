@@ -1,6 +1,6 @@
-/* Запись исполнителей на выходы (ZAPIS_APP_V1.2, UI v=11, тёмная тема) */
+/* Запись исполнителей на выходы (ZAPIS_APP_V1.3, UI v=12, тёмная тема) */
 (function(){
-var VER=11, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
+var VER=12, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
 var D=null, E=null, C=null, CP=null, tab='slots', mineSeg='up', F={site:'',date:'',q:''}, role='', loadSeq=0, EP='', CPid='', searchOn=false;
 var $ = function(s, r){return (r||document).querySelector(s)};
 var TOKEN='zapisToken', KIND='zapisKind';
@@ -753,11 +753,11 @@ function earnBody(p, opts){
   var rows=lrow({icon:rowIcon('','bag','#4F8BFF'), title:'Объём услуг', sub:esc(String(p.units).replace('.',','))+' ед. · по отчёту площадки', amount:money(p.volume), line:'стоимость услуг', lineCls:'muted'})
     +lrow({icon:rowIcon('','wallet','#22C08A'), title:'Вознаграждение', sub:esc(String(p.share).replace('.',','))+'% от объёма услуг', amount:money(p.reward,true), line:'по договору', lineCls:'up'});
   (p.deductions||[]).forEach(function(d){
-    var col=d.kind==='quality'?'#FF5A6E':d.kind==='housing'?'#FF8A3D':'#F2B51B', icn=d.kind==='quality'?'alert':d.kind==='housing'?'home':'pay';
+    var col=d.kind==='quality'?'#FF5A6E':d.kind==='housing'?'#FF8A3D':d.kind==='carry'?'#B07CFF':'#F2B51B', icn=d.kind==='quality'?'alert':d.kind==='housing'?'home':d.kind==='carry'?'link':'pay';
     rows+=lrow({cls:d.items&&d.items.length?'tap':'', attrs:d.items&&d.items.length?' data-ded="'+d.kind+'"':'', icon:rowIcon('',icn,col), title:esc(d.label), sub:d.kind==='quality'?numWord((d.items||[]).length,'случай','случая','случаев')+' · удержание по договору':(d.note?esc(d.note):'зачёт встречных требований'), amount:'<span class="neg">'+money(-d.amount)+'</span>', line:d.items&&d.items.length?'подробнее':'', lineCls:'muted'});
   });
   rows+='<div class="ltotal"><span>Итого к выплате</span><b>'+money(p.payout)+'</b></div>';
-  if(p.carry)rows+='<p class="hint pad">Удержания превысили вознаграждение. Остаток '+money(p.carry)+' будет учтён в следующем периоде по согласованию сторон.</p>';
+  if(p.carry)rows+='<p class="hint pad">Удержания превысили вознаграждение. Остаток '+money(p.carry)+' будет зачтён в следующем периоде как зачёт задолженности прошлого периода.</p>';
   h+=card('Расчёт за '+esc(shortRange(p.from,p.to))+':', '<div class="lrows">'+rows+'</div>');
   if(p.days&&p.days.length){
     var dr=p.days.slice().reverse().map(function(d){
@@ -772,8 +772,10 @@ function earnBody(p, opts){
 function bindEarn(p, root){
   (root||$('#view')).querySelectorAll('[data-ded]').forEach(function(el){el.onclick=function(){
     var d=(p.deductions||[]).filter(function(x){return x.kind===el.dataset.ded})[0]; if(!d)return;
-    openSheet('<h3>'+esc(d.label)+'</h3><p class="hint">Удержание по договору (зачёт встречных требований) по данным заказчика</p><div class="lrows">'+(d.items||[]).map(function(it){
-      return lrow({icon:rowIcon('','alert','#FF5A6E'), title:esc(it.date?dayHeading(it.date):'Дополнительно'), sub:esc(it.text), amount:'<span class="neg">'+money(-it.amount)+'</span>'});
+    var hint=d.kind==='housing'?'Зачёт встречных требований по договору: дни оказания услуг по данным заказчика × ставка проживания':d.kind==='carry'?'Зачёт встречных требований по договору: остаток удержаний прошлого периода':'Удержание по договору (зачёт встречных требований) по данным заказчика';
+    var di=d.kind==='housing'?'home':d.kind==='carry'?'link':'alert', dc=d.kind==='housing'?'#FF8A3D':d.kind==='carry'?'#B07CFF':'#FF5A6E';
+    openSheet('<h3>'+esc(d.label)+'</h3><p class="hint">'+hint+'</p><div class="lrows">'+(d.items||[]).map(function(it){
+      return lrow({icon:rowIcon('',di,dc), title:esc(it.date?dayHeading(it.date):(d.kind==='quality'?'Дополнительно':it.text.split(':')[0])), sub:esc(it.date||d.kind==='quality'?it.text:(it.text.indexOf(':')>0?it.text.split(':').slice(1).join(':').trim():'')), amount:'<span class="'+(it.amount<0?'up':'neg')+'">'+money(-it.amount)+'</span>'});
     }).join('')+'</div>');
   }});
 }
@@ -910,7 +912,7 @@ function openPerson(row){
   openSheet('<div class="sh-top">'+'<span class="ricon site big" style="--c:'+siteColor(u.name)+'">'+esc(initials(u.name))+'</span><div><h3>'+esc(u.name)+'</h3><div class="sh-sub">'+esc(fmtPhone(u.phone))+' · <span class="'+stCls(u.status)+'">'+esc(u.status)+'</span></div></div></div>'
     +'<label class="fld"><span>Площадка оказания услуг</span><select id="psite">'+opts+'</select></label>'
     +'<label class="fld"><span>Идентификатор в системе заказчика</span><input id="pext" value="'+esc(u.extId||'')+'" placeholder="логин или ФИО как в отчёте"></label>'
-    +'<button class="btn s" id="psave">Сохранить площадку и идентификатор</button>', acts);
+    +'<button class="btn s" id="psave">Сохранить</button>', acts);
   $('#psave').onclick=function(){api({action:'updateContractor',row:u.row,site:$('#psite').value,extId:$('#pext').value}).then(function(j){if(!j.ok){toast(errText(j.error),'bad');return}toast('Сохранено','ok');closeSheet();load()}).catch(function(){toast(netErr(),'bad')})};
   $('#sheet').querySelectorAll('[data-st]').forEach(function(b){b.onclick=function(){api({action:'updateContractor',row:u.row,status:b.dataset.st}).then(function(j){if(!j.ok){toast(errText(j.error),'bad');return}toast('Статус обновлён','ok');closeSheet();load()}).catch(function(){toast(netErr(),'bad')})}});
 }
@@ -947,7 +949,8 @@ function renderCalc(){
   var chips=['<span class="qchip"><i class="dotc" style="--c:#22C08A"></i>Сопоставлено <b class="up">'+ok+'</b></span>',
     '<button type="button" class="qchip" data-flt="bad"><i class="dotc" style="--c:#FF5A6E"></i>Нет пары <b class="pink">'+bad+'</b></button>',
     '<span class="qchip">Исполнителей в файле <b>'+per.npeople+'</b></span>','<span class="qchip">Строк <b>'+per.nrows+'</b></span>',
-    '<span class="qchip">Доля <b class="up">'+esc(String(per.share))+'%</b></span>'];
+    '<span class="qchip">Доля <b class="up">'+esc(String(per.share))+'%</b></span>',
+    '<button type="button" class="qchip" id="hrate">Проживание <b>'+esc(String(per.housingRate||333).replace('.',','))+' ₽/дн</b></button>'];
   h+=chipsRow('Статус:', chips);
   var persons=(CP.persons||[]).slice();
   if(F.calcBad)persons=persons.filter(function(x){return x.match.status==='none'||x.match.status==='ambiguous'});
@@ -978,17 +981,26 @@ function openCalcPeriodPicker(){
   openSheet(h+'</div>','<button class="btn" id="pup">'+ic('upload','sm')+' Загрузить файл площадки</button>');
   $('#shBody').querySelectorAll('[data-p]').forEach(function(el){el.onclick=function(){closeSheet();loadCalcPeriod(el.dataset.p)}});
   $('#pup').onclick=openUpload;
+  var hr=$('#hrate'); if(hr)hr.onclick=function(){openHousingRate(per)};
+}
+function openHousingRate(per){
+  openSheet('<h3>Ставка проживания (зачёт)</h3><p class="hint">Удерживается за каждый день, по которому в файле площадки есть объём услуг, у всех исполнителей. Ручная корректировка — в карточке исполнителя.</p>'
+    +'<label class="fld"><span>Ставка за день, ₽</span><input id="hrv" type="number" min="0" step="1" value="'+esc(String(per.housingRate||333))+'"></label>'
+    +'<label class="chk"><input type="checkbox" id="hrdef" checked> Сделать ставкой площадки по умолчанию</label>',
+    '<button class="btn" id="hrsave">Сохранить и пересчитать</button>');
+  $('#hrsave').onclick=function(){var b=$('#hrsave'); b.disabled=true;
+    api({action:'calcSetHousingRate',id:per.id,rate:+$('#hrv').value,asDefault:$('#hrdef').checked},{timeout:120000}).then(function(j){if(!j.ok){toast(errText(j.error),'bad');b.disabled=false;return}toast('Пересчитано','ok');closeSheet();loadCalcPeriod(per.id)}).catch(function(){toast(netErr(),'bad');b.disabled=false})};
 }
 function openUpload(){
   var sites=(C&&C.sites)||[], opts='<option value="">Выберите площадку</option>';
-  sites.forEach(function(s){opts+='<option value="'+esc(s.site)+'" data-share="'+s.share+'" data-parser="'+esc(s.parserTitle)+'"'+(/северн/i.test(s.site)?' selected':'')+'>'+esc(s.site)+'</option>'});
+  sites.forEach(function(s){opts+='<option value="'+esc(s.site)+'" data-share="'+s.share+'" data-hr="'+(s.housingRate!=null?s.housingRate:333)+'" data-parser="'+esc(s.parserTitle)+'"'+(/северн/i.test(s.site)?' selected':'')+'>'+esc(s.site)+'</option>'});
   openSheet('<div class="sh-glow"></div><h3>Загрузить файл площадки</h3><p class="hint">У каждой площадки свой формат. Строки разбираются автоматически, расчёт сохраняется черновиком и не виден исполнителям до публикации.</p>'
     +'<label class="fld"><span>Площадка</span><select id="usite">'+opts+'</select></label><p class="hint" id="uparser"></p>'
     +'<div class="two"><label class="fld"><span>Период с <em>необязательно</em></span><input id="ufrom" type="date"></label><label class="fld"><span>по</span><input id="uto" type="date"></label></div>'
-    +'<label class="fld"><span>Доля вознаграждения, %</span><input id="ushare" type="number" min="1" max="100" step="0.5" value="65"></label>'
+    +'<div class="two"><label class="fld"><span>Доля вознаграждения, %</span><input id="ushare" type="number" min="1" max="100" step="0.5" value="65"></label><label class="fld"><span>Проживание, ₽/день</span><input id="uhr" type="number" min="0" step="1" value="333"></label></div>'
     +'<label class="fld"><span>Файл (.xlsm, .xlsx, .csv)</span><input id="ufile" type="file" accept=".xlsm,.xlsx,.csv"></label><div id="ust" class="errline"></div>',
     '<button class="btn" id="ugo">'+ic('upload','sm')+' Загрузить и рассчитать</button>');
-  function sync(){var o=$('#usite').selectedOptions[0]; if(o&&o.value){$('#ushare').value=o.dataset.share||65; $('#uparser').textContent='Формат: '+(o.dataset.parser||'');} else $('#uparser').textContent='';}
+  function sync(){var o=$('#usite').selectedOptions[0]; if(o&&o.value){$('#ushare').value=o.dataset.share||65; $('#uhr').value=o.dataset.hr||333; $('#uparser').textContent='Формат: '+(o.dataset.parser||'');} else $('#uparser').textContent='';}
   $('#usite').onchange=sync; sync();
   $('#ugo').onclick=function(){doUpload(false)};
 }
@@ -1000,7 +1012,7 @@ function doUpload(replace){
   rd.onload=function(){
     var b64=String(rd.result).split(',')[1]||'';
     $('#ust').textContent='Разбираем и считаем, это до минуты…';
-    api({action:'calcUpload',site:site,name:f.name,mime:f.type,b64:b64,share:+$('#ushare').value,from:$('#ufrom').value,to:$('#uto').value,replacePublished:!!replace},{timeout:240000,retries:0}).then(function(j){
+    api({action:'calcUpload',site:site,name:f.name,mime:f.type,b64:b64,share:+$('#ushare').value,housingRate:+$('#uhr').value,from:$('#ufrom').value,to:$('#uto').value,replacePublished:!!replace},{timeout:240000,retries:0}).then(function(j){
       if(!j.ok){
         if(j.error==='published'&&!replace){if(confirm('Расчёт за этот период уже опубликован. Обновить его данными из нового файла? Исполнители сразу увидят новые цифры.'))return doUpload(true);}
         $('#ust').textContent=errText(j.error)+(j.notes?': '+j.notes.join('; '):''); b.disabled=false; return;
@@ -1036,14 +1048,18 @@ function openCalcPerson(key){
   var rows=lrow({icon:rowIcon('','bag','#4F8BFF'), title:'Объём услуг', sub:esc(String(x.units).replace('.',','))+' ед. · '+numWord(x.days.length,'день','дня','дней'), amount:money(x.volume)})
     +lrow({icon:rowIcon('','wallet','#22C08A'), title:'Вознаграждение '+esc(String(per.share))+'%', amount:money(x.reward,true)})
     +lrow({icon:rowIcon('','alert','#FF5A6E'), title:'Качество по файлу', sub:numWord(x.qItems.length,'случай','случая','случаев'), amount:'<span class="neg">'+money(-x.qualityFile)+'</span>'})
-    +'<div class="ltotal"><span>К выплате</span><b>'+money(x.payout)+'</b></div>';
+    +lrow({icon:rowIcon('','home','#FF8A3D'), title:'Проживание (зачёт)', sub:x.hDays+' дн. × '+esc(String(x.hRate))+' ₽'+(x.housingAdj?' · корр. '+money(x.housingAdj):''), amount:'<span class="neg">'+money(-x.housing)+'</span>'})
+    +(x.prepay?lrow({icon:rowIcon('','pay','#F2B51B'), title:'Предоплата', amount:'<span class="neg">'+money(-x.prepay)+'</span>'}):'')
+    +(x.carryIn?lrow({icon:rowIcon('','link','#B07CFF'), title:'Перенос с прошлого периода', sub:(x.carryItems||[]).map(function(c){return shortRange(c.from,c.to)}).join(', '), amount:'<span class="neg">'+money(-x.carryIn)+'</span>'}):'')
+    +'<div class="ltotal"><span>К выплате</span><b>'+money(x.payout)+'</b></div>'
+    +(x.carry?'<p class="hint pad">Итог '+money(x.total)+'. '+(x.execRow?'При публикации '+money(x.carry)+' перейдёт в следующий период исполнителя.':'Перенос возможен только после сопоставления с исполнителем.')+'</p>':'');
   var q=x.qItems.map(function(it){return lrow({icon:rowIcon('','alert','#FF5A6E'), title:esc(dayHeading(it.date)), sub:esc(it.type+(it.descr?': '+it.descr:'')), amount:'<span class="neg">'+money(-it.amount)+'</span>'})}).join('');
   openSheet('<div class="sh-top"><span class="ricon site big" style="--c:'+siteColor(x.name)+'">'+esc(initials(x.name))+'</span><div><h3>'+esc(x.name)+'</h3><div class="sh-sub">'+esc(x.key.replace(/^n:/,''))+' · <span class="'+m[1]+'">'+m[0]+'</span>'+(x.match.exec?' · '+esc(x.match.exec.name):'')+'</div></div></div>'
     +'<div class="lrows">'+rows+'</div>'
     +'<h4 class="subhead">Сопоставление</h4><label class="fld"><span>Исполнитель в приложении'+(cands.length?' (★ — подходят по ФИО)':'')+'</span><select id="lsel">'+opts+'</select></label>'
     +'<div class="cta-row"><button class="btn s" id="lsave">'+ic('link','sm')+' Связать</button>'+(x.match.status==='manual'?'<button class="btn s" id="lclear">Убрать связь</button>':'<button class="btn s" id="lskip">Не сопоставлять</button>')+'</div>'
-    +'<h4 class="subhead">Удержания вручную</h4>'
-    +'<div class="two"><label class="fld"><span>Проживание (зачёт), ₽</span><input id="dh" type="number" min="0" step="0.01" value="'+(man.housing?man.housing.amount:'')+'"></label><label class="fld"><span>Предоплата, ₽</span><input id="dp" type="number" min="0" step="0.01" value="'+(man.prepay?man.prepay.amount:'')+'"></label></div>'
+    +'<h4 class="subhead">Удержания вручную</h4><p class="hint">Проживание считается автоматически: дни с объёмом услуг × ставка. Здесь — только корректировка (минус уменьшает удержание).</p>'
+    +'<div class="two"><label class="fld"><span>Корректировка проживания, ± ₽</span><input id="dh" type="number" step="0.01" value="'+(man.housing?man.housing.amount:'')+'" placeholder="напр. -333"></label><label class="fld"><span>Предоплата, ₽</span><input id="dp" type="number" min="0" step="0.01" value="'+(man.prepay?man.prepay.amount:'')+'"></label></div>'
     +'<label class="fld"><span>Качество услуг, если нет в файле, ₽</span><input id="dq" type="number" min="0" step="0.01" value="'+(man.quality?man.quality.amount:'')+'"></label>'
     +'<button class="btn s" id="dsave">Сохранить удержания</button>'
     +(q?'<h4 class="subhead">Качество по файлу</h4><div class="lrows">'+q+'</div>':''),

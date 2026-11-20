@@ -260,3 +260,4 @@ input[type=date],input[type=time]{color-scheme:dark}
   body.role-contractor #view{max-width:480px}
 }
 @media (min-width:600px){ body.role-contractor #view{border-left:1px solid var(--line);border-right:1px solid var(--line);min-height:100vh} }
+.chk{display:flex;align-items:center;gap:10px;color:#C9C9D6;font-size:14px;margin:4px 0 8px}.chk input{width:18px;height:18px;accent-color:#C13BD8}
