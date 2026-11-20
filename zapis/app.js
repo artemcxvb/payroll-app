@@ -1,6 +1,6 @@
-/* Запись исполнителей на выходы (ZAPIS_APP_V1, UI v=8) */
+/* Запись исполнителей на выходы (ZAPIS_APP_V1, UI v=9) */
 (function(){
-var VER=8, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
+var VER=9, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
 var D=null, tab='slots', mineSeg='up', F={site:'',date:''}, role='', loadSeq=0;
 var $ = function(s, r){return (r||document).querySelector(s)};
 var TOKEN='zapisToken', KIND='zapisKind';
@@ -76,7 +76,15 @@ function toast(t, kind){
   var e=$('#toast'); e.textContent=t; e.className=kind||''; e.hidden=false;
   clearTimeout(e._t); e._t=setTimeout(function(){e.hidden=true}, 2800);
 }
-function fmtLen(min){min=Math.round(+min||0);var h=Math.floor(min/60),m=min%60;if(h&&m)return h+' ч '+m+' мин';if(h)return h+' ч';return m+' мин'}
+function plural(n, one, few, many){
+  n=Math.abs(parseInt(n,10)||0);
+  var n10=n%10, n100=n%100;
+  if(n10===1 && n100!==11)return one;
+  if(n10>=2 && n10<=4 && (n100<12 || n100>14))return few;
+  return many;
+}
+function numWord(n, one, few, many){n=Math.abs(parseInt(n,10)||0);return n+' '+plural(n, one, few, many)}
+function fmtLen(min){min=Math.round(+min||0);var h=Math.floor(min/60),m=min%60;var hs=h?numWord(h,'час','часа','часов'):'';var ms=m?numWord(m,'минута','минуты','минут'):'';if(h&&m)return hs+' '+ms;return hs||ms}
 function fmtEnd(start,len){
   var m=/^(\d{1,2}):(\d{2})/.exec(start||''); if(!m)return '';
   var t=(+m[1])*60+(+m[2])+Math.round(+len||0); t=((t%1440)+1440)%1440;
@@ -169,12 +177,13 @@ function placesText(s, long){
   var p=placesLeft(s);
   if(!p.places)return 'места не указаны';
   if(p.left<=0)return 'мест нет';
+  var of=numWord(p.places,'места','мест','мест');
   if(long){
-    if(p.left===p.places)return 'свободно '+p.places+' из '+p.places;
-    return 'свободно '+p.left+' из '+p.places;
+    if(p.left===p.places)return 'свободно '+numWord(p.places,'место','места','мест');
+    return 'свободно '+p.left+' из '+of;
   }
-  if(p.left===p.places)return p.places+' мест';
-  return p.left+' из '+p.places;
+  if(p.left===p.places)return numWord(p.places,'место','места','мест');
+  return p.left+' из '+of;
 }
 function slotStatus(s){
   if(s.status==='Закрыт')return {cls:'bad',label:'Закрыт'};
@@ -603,12 +612,12 @@ function countdown(s){
   var ms=start-now;
   if(ms<=0)return 'уже начался';
   var m=Math.round(ms/60000);
-  if(m<60)return 'через '+m+' мин';
+  if(m<60)return 'через '+numWord(m,'минуту','минуты','минут');
   var h=Math.floor(m/60), rm=m%60;
-  if(h<24)return 'через '+h+' ч'+(rm?' '+rm+' мин':'');
+  if(h<24)return 'через '+numWord(h,'час','часа','часов')+(rm?' '+numWord(rm,'минуту','минуты','минут'):'');
   var d=Math.floor(h/24);
   if(d===1)return 'завтра в '+(s.start||'');
-  return 'через '+d+' дн.';
+  return 'через '+numWord(d,'день','дня','дней');
 }
 function isUpcoming(item){
   var s=item.slot||{}, sg=item.signup||{};
@@ -632,8 +641,8 @@ function renderMine(){
   var all=D.mine||[], up=all.filter(isUpcoming).slice().sort(function(a,b){return slotStartMs(a.slot)-slotStartMs(b.slot)}),
       hist=all.filter(function(x){return !isUpcoming(x)});
   var h='<h1 class="h1">Мои записи</h1><div class="segtab">'
-    +'<button type="button" data-seg="up"'+(mineSeg==='up'?' class="on"':'')+'>Предстоящие'+(up.length?' · '+up.length:'')+'</button>'
-    +'<button type="button" data-seg="hist"'+(mineSeg==='hist'?' class="on"':'')+'>История'+(hist.length?' · '+hist.length:'')+'</button></div>';
+    +'<button type="button" data-seg="up"'+(mineSeg==='up'?' class="on"':'')+'>Предстоящие'+(up.length?' · '+numWord(up.length,'запись','записи','записей'):'')+'</button>'
+    +'<button type="button" data-seg="hist"'+(mineSeg==='hist'?' class="on"':'')+'>История'+(hist.length?' · '+numWord(hist.length,'запись','записи','записей'):'')+'</button></div>';
   if(mineSeg==='up'){
     if(!up.length)h+=emptyBox('Нет предстоящих записей','Откройте вкладку «Выходы», чтобы записаться');
     else {
@@ -675,9 +684,9 @@ function adminKpis(){
   var fill=places?Math.round(taken/places*100):0;
   var pend=(D.contractors||[]).filter(function(u){return u.status==='Ожидает'}).length;
   return '<div class="kpi-card">'
-    +'<div class="kpi-cell"><div class="kpi-n">'+open.length+'</div><span class="kpi-l">Открытых выходов</span></div>'
+    +'<div class="kpi-cell"><div class="kpi-n">'+open.length+'</div><span class="kpi-l">'+plural(open.length,'Открытый выход','Открытых выхода','Открытых выходов')+'</span></div>'
     +'<div class="kpi-cell"><div class="kpi-n">'+ringSvg(fill)+'<span>'+fill+'%</span></div><span class="kpi-l">Заполнение мест</span></div>'
-    +'<div class="kpi-cell"><div class="kpi-n">'+pend+'</div><span class="kpi-l">Заявок на одобрение</span></div>'
+    +'<div class="kpi-cell"><div class="kpi-n">'+pend+'</div><span class="kpi-l">'+plural(pend,'Заявка на одобрение','Заявки на одобрение','Заявок на одобрение')+'</span></div>'
     +'</div>';
 }
 
@@ -772,7 +781,7 @@ function openAdminSlot(row){
   var sigs=s.signups||[];
   var active=sigs.filter(function(x){return x.status==='Записан'});
   var other=sigs.filter(function(x){return x.status!=='Записан'});
-  var people='<h3 class="subhead">Записавшиеся · '+active.length+'</h3>';
+  var people='<h3 class="subhead">Записавшиеся · '+numWord(active.length,'исполнитель','исполнителя','исполнителей')+'</h3>';
   if(!sigs.length)people+='<div class="empty sm"><b>Пока никто не записался</b><span>Исполнители появятся после записи</span></div>';
   if(sigs.length)people+='<div class="list" style="box-shadow:none">';
   active.forEach(function(x){
@@ -783,7 +792,7 @@ function openAdminSlot(row){
   });
   if(sigs.length)people+='</div>';
   var h=sheetHero(s)
-    +'<div class="drow" style="padding-top:4px">'+ic('users')+'<div class="dk"><span>Места</span><b>'+placesLeft(s).taken+' из '+placesLeft(s).places+' занято</b></div></div>'
+    +'<div class="drow" style="padding-top:4px">'+ic('users')+'<div class="dk"><span>Места</span><b>'+placesLeft(s).taken+' из '+numWord(placesLeft(s).places,'места','мест','мест')+' занято</b></div></div>'
     +people
     +'<div class="dlist">'
     +'<div class="drow">'+ic('bag')+'<div class="dk"><span>Вид услуг</span><b>'+esc(gph(s.vacancy||'—'))+'</b></div></div>'
@@ -802,7 +811,7 @@ function openAdminSlot(row){
       $('#cgo').disabled=true;
       api({action:'copySlot',row:s.row,days:+$('#cdays').value}).then(function(j){
         if(!j.ok){toast(errText(j.error),'bad');$('#cgo').disabled=false;return}
-        toast('Создано выходов: '+(j.rows&&j.rows.length||0),'ok'); closeSheet(); load();
+        toast((function(n){return (n%10===1&&n%100!==11?'Создан ':'Создано ')+numWord(n,'выход','выхода','выходов')})((j.rows&&j.rows.length)||0),'ok'); closeSheet(); load();
       }).catch(function(){toast(netErr(),'bad');$('#cgo').disabled=false});
     };
   };
