@@ -1,6 +1,6 @@
 /* Запись исполнителей на выходы (ZAPIS_APP_V1) */
 (function(){
-var VER=2, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
+var VER=3, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
 var D=null, tab='slots', F={site:'',date:''}, role='', $ = function(s){return document.querySelector(s)};
 var TOKEN='zapisToken', KIND='zapisKind';
 
