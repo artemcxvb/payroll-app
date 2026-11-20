@@ -1,6 +1,6 @@
 /* Запись исполнителей на выходы (ZAPIS_APP_V1) */
 (function(){
-var VER=1, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
+var VER=2, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
 var D=null, tab='slots', F={site:'',date:''}, role='', $ = function(s){return document.querySelector(s)};
 var TOKEN='zapisToken', KIND='zapisKind';
 
@@ -18,7 +18,7 @@ function gph(s){s=String(s==null?'':s);if(!s)return s;
  s=s.replace(/зарплат[аыуе]/gi,'вознаграждение').replace(/\bЗП\b/g,'вознаграждение');
  s=s.replace(/(^|[^А-Яа-яЁё0-9])смен[аыуе]?(?=[^А-Яа-яЁё]|$)/gi,'$1выход');
  return s}
-function hlReq(s){s=gph(s);var e=esc(s);return e.replace(/медкнижк[а-яё]*/gi,function(m){return'<mark class="req-hl">'+m+'</mark>'})}
+function hlReq(s){s=gph(s);var e=esc(s);return e.replace(/медкнижк[а-яё]*|ЛМК/gi,function(m){return'<mark class="req-hl">'+m+'</mark>'})}
 function closeSheet(){$('#sheet').hidden=true;$('#shBody').innerHTML=''}
 function openSheet(html){$('#shBody').innerHTML=html;$('#sheet').hidden=false}
 function skel(){return'<div class="card"><div class="sk sk-t"></div><div class="sk sk-b"></div><div class="sk sk-s"></div></div><div class="card"><div class="sk sk-b"></div><div class="sk"></div></div>'}
