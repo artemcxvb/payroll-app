@@ -1,6 +1,6 @@
-/* Запись исполнителей на выходы (ZAPIS_APP_V1, UI v=6) */
+/* Запись исполнителей на выходы (ZAPIS_APP_V1, UI v=7) */
 (function(){
-var VER=6, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
+var VER=7, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
 var D=null, tab='slots', mineSeg='up', F={site:'',date:''}, role='', loadSeq=0;
 var $ = function(s, r){return (r||document).querySelector(s)};
 var TOKEN='zapisToken', KIND='zapisKind';
@@ -118,7 +118,9 @@ function openSheet(html, cta){
   var foot=$('#shCta');
   if(cta){foot.innerHTML=cta; foot.hidden=false;} else {foot.innerHTML=''; foot.hidden=true;}
   $('#sheet').hidden=false;
-  var x=$('#shclose'); if(x)x.onclick=closeSheet;
+  var x=$('#shclose');
+  if(x){x.innerHTML=ic('x'); x.onclick=closeSheet;}
+  var body=$('#shBody'); if(body)body.scrollTop=0;
 }
 function skel(){var n='',i;for(i=0;i<3;i++)n+='<div class="scard sk-card"><div class="sk" style="width:40px;height:40px;border-radius:12px"></div><div style="grid-column:2/-1"><div class="sk sk-t"></div><div class="sk sk-b"></div></div><div class="sk" style="grid-column:1/-1;height:8px"></div></div>';return n}
 
@@ -556,27 +558,28 @@ function openAdminSlot(row){
   var s=(D.slots||[]).filter(function(x){return x.row===row})[0];
   if(!s)return;
   var sigs=s.signups||[];
+  var active=sigs.filter(function(x){return x.status==='Записан'});
+  var other=sigs.filter(function(x){return x.status!=='Записан'});
+  var people='<h3 class="subhead" style="font-size:16px;margin:4px 0 8px">Записавшиеся · '+active.length+'</h3>';
+  if(!sigs.length)people+='<div class="empty sm"><b>Пока никто не записался</b><span>Исполнители появятся после записи</span></div>';
+  active.forEach(function(x){
+    people+='<div class="person">'+avatar(x.name||'')+'<div><div class="nm">'+esc(x.name)+'</div><div class="sub">'+esc(fmtPhone(x.phone))+'</div></div><button class="btn s" data-rm="'+x.row+'">Снять</button></div>';
+  });
+  other.forEach(function(x){
+    people+='<div class="person">'+avatar(x.name||'')+'<div><div class="nm">'+esc(x.name)+'</div><div class="sub">'+esc(fmtPhone(x.phone))+' · '+esc(x.status)+'</div></div></div>';
+  });
   var h='<h3>'+esc(s.site)+'</h3>'
     +'<div class="sheet-hero"><div class="scard-time amt">'+esc(timeRange(s))+'</div>'
     +'<div class="scard-meta">'+fdLong(s.date)+'</div>'
-    +'<div class="scard-pay amt" style="margin-top:10px">'+esc(fmtReward(s.reward))+'<small>вознаграждение</small></div></div>'
+    +'<div class="scard-pay amt" style="margin-top:10px">'+esc(fmtReward(s.reward))+'<small>вознаграждение</small></div>'
+    +'<div class="scard-meta" style="margin-top:8px">'+(s.taken||0)+' из '+s.places+' занято</div>'+pbar(s)+'</div>'
+    +people
     +'<div class="dlist">'
     +'<div class="drow">'+ic('bag')+'<div class="dk"><span>Вид услуг</span><b>'+esc(gph(s.vacancy||'—'))+'</b></div></div>'
-    +'<div class="drow">'+ic('users')+'<div class="dk"><span>Места</span><b>'+(s.taken||0)+' из '+s.places+' занято</b>'+pbar(s)+'</div></div>'
     +(s.comment?'<div class="drow">'+ic('file')+'<div class="dk"><span>Комментарий</span><b>'+esc(s.comment)+'</b></div></div>':'')
     +(s.req?'<div class="drow">'+ic('shield')+'<div class="dk"><span>Требования</span><b>'+hlReq(s.req)+'</b></div></div>':'')
-    +'</div><h3 class="subhead" style="font-size:16px;margin:18px 0 8px">Записавшиеся</h3>';
-  var active=sigs.filter(function(x){return x.status==='Записан'});
-  var other=sigs.filter(function(x){return x.status!=='Записан'});
-  if(!sigs.length)h+='<div class="empty sm"><b>Пока никто не записался</b><span>Исполнители появятся после записи</span></div>';
-  active.forEach(function(x){
-    h+='<div class="person">'+avatar(x.name||'')+'<div><div class="nm">'+esc(x.name)+'</div><div class="sub">'+esc(fmtPhone(x.phone))+'</div></div><button class="btn s" data-rm="'+x.row+'">Снять</button></div>';
-  });
-  other.forEach(function(x){
-    h+='<div class="person">'+avatar(x.name||'')+'<div><div class="nm">'+esc(x.name)+'</div><div class="sub">'+esc(fmtPhone(x.phone))+' · '+esc(x.status)+'</div></div></div>';
-  });
-  openSheet(h, '<button class="btn" id="sedit">Редактировать</button><button class="btn s" id="scopy">Копировать на следующие дни</button><button class="btn s" id="sclose">'+(s.status==='Закрыт'?'Открыть выход':'Закрыть выход')+'</button><button class="btn s" id="shx">Закрыть</button>');
-  $('#shx').onclick=closeSheet;
+    +'</div>';
+  openSheet(h, '<button class="btn" id="sedit">Редактировать</button><div class="cta-row"><button class="btn s" id="scopy">Копировать</button><button class="btn s" id="sclose">'+(s.status==='Закрыт'?'Открыть выход':'Закрыть выход')+'</button></div>');
   $('#sedit').onclick=function(){openSlotForm(s)};
   $('#sclose').onclick=function(){
     api({action:'closeSlot',row:s.row}).then(function(j){if(!j.ok){toast(errText(j.error),'bad');return}toast(j.status==='Закрыт'?'Выход закрыт':'Выход открыт','ok');closeSheet();load()}).catch(function(){toast(netErr(),'bad')});
