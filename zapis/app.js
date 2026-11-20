@@ -1,11 +1,12 @@
-/* Запись исполнителей на выходы (ZAPIS_APP_V1, UI v=7) */
+/* Запись исполнителей на выходы (ZAPIS_APP_V1, UI v=8) */
 (function(){
-var VER=7, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
+var VER=8, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
 var D=null, tab='slots', mineSeg='up', F={site:'',date:''}, role='', loadSeq=0;
 var $ = function(s, r){return (r||document).querySelector(s)};
 var TOKEN='zapisToken', KIND='zapisKind';
-var AV=['#1b2a4e','#2b4de0','#0f766e','#9a3412','#5b21b6','#1e3a8a'];
+var AV=['#2F5BFF','#0F766E','#7C3AED','#C2410C','#0369A1','#4F46E5'];
 var WD=['вс','пн','вт','ср','чт','пт','сб'];
+var MONTHS=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
 var ICO={
   cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/>',
   clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -18,31 +19,59 @@ var ICO={
   phone:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7A2 2 0 0 1 22 16.9z"/>',
   check:'<path d="M20 6 9 17l-5-5"/>',
   x:'<path d="M18 6 6 18M6 6l12 12"/>',
-  eye:'<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
-  eyeOff:'<path d="M17.9 17.9A10.9 10.9 0 0 1 12 19c-6 0-10-7-10-7a18.7 18.7 0 0 1 5.1-5.9M9.9 4.2A11 11 0 0 1 12 4c6 0 10 7 10 7a18.5 18.5 0 0 1-3.3 3.9M15 9.1a3 3 0 0 1-4 4.1M2 2l20 20"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
   logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>',
   refresh:'<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>',
   list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   alert:'<path d="M10.3 4.3 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
-  layout:'<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
-  more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
-  file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>'
+  more:'<circle cx="5" cy="12" r="1.15"/><circle cx="12" cy="12" r="1.15"/><circle cx="19" cy="12" r="1.15"/>',
+  file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
+  chev:'<path d="m9 18 6-6-6-6"/>'
 };
-function ic(n, cls){return '<svg class="ic '+(cls||'')+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+((ICO[n])||'')+'</svg>'}
+function ic(n, cls){return '<svg class="ic '+(cls||'')+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">'+((ICO[n])||'')+'</svg>'}
+function logoSvg(){return '<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="10" fill="#2F5BFF"/><path d="M10 10.5h12.2c.1 2.7-1.9 4.4-5.3 5.4 3.7.7 6.1 2.6 6.3 5.6H11" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>'}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function fd(s){if(!s)return'—';var p=String(s).split('-');return p.length===3?p[2]+'.'+p[1]+'.'+p[0]:s}
+function dateParts(s){
+  var p=String(s||'').split('-');
+  if(p.length!==3)return null;
+  return {y:+p[0], m:+p[1], d:+p[2], dt:new Date(+p[0],+p[1]-1,+p[2])};
+}
 function fdLong(s){
-  if(!s)return'—';
-  var p=String(s).split('-'); if(p.length!==3)return fd(s);
-  var d=new Date(+p[0],+p[1]-1,+p[2]);
-  return WD[d.getDay()]+', '+p[2]+'.'+p[1]+'.'+p[0];
+  var x=dateParts(s); if(!x)return fd(s);
+  return WD[x.dt.getDay()]+', '+('0'+x.d).slice(-2)+'.'+('0'+x.m).slice(-2)+'.'+x.y;
+}
+function dayHeading(s){
+  var x=dateParts(s); if(!x)return fd(s);
+  var t=today(), mon=MONTHS[x.m-1]||'';
+  if(s===t)return 'Сегодня, '+x.d+' '+mon;
+  if(s===addDays(t,1))return 'Завтра';
+  return cap(WD[x.dt.getDay()])+', '+x.d+' '+mon;
+}
+function cap(s){s=String(s||'');return s?s.charAt(0).toUpperCase()+s.slice(1):s}
+function tableDate(s){
+  var x=dateParts(s); if(!x)return esc(fd(s));
+  var mon=MONTHS[x.m-1]||'', t=today(), day=x.d+' '+mon;
+  if(s===t)return '<b>Сегодня</b><span>'+esc(day)+'</span>';
+  if(s===addDays(t,1))return '<b>Завтра</b><span>'+esc(day)+'</span>';
+  return '<b>'+esc(cap(WD[x.dt.getDay()]))+'</b><span>'+esc(day)+'</span>';
 }
 function today(){
   try{return new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
   catch(e){var u=new Date(Date.now()+3*3600e3);return u.getUTCFullYear()+'-'+('0'+(u.getUTCMonth()+1)).slice(-2)+'-'+('0'+u.getUTCDate()).slice(-2);}
 }
 function addDays(ymd,n){var p=ymd.split('-'),d=new Date(+p[0],+p[1]-1,+p[2]+n);return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
+function moscowHour(){
+  try{return +new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Moscow',hour:'numeric',hourCycle:'h23'}).format(new Date())}
+  catch(e){return new Date().getHours()}
+}
+function firstName(n){n=String(n||'').trim();return n?n.split(/\s+/)[0]:''}
+function hello(){
+  var h=moscowHour();
+  var g=h<5||h>=23?'Доброй ночи':h<12?'Доброе утро':h<18?'Добрый день':'Добрый вечер';
+  var fn=firstName(D&&D.user&&D.user.name);
+  return fn?g+', '+fn:g;
+}
 function toast(t, kind){
   var e=$('#toast'); e.textContent=t; e.className=kind||''; e.hidden=false;
   clearTimeout(e._t); e._t=setTimeout(function(){e.hidden=true}, 2800);
@@ -71,14 +100,20 @@ function maskPhone(s){
   if(d.length>9)out+='-'+d.slice(9,11);
   return out;
 }
-function fmtReward(v){
-  v=String(v||'').trim(); if(!v)return'—';
-  var m=v.match(/^(.*?)(\d[\d\s]*)(.*)$/); if(!m)return v;
-  var n=m[2].replace(/\s/g,''); if(!/^\d+$/.test(n))return v;
+function rewardParts(v){
+  v=String(v||'').trim();
+  if(!v)return {pre:'', num:'—', suf:''};
+  var m=v.match(/^(.*?)(\d[\d\s]*)(.*)$/); if(!m)return {pre:'', num:v, suf:''};
+  var n=m[2].replace(/\s/g,''); if(!/^\d+$/.test(n))return {pre:'', num:v, suf:''};
   var pretty=n.replace(/\B(?=(\d{3})+(?!\d))/g,' ');
   var pre=m[1].trim(), suf=m[3].trim().replace(/^руб\.?/i,'₽').replace(/^р$/i,'₽');
-  if(!/₽|руб/i.test(pre+' '+suf)) suf=(suf?suf+' ':'')+'₽';
-  return (pre?pre+' ':'')+pretty+(suf?' '+suf:'');
+  if(!/₽|руб/i.test(pre+' '+suf)) suf='₽';
+  return {pre:pre, num:pretty, suf:suf};
+}
+function fmtReward(v){var p=rewardParts(v); return ((p.pre?p.pre+' ':'')+p.num+(p.suf?' '+p.suf:'')).trim()}
+function rewardHtml(v){
+  var p=rewardParts(v);
+  return (p.pre?'<span class="pre">'+esc(p.pre)+' </span>':'')+esc(p.num)+(p.suf?' '+esc(p.suf):'');
 }
 function siteColor(name){var s=String(name||''),i=0,h=0;for(i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return AV[h%AV.length]}
 function initials(name){
@@ -88,16 +123,58 @@ function initials(name){
   return (p[0][0]+p[1][0]).toUpperCase();
 }
 function avatar(name, size){return '<span class="av" style="background:'+siteColor(name)+((size)?';width:'+size+'px;height:'+size+'px':'')+'">'+esc(initials(name))+'</span>'}
-function emptyBox(title,sub,action){
-  return '<div class="empty"><div class="empty-ic">'+ic('cal','lg')+'</div><b>'+title+'</b><span>'+sub+'</span>'+(action||'')+'</div>';
+function cleanSitePart(s){
+  s=String(s||'').replace(/\s+/g,' ').trim();
+  s=s.replace(/^склад\s+/i,'');
+  s=s.replace(/Лемано/gi,'Лемана');
+  return s;
 }
-function pbar(s){
+function parseSite(name){
+  var raw=String(name||'').replace(/\s+/g,' ').trim();
+  if(!raw)return {title:'—', sub:'', short:'—'};
+  var extras=[], main=raw.replace(/\s*\(([^)]*)\)\s*/g,function(_,inn){
+    var c=cleanSitePart(inn); if(c)extras.push(c); return ' ';
+  });
+  main=cleanSitePart(main.replace(/\s*-\s*/g,' '));
+  var title=main, rest='';
+  var m=main.match(/^([A-Za-zА-Яа-яЁё]+\s+\d+)\s+(.*)$/);
+  if(m){title=m[1]; rest=m[2];}
+  if(rest)extras.push(rest);
+  var sub=extras.filter(Boolean).join(' · ');
+  return {title:title||raw, sub:sub, short:title||raw};
+}
+function emptyArt(){
+  return '<svg class="empty-art" viewBox="0 0 160 100" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    +'<rect x="44" y="26" width="72" height="56" rx="10"/>'
+    +'<path d="M58 26v-8h44v8"/>'
+    +'<path d="M60 50h40M60 62h24"/>'
+    +'</svg>';
+}
+function emptyBox(title,sub,action){
+  return '<div class="empty">'+emptyArt()+'<b>'+title+'</b><span>'+sub+'</span>'+(action||'')+'</div>';
+}
+function placesLeft(s){
   var places=+s.places||0, taken=+s.taken||Math.max(0,places-(+s.left||0));
   var left=s.left!=null?+s.left:Math.max(0,places-taken);
-  var pct=places?Math.min(100,Math.round(taken/places*100)):0;
-  var cls=s.status==='Закрыт'?'is-closed':(left<=0?'is-full':'');
-  return '<div class="pbar '+cls+'"><i style="width:'+pct+'%"></i></div>'
-    +'<span class="pbar-lab">'+(places?(left<=0?'Мест нет · '+taken+' из '+places:'Осталось '+left+' из '+places):'Места не указаны')+'</span>';
+  return {places:places, taken:taken, left:left};
+}
+function segind(s){
+  var p=placesLeft(s);
+  if(!p.places||p.places>8)return '';
+  var h='<span class="segind" aria-hidden="true">',i;
+  for(i=0;i<p.places;i++)h+='<i'+(i<p.taken?' class="on"':'')+'></i>';
+  return h+'</span>';
+}
+function placesText(s, long){
+  var p=placesLeft(s);
+  if(!p.places)return 'места не указаны';
+  if(p.left<=0)return 'мест нет';
+  if(long){
+    if(p.left===p.places)return 'свободно '+p.places+' из '+p.places;
+    return 'свободно '+p.left+' из '+p.places;
+  }
+  if(p.left===p.places)return p.places+' мест';
+  return p.left+' из '+p.places;
 }
 function slotStatus(s){
   if(s.status==='Закрыт')return {cls:'bad',label:'Закрыт'};
@@ -122,7 +199,11 @@ function openSheet(html, cta){
   if(x){x.innerHTML=ic('x'); x.onclick=closeSheet;}
   var body=$('#shBody'); if(body)body.scrollTop=0;
 }
-function skel(){var n='',i;for(i=0;i<3;i++)n+='<div class="scard sk-card"><div class="sk" style="width:40px;height:40px;border-radius:12px"></div><div style="grid-column:2/-1"><div class="sk sk-t"></div><div class="sk sk-b"></div></div><div class="sk" style="grid-column:1/-1;height:8px"></div></div>';return n}
+function skel(){
+  var n='',i;
+  for(i=0;i<4;i++)n+='<div class="srow sk-card"><div class="sk" style="height:28px;width:44px"></div><div><div class="sk sk-t"></div><div class="sk sk-b"></div></div><div class="sk" style="width:56px;height:16px"></div></div>';
+  return '<div class="list">'+n+'</div>';
+}
 
 function errText(e){
   return ({
@@ -178,17 +259,30 @@ function api(body, opts){
   });
 }
 
+function closeMenu(){var m=$('#usermenu'); if(m)m.hidden=true; var b=$('#avbtn'); if(b)b.setAttribute('aria-expanded','false')}
+function openMenu(){
+  var m=$('#usermenu'); if(!m)return;
+  $('#menuName').textContent=(D&&D.user&&D.user.name)||'';
+  $('#menuSub').textContent=role==='admin'?'Администратор':(D&&D.user&&D.user.phone?fmtPhone(D.user.phone):'Исполнитель');
+  m.hidden=false;
+  var b=$('#avbtn'); if(b)b.setAttribute('aria-expanded','true');
+}
 function setChrome(){
   var logged=!!(role&&localStorage[TOKEN]);
   document.body.classList.toggle('is-login', !logged);
   document.body.classList.toggle('role-admin', role==='admin');
   document.body.classList.toggle('role-contractor', role==='contractor');
   $('#top').hidden=!logged;
+  var side=$('#side'); if(side)side.hidden=!(logged&&role==='admin');
   $('#tabs').hidden=!logged;
+  var fab=$('#fab'); if(fab)fab.hidden=!(logged&&role==='admin'&&tab==='slots');
+  closeMenu();
+  document.querySelectorAll('.logo').forEach(function(el){if(!el.innerHTML)el.innerHTML=logoSvg()});
   if(logged){
-    $('#who').textContent=(D&&D.user&&D.user.name)||'';
-    $('#refresh').innerHTML=ic('refresh');
-    $('#logout').innerHTML=ic('logout');
+    $('#greet').textContent=hello();
+    $('#avbtn').innerHTML=avatar((D&&D.user&&D.user.name)||'');
+    var rf=$('#refresh'); if(rf)rf.innerHTML=ic('refresh')+' Обновить';
+    var lg=$('#logout'); if(lg)lg.innerHTML=ic('logout')+' Выйти';
     setNav();
   }
 }
@@ -202,16 +296,17 @@ function navHtml(){
     +'<button data-t="mine"'+(tab==='mine'?' class="on"':'')+'>'+ic('list')+'<span>Мои записи</span></button>';
 }
 function setNav(){
-  var n=$('#tabs'); if(!n)return;
-  n.innerHTML=navHtml(); n.hidden=false;
-  n.querySelectorAll('button').forEach(function(b){b.onclick=function(){tab=b.dataset.t;render()}});
+  var n=$('#tabs'); if(n){n.innerHTML=navHtml(); n.hidden=false;
+    n.querySelectorAll('button').forEach(function(b){b.onclick=function(){tab=b.dataset.t;render()}});}
+  var s=$('#sidenav'); if(s){s.innerHTML=navHtml();
+    s.querySelectorAll('button').forEach(function(b){b.onclick=function(){tab=b.dataset.t;render()}});}
 }
 
 function load(){
   if(!LIVE){$('#view').innerHTML='<div class="errbox"><b>Приложение доступно только в боевом режиме.</b></div>';return}
   var seq=++loadSeq, kind=localStorage[KIND];
   var action=kind==='admin'?'adminZapisData':'contractorData';
-  closeSheet();
+  closeSheet(); closeMenu();
   $('#view').innerHTML=skel()+'<p class="muted" id="ldhint" style="text-align:center">Загрузка… если сервер отвечает дольше 15 секунд, подождите или обновите.</p>';
   api({action:action},{seq:seq,onRetry:function(){var h=$('#ldhint');if(h)h.textContent='Сервер отвечает дольше обычного, пробуем ещё раз…'}}).then(function(j){
     if(seq!==loadSeq)return;
@@ -227,7 +322,7 @@ function load(){
 }
 function logout(){
   if(!confirm('Выйти из аккаунта?'))return;
-  loadSeq++; closeSheet();
+  loadSeq++; closeSheet(); closeMenu();
   [TOKEN,KIND,'zapisCache'].forEach(function(k){localStorage.removeItem(k)});
   D=null; role=''; tab='slots'; mineSeg='up';
   setChrome(); login(); toast('Вы вышли');
@@ -236,38 +331,55 @@ function logout(){
 function bindPhone(id){
   var el=$(id); if(!el)return;
   el.addEventListener('input',function(){
-    var c=el.selectionStart, old=el.value, next=maskPhone(el.value);
+    var next=maskPhone(el.value);
     el.value=next;
     try{el.setSelectionRange(next.length,next.length)}catch(e){}
   });
 }
-function bindPinToggle(inputId, btnId){
-  var inp=$(inputId), btn=$(btnId); if(!inp||!btn)return;
-  btn.innerHTML=ic('eye');
-  btn.onclick=function(){
-    var show=inp.type==='password';
-    inp.type=show?'text':'password';
-    btn.innerHTML=ic(show?'eyeOff':'eye');
-    btn.setAttribute('aria-label', show?'Скрыть PIN':'Показать PIN');
-  };
+function bindOtp(wrapId, inputId){
+  var wrap=$(wrapId), inp=$(inputId); if(!wrap||!inp)return;
+  var cells=wrap.querySelectorAll('.otp-cells i');
+  function paint(){
+    var v=String(inp.value||'').replace(/\D/g,'').slice(0,6);
+    if(inp.value!==v)inp.value=v;
+    for(var i=0;i<cells.length;i++){
+      cells[i].classList.toggle('fill', !!v[i]);
+      cells[i].classList.toggle('on', i===Math.min(v.length, cells.length-1));
+    }
+  }
+  wrap.addEventListener('click',function(){inp.focus()});
+  inp.addEventListener('input',paint);
+  inp.addEventListener('focus',function(){wrap.classList.add('focus');paint()});
+  inp.addEventListener('blur',function(){wrap.classList.remove('focus')});
+  paint();
 }
 function setInvalid(id, on, msg){
   var f=$(id); if(!f)return;
   f.classList.toggle('is-invalid', !!on);
   var e=$('.ferr', f); if(e&&msg)e.textContent=msg;
 }
+function otpField(id, inputId, label, auto){
+  return '<label class="fld" id="'+id+'"><span>'+label+'</span><div class="otp" id="'+id+'-otp">'
+    +'<input id="'+inputId+'" class="otp-inp" type="tel" inputmode="numeric" maxlength="6" autocomplete="'+(auto||'one-time-code')+'" pattern="[0-9]{4,6}">'
+    +'<div class="otp-cells" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>'
+    +'<div class="ferr">PIN должен содержать 4–6 цифр</div></label>';
+}
+function authShell(title, lead, inner){
+  return '<div class="auth"><div class="logo lg auth-mark">'+logoSvg()+'</div><h1>'+title+'</h1>'
+    +(lead?'<p class="lead">'+lead+'</p>':'')+inner+'</div>';
+}
 
 function login(mode){
   mode=mode||'contractor';
   role=''; setChrome();
   if(mode==='admin'){
-    $('#view').innerHTML='<div class="auth"><div class="auth-mark">В</div><h1>Запись на выходы</h1><p class="lead">Вход администратора</p>'
-      +'<label class="fld" id="f-name"><span>Имя</span><input id="ln" autocomplete="username"><div class="ferr">Укажите имя</div></label>'
-      +'<label class="fld" id="f-pin"><span>PIN (4–6 цифр, если требуется)</span><div class="pin-wrap"><input id="lp" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" pattern="[0-9]{4,6}"><button type="button" class="pin-toggle" id="ptog" aria-label="Показать PIN"></button></div></label>'
+    $('#view').innerHTML=authShell('Запись','Вход для администратора',
+      '<label class="fld" id="f-name"><span>Имя</span><input id="ln" autocomplete="username"><div class="ferr">Укажите имя</div></label>'
+      +otpField('f-pin','lp','PIN, если требуется','current-password')
       +'<button class="btn" id="lb">Войти</button>'
-      +'<div class="auth-alt"><button type="button" class="btn ghost" id="lback">Вход исполнителя</button></div>'
-      +'<div id="le" class="errline"></div></div>';
-    bindPinToggle('#lp','#ptog');
+      +'<div class="auth-alt"><button type="button" class="link" id="lback">Вход исполнителя</button></div>'
+      +'<div id="le" class="errline"></div>');
+    bindOtp('#f-pin-otp','#lp');
     $('#lback').onclick=function(){login('contractor')};
     $('#lb').onclick=function(){
       var name=$('#ln').value.trim();
@@ -283,39 +395,41 @@ function login(mode){
     return;
   }
   if(mode==='reg'){
-    $('#view').innerHTML='<div class="auth"><div class="auth-mark">В</div><h1>Запись на выходы</h1><p class="lead">Регистрация исполнителя</p>'
-      +'<label class="fld" id="f-name"><span>ФИО</span><input id="rn" autocomplete="name"><div class="ferr">Укажите ФИО</div></label>'
+    $('#view').innerHTML=authShell('Регистрация','Заявка поступит администратору. Вход откроется после одобрения.',
+      '<label class="fld" id="f-name"><span>ФИО</span><input id="rn" autocomplete="name"><div class="ferr">Укажите ФИО</div></label>'
       +'<label class="fld" id="f-phone"><span>Телефон</span><input id="rp" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7 900 000-00-00"><div class="ferr">Укажите телефон в формате +7 XXX XXX-XX-XX</div></label>'
-      +'<label class="fld" id="f-pin"><span>PIN (4–6 цифр)</span><div class="pin-wrap"><input id="rpin" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}"><button type="button" class="pin-toggle" id="ptog" aria-label="Показать PIN"></button></div><div class="ferr">PIN должен содержать 4–6 цифр</div></label>'
-      +'<label class="fld" id="f-pin2"><span>Повторите PIN</span><input id="rpin2" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{4,6}"><div class="ferr">PIN не совпадают</div></label>'
+      +otpField('f-pin','rpin','PIN (4–6 цифр)','new-password')
+      +otpField('f-pin2','rpin2','Повторите PIN','new-password')
       +'<button class="btn" id="rb">Отправить заявку</button>'
-      +'<div class="auth-alt"><button type="button" class="btn ghost" id="lback">Назад ко входу</button></div>'
-      +'<div id="le" class="errline"></div></div>';
-    bindPhone('#rp'); bindPinToggle('#rpin','#ptog');
+      +'<div class="auth-alt"><button type="button" class="link" id="lback">Назад ко входу</button></div>'
+      +'<div id="le" class="errline"></div>');
+    bindPhone('#rp'); bindOtp('#f-pin-otp','#rpin'); bindOtp('#f-pin2-otp','#rpin2');
     $('#lback').onclick=function(){login('contractor')};
     $('#rb').onclick=function(){
       var name=$('#rn').value.trim(), phone=digitsPhone($('#rp').value), pin=$('#rpin').value, pin2=$('#rpin2').value;
       setInvalid('#f-name', name.length<2, 'Укажите ФИО');
       setInvalid('#f-phone', !/^7\d{10}$/.test(phone));
       setInvalid('#f-pin', !/^\d{4,6}$/.test(pin));
-      setInvalid('#f-pin2', pin!==pin2);
+      setInvalid('#f-pin2', pin!==pin2, 'PIN не совпадают');
       if(name.length<2||!/^7\d{10}$/.test(phone)||!/^\d{4,6}$/.test(pin)||pin!==pin2)return;
       var b=$('#rb'); b.disabled=true; $('#le').textContent='Отправляем…';
       api({action:'contractorRegister',name:name,fio:name,phone:phone,pin:pin,pin2:pin2},{retries:1}).then(function(j){
         if(!j.ok){$('#le').textContent=errText(j.error);b.disabled=false;return}
-        $('#view').innerHTML='<div class="auth"><div class="auth-mark">В</div><h1>Запись на выходы</h1><div class="okmsg">Заявка отправлена. Статус «Ожидает» — вход будет доступен после одобрения администратора.</div><button class="btn" id="lback" style="margin-top:16px">Назад ко входу</button></div>';
+        $('#view').innerHTML=authShell('Запись','',
+          '<div class="okmsg">Заявка отправлена. Статус «Ожидает» — вход будет доступен после одобрения администратора.</div>'
+          +'<button class="btn" id="lback" style="margin-top:16px">Назад ко входу</button>');
         $('#lback').onclick=function(){login('contractor')};
       }).catch(function(){$('#le').textContent=netErr();b.disabled=false});
     };
     return;
   }
-  $('#view').innerHTML='<div class="auth"><div class="auth-mark">В</div><h1>Запись на выходы</h1><p class="lead">Вход исполнителя · НПД · ГПХ</p>'
-    +'<label class="fld" id="f-phone"><span>Телефон</span><input id="lpn" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7 900 000-00-00"><div class="ferr">Укажите телефон в формате +7 XXX XXX-XX-XX</div></label>'
-    +'<label class="fld" id="f-pin"><span>PIN (4–6 цифр)</span><div class="pin-wrap"><input id="lp" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" pattern="[0-9]{4,6}"><button type="button" class="pin-toggle" id="ptog" aria-label="Показать PIN"></button></div><div class="ferr">PIN должен содержать 4–6 цифр</div></label>'
+  $('#view').innerHTML=authShell('Запись','Выбирайте выходы на площадках и записывайтесь за пару секунд',
+    '<label class="fld" id="f-phone"><span>Телефон</span><input id="lpn" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7 900 000-00-00"><div class="ferr">Укажите телефон в формате +7 XXX XXX-XX-XX</div></label>'
+    +otpField('f-pin','lp','PIN','current-password')
     +'<button class="btn" id="lb">Войти</button>'
-    +'<div class="auth-alt"><button type="button" class="btn ghost" id="lreg">Регистрация</button><button type="button" class="btn ghost" id="ladm">Вход администратора</button></div>'
-    +'<div id="le" class="errline"></div></div>';
-  bindPhone('#lpn'); bindPinToggle('#lp','#ptog');
+    +'<div class="auth-alt"><button type="button" class="link" id="lreg">Регистрация</button><button type="button" class="link" id="ladm">Вход для администратора</button></div>'
+    +'<div id="le" class="errline"></div>');
+  bindPhone('#lpn'); bindOtp('#f-pin-otp','#lp');
   $('#lreg').onclick=function(){login('reg')};
   $('#ladm').onclick=function(){login('admin')};
   $('#lb').onclick=function(){
@@ -331,20 +445,31 @@ function login(mode){
   };
 }
 
+function datesWithSlots(){
+  var set={}, list=(D&&D.slots)||[];
+  list.forEach(function(s){
+    if(F.site&&s.site!==F.site)return;
+    if(s.date)set[s.date]=true;
+  });
+  return set;
+}
 function dateStrip(){
-  var from=today(), h='<div class="strip-wrap"><div class="strip" id="dstrip">';
-  h+='<button type="button" class="chip day'+(F.date?'':' on')+'" data-d=""><small>все</small><b>•</b></button>';
+  var from=today(), has=datesWithSlots(), h='<div class="strip-wrap"><div class="strip" id="dstrip">';
+  h+='<button type="button" class="chip-all'+(F.date?'':' on')+'" data-d="">Все даты</button>';
   var i,d,p,dt;
   for(i=0;i<14;i++){
     d=addDays(from,i); p=d.split('-'); dt=new Date(+p[0],+p[1]-1,+p[2]);
-    h+='<button type="button" class="chip day'+(F.date===d?' on':'')+'" data-d="'+d+'"><small>'+(i===0?'сегодня':WD[dt.getDay()])+'</small><b>'+p[2]+'</b></button>';
+    h+='<button type="button" class="dchip'+(F.date===d?' on':'')+(has[d]?' has':'')+(i===0?' today':'')+'" data-d="'+d+'"><small>'+WD[dt.getDay()]+'</small><span class="num">'+p[2]+'</span><i class="dot"></i></button>';
   }
   return h+'</div></div>';
 }
 function siteStrip(){
   var sites=(D&&D.sites)||[], h='<div class="strip-wrap"><div class="strip" id="sstrip">';
-  h+='<button type="button" class="chip site'+(F.site?'':' on')+'" data-s="">Все площадки</button>';
-  sites.forEach(function(s){var n=s.site||''; if(!n)return; h+='<button type="button" class="chip site'+(F.site===n?' on':'')+'" data-s="'+esc(n)+'">'+esc(n)+'</button>'});
+  h+='<button type="button" class="schip'+(F.site?'':' on')+'" data-s="">Все площадки</button>';
+  sites.forEach(function(s){
+    var n=s.site||''; if(!n)return;
+    h+='<button type="button" class="schip'+(F.site===n?' on':'')+'" data-s="'+esc(n)+'">'+esc(parseSite(n).short)+'</button>';
+  });
   return h+'</div></div>';
 }
 function bindFilters(){
@@ -356,59 +481,90 @@ function filterSlots(list){
     if(F.site&&s.site!==F.site)return false;
     if(F.date&&s.date!==F.date)return false;
     return true;
+  }).slice().sort(function(a,b){
+    return String(a.date||'').localeCompare(b.date||'')||String(a.start||'').localeCompare(b.start||'');
   });
 }
 
-function slotCard(s, opts){
+function slotRow(s, opts){
   opts=opts||{};
-  var st=slotStatus(s), can=s.left>0&&s.status==='Открыт'&&!s.started;
-  var req=s.req?'<span class="badge req">'+ic('alert','sm')+' Требования</span>':'';
-  var cta=opts.admin?'':(can?'<button type="button" class="btn sm go">Записаться</button>':'');
-  return '<article class="scard" data-row="'+s.row+'">'
-    +avatar(s.site||'')
-    +'<div class="scard-main"><div class="scard-site">'+esc(s.site||'—')+'</div>'
-    +'<div class="scard-time amt">'+esc(timeRange(s))+'</div>'
-    +'<div class="scard-meta"><span>'+fdLong(s.date)+'</span><span>'+esc(gph(s.vacancy||'Вид услуг не указан'))+'</span></div></div>'
-    +'<div class="scard-side"><span class="st '+st.cls+'">'+st.label+'</span>'
-    +'<div class="scard-pay amt">'+esc(fmtReward(s.reward))+'<small>вознаграждение</small></div></div>'
-    +'<div class="scard-cta">'+pbar(s)+cta+'</div>'
-    +(req?'<div class="tags">'+req+'</div>':'')
+  var site=parseSite(s.site||'');
+  var end=fmtEnd(s.start,s.length);
+  var signed=!!s.mySignup;
+  var right=signed?'<span class="chip-ok">Записан</span>':'<div class="srow-pay">'+rewardHtml(s.reward)+'</div>'+ic('chev','chev');
+  if(opts.admin){
+    var st=slotStatus(s);
+    right='<div class="srow-pay">'+rewardHtml(s.reward)+'</div>'+(st.cls!=='ok'?'<span class="st '+st.cls+'">'+st.label+'</span>':'')+ic('chev','chev');
+  }
+  return '<article class="srow" data-row="'+s.row+'">'
+    +'<div class="srow-time"><b>'+esc(s.start||'—')+'</b><small>'+(end?'→'+end:'')+'</small></div>'
+    +'<div class="srow-main"><div class="srow-title">'+esc(site.title)+'</div>'
+    +(site.sub?'<div class="srow-sub">'+esc(site.sub)+'</div>':'')
+    +'<div class="srow-vac">'+esc(gph(s.vacancy||'Вид услуг не указан'))+'</div>'
+    +'<div class="srow-meta">'+ic('users','sm')+'<span>'+esc(placesText(s))+'</span>'
+    +(s.req?ic('shield','sm shield'):'')
+    +'</div></div>'
+    +'<div class="srow-side">'+right+'</div>'
     +'</article>';
+}
+function groupedSlots(list, opts){
+  if(!list.length)return emptyBox('Нет открытых выходов','Измените площадку или дату');
+  var h='', last='', i;
+  for(i=0;i<list.length;i++){
+    if(list[i].date!==last){
+      if(last)h+='</div></section>';
+      last=list[i].date;
+      h+='<section class="day-group"><h2 class="day-h">'+esc(dayHeading(last))+'</h2><div class="list">';
+    }
+    h+=slotRow(list[i], opts);
+  }
+  return h+'</div></section>';
 }
 
 function renderSlotsContractor(){
   var list=filterSlots(D.slots||[]);
-  var h='<h1 class="h1">Открытые выходы</h1>'+dateStrip()+siteStrip();
-  if(!list.length)h+=emptyBox('Нет открытых выходов','Измените площадку или дату');
-  else list.forEach(function(s){h+=slotCard(s)});
+  var h=dateStrip()+siteStrip()+groupedSlots(list);
   $('#view').innerHTML=h; bindFilters();
-  $('#view').querySelectorAll('.scard').forEach(function(el){
-    el.onclick=function(ev){ if(ev.target.closest && ev.target.closest('.go')) ev.preventDefault(); openSignup(+el.dataset.row); };
+  $('#view').querySelectorAll('.srow').forEach(function(el){
+    el.onclick=function(){openSignup(+el.dataset.row)};
   });
+}
+
+function sheetHero(s){
+  var site=parseSite(s.site||'');
+  var end=fmtEnd(s.start,s.length);
+  var x=dateParts(s.date);
+  var when=x?(dayHeading(s.date)+(s.start?' · '+s.start:'')):fdLong(s.date);
+  return '<p class="sh-kicker">'+esc(when)+'</p>'
+    +'<h3>'+esc(site.title)+'</h3>'
+    +(site.sub?'<div class="sh-sub">'+esc(site.sub)+'</div>':'')
+    +'<div class="sh-pay"><div class="tm">'+esc(s.start||'—')+(end?'–'+end:'')+'<small>'+esc(fmtLen(s.length))+'</small></div>'
+    +'<div class="am">'+rewardHtml(s.reward)+'</div></div>';
 }
 
 function openSignup(row){
   var s=(D.slots||[]).filter(function(x){return x.row===row})[0];
   if(!s)return;
-  var req=s.req?('<div class="drow">'+ic('shield')+'<div class="dk"><span>Требования</span><b>'+hlReq(s.req)+'</b></div></div>'):'';
   var can=s.left>0&&s.status==='Открыт'&&!s.started;
   var already=s.mySignup;
-  var body='<h3>'+esc(s.site)+'</h3>'
-    +'<div class="sheet-hero"><div class="scard-time amt">'+esc(timeRange(s))+'</div>'
-    +'<div class="scard-meta">'+fdLong(s.date)+'</div>'
-    +'<div class="scard-pay amt" style="margin-top:10px">'+esc(fmtReward(s.reward))+'<small>вознаграждение</small></div></div>'
+  var mine=(D.mine||[]).filter(function(it){return it.slot&&it.slot.row===s.row&&it.signup&&it.signup.status==='Записан'})[0];
+  var canCancel=already&&mine&&mine.signup&&mine.slot&&mine.slot.canCancel;
+  var body=sheetHero(s)
     +'<div class="dlist">'
     +'<div class="drow">'+ic('bag')+'<div class="dk"><span>Вид услуг</span><b>'+esc(gph(s.vacancy||'—'))+'</b></div></div>'
-    +'<div class="drow">'+ic('clock')+'<div class="dk"><span>Длительность</span><b>'+esc(fmtLen(s.length))+'</b></div></div>'
-    +'<div class="drow">'+ic('users')+'<div class="dk"><span>Места</span><b>'+s.left+' из '+s.places+' свободно</b>'+pbar(s)+'</div></div>'
+    +'<div class="drow">'+ic('users')+'<div class="dk"><span>Места</span><b>'+esc(placesText(s,true))+'</b></div></div>'
     +(s.comment?'<div class="drow">'+ic('file')+'<div class="dk"><span>Комментарий</span><b>'+esc(s.comment)+'</b></div></div>':'')
-    +req+'</div>'
+    +'</div>'
+    +(s.req?'<div class="reqbox"><div class="rh">'+ic('shield','sm')+' Требования</div><div class="rt">'+hlReq(s.req)+'</div>'
+      +(!already&&can?'<label class="confirm"><input type="checkbox" id="cnf"><span>Подтверждаю, что ознакомлен(а) с требованиями и готов(а) записаться на этот выход</span></label>':'')
+      +'</div>':'')
+    +(!s.req&&!already&&can?'<label class="confirm"><input type="checkbox" id="cnf"><span>Подтверждаю, что готов(а) записаться на этот выход</span></label>':'')
     +(already?'<div class="okmsg" style="margin-top:16px">Вы уже записаны на этот выход</div>':'')
-    +(!already&&can?'<label class="confirm"><input type="checkbox" id="cnf"><span>Подтверждаю, что ознакомлен(а) с требованиями и готов(а) записаться на этот выход</span></label>':'')
     +(!already&&!can?'<p class="hint">Запись на этот выход недоступна</p>':'');
-  var cta=already||!can?'<button class="btn s" id="shx">Закрыть</button>':'<button class="btn" id="sgo">Записаться</button><button class="btn s" id="shx">Отмена</button>';
+  var cta='';
+  if(already&&canCancel)cta='<button class="btn danger" id="scancel">Отменить запись</button>';
+  else if(!already&&can)cta='<button class="btn" id="sgo">Записаться на выход</button>';
   openSheet(body, cta);
-  $('#shx')&&($('#shx').onclick=closeSheet);
   var go=$('#sgo');
   if(go)go.onclick=function(){
     if(!$('#cnf')||!$('#cnf').checked){toast('Отметьте «подтверждаю»','bad');return}
@@ -418,79 +574,136 @@ function openSignup(row){
       toast('Вы записаны','ok'); closeSheet(); load();
     }).catch(function(){toast(netErr(),'bad');go.disabled=false});
   };
+  var cl=$('#scancel');
+  if(cl)cl.onclick=function(){
+    if(!mine||!mine.signup)return;
+    if(!confirm('Отменить запись на этот выход?'))return;
+    cl.disabled=true;
+    api({action:'cancelSignup',row:mine.signup.row}).then(function(j){
+      if(!j.ok){toast(errText(j.error),'bad');cl.disabled=false;return}
+      toast('Запись отменена','ok'); closeSheet(); load();
+    }).catch(function(){toast(netErr(),'bad');cl.disabled=false});
+  };
 }
 
+function slotStartMs(s){
+  if(s&&s.startMs)return +s.startMs;
+  if(!s||!s.date)return 0;
+  var p=String(s.date).split('-'), m=/^(\d{1,2}):(\d{2})/.exec(s.start||'');
+  if(p.length!==3)return 0;
+  var hh=m?+m[1]:0, mm=m?+m[2]:0;
+  try{
+    var iso=p[0]+'-'+p[1]+'-'+p[2]+'T'+('0'+hh).slice(-2)+':'+('0'+mm).slice(-2)+':00+03:00';
+    var t=Date.parse(iso); return isNaN(t)?0:t;
+  }catch(e){return 0}
+}
+function countdown(s){
+  var start=slotStartMs(s), now=Date.now();
+  if(!start)return fdLong(s.date);
+  var ms=start-now;
+  if(ms<=0)return 'уже начался';
+  var m=Math.round(ms/60000);
+  if(m<60)return 'через '+m+' мин';
+  var h=Math.floor(m/60), rm=m%60;
+  if(h<24)return 'через '+h+' ч'+(rm?' '+rm+' мин':'');
+  var d=Math.floor(h/24);
+  if(d===1)return 'завтра в '+(s.start||'');
+  return 'через '+d+' дн.';
+}
 function isUpcoming(item){
   var s=item.slot||{}, sg=item.signup||{};
   return sg.status==='Записан'&&!s.started;
 }
+function mineRow(item, compact){
+  var s=item.slot||{}, sg=item.signup||{};
+  var site=parseSite(s.site||'');
+  var end=fmtEnd(s.start,s.length);
+  var st=sg.status==='Записан'?'ok':(sg.status==='Отменена'?'w':'bad');
+  var right='<span class="st '+st+'">'+esc(sg.status==='Записан'?'Записан':sg.status)+'</span>'+ic('chev','chev');
+  return '<article class="srow" data-slot="'+s.row+'" data-sg="'+(sg.row||'')+'">'
+    +'<div class="srow-time"><b>'+esc(s.start||'—')+'</b><small>'+(end?'→'+end:'')+'</small></div>'
+    +'<div class="srow-main"><div class="srow-title">'+esc(site.title)+'</div>'
+    +(site.sub?'<div class="srow-sub">'+esc(site.sub)+'</div>':'')
+    +'<div class="srow-vac">'+esc(gph(s.vacancy||''))+' · '+esc(dayHeading(s.date))+'</div></div>'
+    +'<div class="srow-side">'+(!compact?'<div class="srow-pay">'+rewardHtml(s.reward)+'</div>':'')+right+'</div>'
+    +'</article>';
+}
 function renderMine(){
-  var all=D.mine||[], up=all.filter(isUpcoming), hist=all.filter(function(x){return !isUpcoming(x)});
-  var list=mineSeg==='hist'?hist:up;
+  var all=D.mine||[], up=all.filter(isUpcoming).slice().sort(function(a,b){return slotStartMs(a.slot)-slotStartMs(b.slot)}),
+      hist=all.filter(function(x){return !isUpcoming(x)});
   var h='<h1 class="h1">Мои записи</h1><div class="segtab">'
     +'<button type="button" data-seg="up"'+(mineSeg==='up'?' class="on"':'')+'>Предстоящие'+(up.length?' · '+up.length:'')+'</button>'
     +'<button type="button" data-seg="hist"'+(mineSeg==='hist'?' class="on"':'')+'>История'+(hist.length?' · '+hist.length:'')+'</button></div>';
-  if(!list.length)h+=emptyBox(mineSeg==='hist'?'История пуста':'Нет предстоящих записей', mineSeg==='hist'?'Завершённые и отменённые записи появятся здесь':'Откройте вкладку «Выходы», чтобы записаться');
-  list.forEach(function(item){
-    var s=item.slot||{}, sg=item.signup||{};
-    var can=sg.status==='Записан'&&s.canCancel;
-    var st=sg.status==='Записан'?'ok':(sg.status==='Отменена'?'w':'bad');
-    h+='<article class="scard mine">'
-      +avatar(s.site||'')
-      +'<div class="scard-main"><div class="scard-site">'+esc(s.site||'—')+'</div>'
-      +'<div class="scard-time amt">'+esc(timeRange(s))+'</div>'
-      +'<div class="scard-meta">'+fdLong(s.date)+'</div></div>'
-      +'<div class="scard-side"><span class="st '+st+'">'+esc(sg.status)+'</span>'
-      +'<div class="scard-pay amt">'+esc(fmtReward(s.reward))+'<small>вознаграждение</small></div></div>';
-    if(can)h+='<div class="scard-actions"><p class="hint">Отмена возможна не позднее чем за '+(D.cancel_hours||12)+' ч до начала</p><button class="btn s" data-cancel="'+sg.row+'">Отменить запись</button></div>';
-    else if(sg.status==='Записан'&&s.startMs)h+='<div class="scard-actions"><p class="hint">Отмена уже недоступна (окно — '+(D.cancel_hours||12)+' ч до начала)</p></div>';
-    h+='</article>';
-  });
+  if(mineSeg==='up'){
+    if(!up.length)h+=emptyBox('Нет предстоящих записей','Откройте вкладку «Выходы», чтобы записаться');
+    else {
+      var next=up[0], s=next.slot||{}, site=parseSite(s.site||'');
+      var end=fmtEnd(s.start,s.length);
+      h+='<article class="feat" data-slot="'+s.row+'"><div class="feat-k">Ближайший выход</div>'
+        +'<div class="feat-title">'+esc(site.title)+'</div>'
+        +(site.sub?'<div class="feat-sub">'+esc(site.sub)+'</div>':'')
+        +'<div class="feat-row"><div class="feat-time">'+esc(s.start||'—')+(end?'–'+end:'')+'<small>'+esc(dayHeading(s.date))+'</small></div>'
+        +'<div class="feat-pay">'+rewardHtml(s.reward)+'</div></div>'
+        +'<div class="cdown">'+esc(countdown(s))+'</div></article>';
+      if(up.length>1){
+        h+='<div class="list">';
+        up.slice(1).forEach(function(it){h+=mineRow(it)});
+        h+='</div>';
+      }
+    }
+  } else {
+    if(!hist.length)h+=emptyBox('История пуста','Завершённые и отменённые записи появятся здесь');
+    else {
+      h+='<div class="list">';
+      hist.forEach(function(it){h+=mineRow(it)});
+      h+='</div>';
+    }
+  }
   $('#view').innerHTML=h;
   $('#view').querySelectorAll('.segtab button').forEach(function(b){b.onclick=function(){mineSeg=b.dataset.seg;render()}});
-  $('#view').querySelectorAll('[data-cancel]').forEach(function(b){b.onclick=function(){
-    if(!confirm('Отменить запись на этот выход?'))return;
-    b.disabled=true;
-    api({action:'cancelSignup',row:+b.dataset.cancel}).then(function(j){
-      if(!j.ok){toast(errText(j.error),'bad');b.disabled=false;return}
-      toast('Запись отменена','ok'); load();
-    }).catch(function(){toast(netErr(),'bad');b.disabled=false});
-  }});
+  $('#view').querySelectorAll('[data-slot]').forEach(function(el){el.onclick=function(){openSignup(+el.dataset.slot)}});
 }
 
+function ringSvg(pct){
+  var r=8, c=2*Math.PI*r, off=c*(1-Math.max(0,Math.min(100,pct))/100);
+  return '<svg class="ring" viewBox="0 0 22 22" aria-hidden="true"><circle class="bg" cx="11" cy="11" r="8"/><circle class="fg" cx="11" cy="11" r="8" stroke-dasharray="'+c.toFixed(2)+'" stroke-dashoffset="'+off.toFixed(2)+'"/></svg>';
+}
 function adminKpis(){
   var slots=D.slots||[], open=slots.filter(function(s){return s.status==='Открыт'});
   var places=0, taken=0;
   open.forEach(function(s){places+=(+s.places||0); taken+=(+s.taken||0)});
   var fill=places?Math.round(taken/places*100):0;
   var pend=(D.contractors||[]).filter(function(u){return u.status==='Ожидает'}).length;
-  return '<div class="kpis">'
-    +'<div class="kpi"><b class="amt">'+open.length+'</b><span>Открытых выходов</span></div>'
-    +'<div class="kpi"><b class="amt">'+fill+'%</b><span>Заполнение мест</span></div>'
-    +'<div class="kpi"><b class="amt">'+pend+'</b><span>Заявок на одобрение</span></div>'
+  return '<div class="kpi-card">'
+    +'<div class="kpi-cell"><div class="kpi-n">'+open.length+'</div><span class="kpi-l">Открытых выходов</span></div>'
+    +'<div class="kpi-cell"><div class="kpi-n">'+ringSvg(fill)+'<span>'+fill+'%</span></div><span class="kpi-l">Заполнение мест</span></div>'
+    +'<div class="kpi-cell"><div class="kpi-n">'+pend+'</div><span class="kpi-l">Заявок на одобрение</span></div>'
     +'</div>';
 }
 
 function renderSlotsAdmin(){
   var list=filterSlots(D.slots||[]);
-  var h='<div class="scr-row"><h1 class="h1">Выходы</h1><button class="btn sm" id="newslot">'+ic('plus','sm')+' Создать</button></div>'
+  var h='<div class="scr-row"><h1 class="h1">Выходы</h1><button class="btn sm desk-only" id="newslot">'+ic('plus','sm')+' Создать</button></div>'
     +adminKpis()+dateStrip()+siteStrip();
   if(!list.length){
     h+=emptyBox('Выходов нет','Создайте выход или снимите фильтр');
   } else {
-    h+='<div class="cards-only">';
-    list.forEach(function(s){h+=slotCard(s,{admin:true})});
-    h+='</div><div class="tbl-wrap desk-only"><table class="tbl"><thead><tr><th>Дата</th><th>Время</th><th>Площадка</th><th>Вид услуг</th><th>Вознаграждение</th><th>Места</th><th>Статус</th></tr></thead><tbody>';
+    h+='<div class="cards-only">'+groupedSlots(list,{admin:true})+'</div>';
+    h+='<div class="tbl-wrap desk-only"><table class="tbl"><thead><tr><th>Дата</th><th>Время</th><th>Площадка</th><th>Вид услуг</th><th>Вознаграждение</th><th>Места</th><th>Статус</th></tr></thead><tbody>';
     list.forEach(function(s){
-      var st=slotStatus(s);
-      h+='<tr data-row="'+s.row+'"><td>'+fdLong(s.date)+'</td><td class="amt">'+esc(timeRange(s))+'</td><td>'+esc(s.site||'—')+'</td><td>'+esc(gph(s.vacancy||'—'))+'</td><td class="amt">'+esc(fmtReward(s.reward))+'</td><td>'+(s.taken||0)+' / '+s.places+'</td><td><span class="st '+st.cls+'">'+st.label+'</span></td></tr>';
+      var st=slotStatus(s), site=parseSite(s.site||'');
+      h+='<tr data-row="'+s.row+'"><td class="date-cell">'+tableDate(s.date)+'</td><td class="tnum">'+esc(timeRange(s))+'</td>'
+        +'<td class="site-cell"><b>'+esc(site.title)+'</b>'+(site.sub?'<span>'+esc(site.sub)+'</span>':'')+'</td>'
+        +'<td class="vac-cell">'+esc(gph(s.vacancy||'—'))+'</td><td class="tnum">'+esc(fmtReward(s.reward))+'</td>'
+        +'<td class="tnum">'+placesLeft(s).taken+' / '+placesLeft(s).places+'</td><td><span class="st '+st.cls+'">'+st.label+'</span></td></tr>';
     });
     h+='</tbody></table></div>';
   }
   $('#view').innerHTML=h; bindFilters();
-  $('#newslot').onclick=function(){openSlotForm(null)};
+  var ns=$('#newslot'); if(ns)ns.onclick=function(){openSlotForm(null)};
+  var fab=$('#fab'); if(fab){fab.innerHTML=ic('plus'); fab.onclick=function(){openSlotForm(null)};}
   function openR(el){var r=el.closest('[data-row]'); if(r)openAdminSlot(+r.dataset.row)}
-  $('#view').querySelectorAll('.scard, .tbl tbody tr').forEach(function(el){el.onclick=function(){openR(el)}});
+  $('#view').querySelectorAll('.srow, .tbl tbody tr').forEach(function(el){el.onclick=function(){openR(el)}});
 }
 
 function slotFormFields(s){
@@ -531,11 +744,10 @@ function openSlotForm(s){
   var edit=!!(s&&s.row);
   var extra=edit?'':'<label class="fld"><span>Даты (можно выбрать несколько дней)</span></label><div class="week" id="wdays">'+weekBoxes(s&&s.date||today())+'</div>';
   openSheet('<h3>'+(edit?'Редактировать выход':'Новый выход')+'</h3>'+slotFormFields(s||{date:today(),start:'09:00',length:660,places:1})+extra,
-    '<button class="btn" id="ssave">'+(edit?'Сохранить':'Создать')+'</button><button class="btn s" id="shx">Отмена</button>');
+    '<button class="btn" id="ssave">'+(edit?'Сохранить':'Создать')+'</button>');
   $('#ssite').onchange=prefillsFromSite;
   if(!edit)prefillsFromSite();
   if($('#sdate')){var syncW=function(){if($('#wdays'))$('#wdays').innerHTML=weekBoxes($('#sdate').value||today())};$('#sdate').onchange=syncW;$('#sdate').oninput=syncW;}
-  $('#shx').onclick=closeSheet;
   $('#ssave').onclick=function(){
     var body=readSlotForm();
     if(!edit){
@@ -560,24 +772,23 @@ function openAdminSlot(row){
   var sigs=s.signups||[];
   var active=sigs.filter(function(x){return x.status==='Записан'});
   var other=sigs.filter(function(x){return x.status!=='Записан'});
-  var people='<h3 class="subhead" style="font-size:16px;margin:4px 0 8px">Записавшиеся · '+active.length+'</h3>';
+  var people='<h3 class="subhead">Записавшиеся · '+active.length+'</h3>';
   if(!sigs.length)people+='<div class="empty sm"><b>Пока никто не записался</b><span>Исполнители появятся после записи</span></div>';
+  if(sigs.length)people+='<div class="list" style="box-shadow:none">';
   active.forEach(function(x){
     people+='<div class="person">'+avatar(x.name||'')+'<div><div class="nm">'+esc(x.name)+'</div><div class="sub">'+esc(fmtPhone(x.phone))+'</div></div><button class="btn s" data-rm="'+x.row+'">Снять</button></div>';
   });
   other.forEach(function(x){
     people+='<div class="person">'+avatar(x.name||'')+'<div><div class="nm">'+esc(x.name)+'</div><div class="sub">'+esc(fmtPhone(x.phone))+' · '+esc(x.status)+'</div></div></div>';
   });
-  var h='<h3>'+esc(s.site)+'</h3>'
-    +'<div class="sheet-hero"><div class="scard-time amt">'+esc(timeRange(s))+'</div>'
-    +'<div class="scard-meta">'+fdLong(s.date)+'</div>'
-    +'<div class="scard-pay amt" style="margin-top:10px">'+esc(fmtReward(s.reward))+'<small>вознаграждение</small></div>'
-    +'<div class="scard-meta" style="margin-top:8px">'+(s.taken||0)+' из '+s.places+' занято</div>'+pbar(s)+'</div>'
+  if(sigs.length)people+='</div>';
+  var h=sheetHero(s)
+    +'<div class="drow" style="padding-top:4px">'+ic('users')+'<div class="dk"><span>Места</span><b>'+placesLeft(s).taken+' из '+placesLeft(s).places+' занято</b></div></div>'
     +people
     +'<div class="dlist">'
     +'<div class="drow">'+ic('bag')+'<div class="dk"><span>Вид услуг</span><b>'+esc(gph(s.vacancy||'—'))+'</b></div></div>'
     +(s.comment?'<div class="drow">'+ic('file')+'<div class="dk"><span>Комментарий</span><b>'+esc(s.comment)+'</b></div></div>':'')
-    +(s.req?'<div class="drow">'+ic('shield')+'<div class="dk"><span>Требования</span><b>'+hlReq(s.req)+'</b></div></div>':'')
+    +(s.req?'<div class="reqbox"><div class="rh">'+ic('shield','sm')+' Требования</div><div class="rt">'+hlReq(s.req)+'</div></div>':'')
     +'</div>';
   openSheet(h, '<button class="btn" id="sedit">Редактировать</button><div class="cta-row"><button class="btn s" id="scopy">Копировать</button><button class="btn s" id="sclose">'+(s.status==='Закрыт'?'Открыть выход':'Закрыть выход')+'</button></div>');
   $('#sedit').onclick=function(){openSlotForm(s)};
@@ -586,8 +797,7 @@ function openAdminSlot(row){
   };
   $('#scopy').onclick=function(){
     openSheet('<h3>Копировать выход</h3><p class="hint">Будут созданы такие же выходы на выбранные дни, начиная со следующего после '+fd(s.date)+'.</p><label class="fld"><span>Сколько следующих дней</span><input id="cdays" type="number" min="1" max="31" value="6"></label>',
-      '<button class="btn" id="cgo">Создать копии</button><button class="btn s" id="shx">Отмена</button>');
-    $('#shx').onclick=closeSheet;
+      '<button class="btn" id="cgo">Создать копии</button>');
     $('#cgo').onclick=function(){
       $('#cgo').disabled=true;
       api({action:'copySlot',row:s.row,days:+$('#cdays').value}).then(function(j){
@@ -608,7 +818,7 @@ function renderPeople(){
   if(!list.length)h+=emptyBox('Пока нет исполнителей','Заявки появятся после регистрации');
   list.forEach(function(u){
     var st=u.status==='Одобрен'?'ok':u.status==='Заблокирован'||u.status==='Отклонён'?'bad':'w';
-    h+='<div class="ucard"><div class="person" style="border:0;padding:0">'+avatar(u.name||'')+'<div><div class="nm">'+esc(u.name)+'</div><div class="sub">'+esc(fmtPhone(u.phone))+(u.date?' · '+esc(u.date):'')+'</div></div><span class="st '+st+'">'+esc(u.status)+'</span></div>';
+    h+='<div class="ucard"><div class="person" style="box-shadow:none;padding:0">'+avatar(u.name||'')+'<div><div class="nm">'+esc(u.name)+'</div><div class="sub">'+esc(fmtPhone(u.phone))+(u.date?' · '+esc(u.date):'')+'</div></div><span class="st '+st+'">'+esc(u.status)+'</span></div>';
     h+='<div class="uacts">';
     if(u.status!=='Одобрен')h+='<button class="btn" data-row="'+u.row+'" data-st="Одобрен">Одобрить</button>';
     if(u.status!=='Заблокирован')h+='<button class="btn s" data-row="'+u.row+'" data-st="Заблокирован">Заблокировать</button>';
@@ -638,10 +848,10 @@ function renderMore(){
   var sites=(D&&D.sites)||[], opts='<option value="">Все площадки</option>';
   sites.forEach(function(s){opts+='<option value="'+esc(s.site)+'">'+esc(s.site)+'</option>'});
   var h='<h1 class="h1">Ещё</h1>'
-    +'<div class="ucard"><h3 style="margin:0 0 8px;font-size:16px">Окно отмены</h3><p class="hint" style="margin-top:0">Исполнитель может отменить запись не позднее чем за указанное число часов до начала выхода.</p>'
+    +'<div class="ucard"><h3 class="subhead" style="margin-top:0">Окно отмены</h3><p class="hint" style="margin-top:0">Исполнитель может отменить запись не позднее чем за указанное число часов до начала выхода.</p>'
     +'<label class="fld"><span>Часов до начала</span><input id="chours" type="number" min="0" max="168" value="'+(D.cancel_hours||12)+'"></label>'
     +'<button class="btn" id="csave">Сохранить</button></div>'
-    +'<div class="ucard"><h3 style="margin:0 0 8px;font-size:16px">Выгрузка</h3><p class="hint" style="margin-top:0">Список записей за дату и площадку — на лист «Выгрузка_выходов» и в CSV-файл.</p>'
+    +'<div class="ucard"><h3 class="subhead" style="margin-top:0">Выгрузка</h3><p class="hint" style="margin-top:0">Список записей за дату и площадку — на лист «Выгрузка_выходов» и в CSV-файл.</p>'
     +'<label class="fld"><span>Дата</span><input id="edate" type="date" value="'+today()+'"></label>'
     +'<label class="fld"><span>Площадка (необязательно)</span><select id="esite">'+opts+'</select></label>'
     +'<button class="btn" id="ego">Выгрузить</button></div>';
@@ -672,8 +882,10 @@ function render(){
   return renderSlotsContractor();
 }
 
-$('#logout').onclick=logout;
-$('#refresh').onclick=function(){if(localStorage[TOKEN])load();else login()};
+if($('#logout'))$('#logout').onclick=logout;
+if($('#refresh'))$('#refresh').onclick=function(){closeMenu(); if(localStorage[TOKEN])load();else login()};
+if($('#avbtn'))$('#avbtn').onclick=function(e){e.stopPropagation(); var m=$('#usermenu'); if(m.hidden)openMenu(); else closeMenu()};
+if($('#menuBack'))$('#menuBack').onclick=closeMenu;
 if($('#sheet')){
   $('#sheet').addEventListener('click',function(e){if(e.target===this)closeSheet()});
   var handle=$('.sh-handle'), startY=0, dragging=false;
@@ -683,6 +895,18 @@ if($('#sheet')){
     handle.addEventListener('pointermove',function(e){if(!dragging)return; var dy=Math.max(0,e.clientY-startY); var sh=$('.sh'); if(sh)sh.style.transform='translateY('+dy+'px)';});
   }
 }
+(function bindPtr(){
+  var startY=0, pulling=false;
+  document.addEventListener('touchstart',function(e){
+    if(!localStorage[TOKEN]||window.scrollY>0)return;
+    startY=e.touches[0].clientY; pulling=true;
+  },{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(!pulling)return; pulling=false;
+    var dy=(e.changedTouches[0]&&e.changedTouches[0].clientY||0)-startY;
+    if(dy>72&&localStorage[TOKEN])load();
+  },{passive:true});
+})();
 function hardUpdate(){toast('Обновляю приложение');var p=[];if(window.caches)p.push(caches.keys().then(function(k){return Promise.all(k.map(function(x){return caches.delete(x)}))}));if('serviceWorker'in navigator)p.push(navigator.serviceWorker.getRegistrations().then(function(rs){return Promise.all(rs.map(function(r){return r.unregister()}))}));Promise.all(p).catch(function(){}).then(function(){location.replace(location.pathname+'?v='+Date.now())})}
 function checkVer(){fetch('index.html?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.text()}).then(function(t){var m=t.match(/app\.js\?v=(\d+)/);if(m&&+m[1]>VER&&sessionStorage.zapisUpd!==m[1]){sessionStorage.zapisUpd=m[1];hardUpdate()}}).catch(function(){})}
 if('serviceWorker'in navigator){var hadC=!!navigator.serviceWorker.controller,rl=false;navigator.serviceWorker.addEventListener('controllerchange',function(){if(hadC&&!rl){rl=true;location.reload()}});navigator.serviceWorker.register('sw.js?v='+VER,{updateViaCache:'none'}).then(function(r){r.update()}).catch(function(){})}
