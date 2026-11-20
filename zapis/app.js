@@ -1,6 +1,6 @@
-/* Запись исполнителей на выходы (ZAPIS_APP_V1.3, UI v=12, тёмная тема) */
+/* Запись исполнителей на выходы (ZAPIS_APP_V1.3, UI v=13, тёмная тема) */
 (function(){
-var VER=12, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
+var VER=13, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
 var D=null, E=null, C=null, CP=null, tab='slots', mineSeg='up', F={site:'',date:'',q:''}, role='', loadSeq=0, EP='', CPid='', searchOn=false;
 var $ = function(s, r){return (r||document).querySelector(s)};
 var TOKEN='zapisToken', KIND='zapisKind';
@@ -113,21 +113,28 @@ function fmtEnd(start,len){
 }
 function timeRange(s){var a=s&&s.start||'—', b=fmtEnd(s&&s.start,s&&s.length); return b?a+'–'+b:a}
 function fmtPhone(p){p=String(p||'').replace(/\D/g,'');if(p.length===11&&p[0]==='7')return '+7 '+p.slice(1,4)+' '+p.slice(4,7)+'-'+p.slice(7,9)+'-'+p.slice(9);return p||'—'}
-function digitsPhone(s){
-  var p=String(s||'').replace(/\D/g,'');
-  if(p.length===11&&p[0]==='8')p='7'+p.slice(1);
-  if(p.length===10)p='7'+p;
-  return p.slice(0,11);
+/* Телефон: «национальная» часть — 10 цифр после кода страны. Код 7/8 отбрасывается только если он стоит первым
+   (после «+» — только 7). Никаких «дописываний» 7 при стирании. */
+function phoneNat(s){
+  var raw=String(s||''), d=raw.replace(/\D/g,''), plus=/^\s*\+/.test(raw);
+  if(plus){ if(d[0]==='7')d=d.slice(1); }
+  else if(d.length>10&&(d[0]==='7'||d[0]==='8'))d=d.slice(1);
+  else if(d.length<=10&&(d[0]==='7'||d[0]==='8')&&!/^[78]\d{9}$/.test(d))d=d.slice(1);
+  return d.slice(0,10);
+}
+function digitsPhone(s){ var n=phoneNat(s); return n?'7'+n:''; }
+function fmtNat(n){
+  var out='+7';
+  if(n.length)out+=' '+n.slice(0,3);
+  if(n.length>3)out+=' '+n.slice(3,6);
+  if(n.length>6)out+='-'+n.slice(6,8);
+  if(n.length>8)out+='-'+n.slice(8,10);
+  return out;
 }
 function maskPhone(s){
-  var d=digitsPhone(s); if(!d)return '';
-  if(d[0]!=='7')d=('7'+d).slice(0,11);
-  var out='+7';
-  if(d.length>1)out+=' '+d.slice(1,4);
-  if(d.length>4)out+=' '+d.slice(4,7);
-  if(d.length>7)out+='-'+d.slice(7,9);
-  if(d.length>9)out+='-'+d.slice(9,11);
-  return out;
+  var n=phoneNat(s);
+  if(!n){ var t=String(s||'').replace(/\s/g,''); return /^\+?7?$/.test(t)||t==='8'?t:''; }
+  return fmtNat(n);
 }
 function rewardParts(v){
   v=String(v||'').trim();
@@ -431,7 +438,24 @@ function logout(){
 /* ---------- вход и регистрация ---------- */
 function bindPhone(id){
   var el=$(id); if(!el)return;
-  el.addEventListener('input',function(){var next=maskPhone(el.value);el.value=next;try{el.setSelectionRange(next.length,next.length)}catch(e){}});
+  var prev=el.value||'';
+  // сколько цифр национальной части стоит до позиции pos в строке v
+  function natBefore(v,pos){ var head=v.slice(0,pos), all=phoneNat(v), hd=head.replace(/\D/g,''), ad=v.replace(/\D/g,''); var drop=ad.length-all.length; return Math.max(0,Math.min(all.length,hd.length-drop)); }
+  function caretAt(f,k){ if(k<=0)return f.length&&f.indexOf(' ')>0?Math.min(f.length,3):f.length; var c=0,i; for(i=2;i<f.length;i++){ if(/\d/.test(f[i])){c++; if(c===k)return i+1;} } return f.length; }
+  el.addEventListener('input',function(ev){
+    var v=el.value, pos=el.selectionStart==null?v.length:el.selectionStart, n=phoneNat(v), pn=phoneNat(prev), k=natBefore(v,pos);
+    var it=ev&&ev.inputType||'';
+    var del=/^delete/.test(it)||(!it&&v.length<prev.length);
+    // стёрли только разделитель (пробел/дефис) — стираем соседнюю цифру
+    if(del&&n===pn&&n.length){
+      if(/Forward/.test(it)){ n=n.slice(0,k)+n.slice(k+1); }
+      else if(k>0){ n=n.slice(0,k-1)+n.slice(k); k--; }
+    }
+    var next=n?fmtNat(n):maskPhone(v);
+    if(del&&!n)next=(v.replace(/\s/g,'')==='+7'&&pn.length>0)?'+7':'';
+    el.value=next; prev=next;
+    if(document.activeElement===el){ var c=n?caretAt(next,k):next.length; try{el.setSelectionRange(c,c)}catch(e){} }
+  });
 }
 function bindOtp(wrapId, inputId){
   var wrap=$(wrapId), inp=$(inputId); if(!wrap||!inp)return;
