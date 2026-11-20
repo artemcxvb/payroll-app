@@ -1,11 +1,17 @@
 /* Запись исполнителей на выходы (ZAPIS_APP_V1) */
 (function(){
-var VER=4, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
+var VER=5, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
 var D=null, tab='slots', F={site:'',date:''}, role='', loadSeq=0, $ = function(s){return document.querySelector(s)};
 var TOKEN='zapisToken', KIND='zapisKind';
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function fd(s){if(!s)return'—';var p=String(s).split('-');return p.length===3?p[2]+'.'+p[1]+'.'+p[0]:s}
+function fdLong(s){
+  if(!s)return'—';
+  var p=String(s).split('-'); if(p.length!==3)return fd(s);
+  var wd=['вс','пн','вт','ср','чт','пт','сб'], d=new Date(+p[0],+p[1]-1,+p[2]);
+  return wd[d.getDay()]+', '+p[2]+'.'+p[1]+'.'+p[0];
+}
 function today(){
   try{
     return new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Moscow',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -18,7 +24,33 @@ function addDays(ymd,n){var p=ymd.split('-'),d=new Date(+p[0],+p[1]-1,+p[2]+n);r
 function toast(t){var e=$('#toast');e.textContent=t;e.hidden=false;clearTimeout(e._t);e._t=setTimeout(function(){e.hidden=true},2500)}
 function fmtLen(min){min=Math.round(+min||0);var h=Math.floor(min/60),m=min%60;if(h&&m)return h+' ч '+m+' мин';if(h)return h+' ч';return m+' мин'}
 function fmtPhone(p){p=String(p||'').replace(/\D/g,'');if(p.length===11&&p[0]==='7')return '+7 '+p.slice(1,4)+' '+p.slice(4,7)+'-'+p.slice(7,9)+'-'+p.slice(9);return p||'—'}
-function fmtReward(v){v=String(v||'').trim();return v||'—'}
+function fmtReward(v){
+  v=String(v||'').trim(); if(!v)return'—';
+  var m=v.match(/^(.*?)(\d[\d\s]*)(.*)$/); if(!m)return v;
+  var n=m[2].replace(/\s/g,''); if(!/^\d+$/.test(n))return v;
+  var pretty=n.replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+  var pre=m[1].trim(), suf=m[3].trim().replace(/^руб\.?/i,'₽').replace(/^р$/i,'₽');
+  if(!/₽|руб/i.test(pre+' '+suf)) suf=(suf?suf+' ':'')+'₽';
+  return (pre?pre+' ':'')+pretty+(suf?' '+suf:'');
+}
+function emptyBox(title,sub,action){
+  return '<div class="empty">'
+    +'<div class="empty-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg></div>'
+    +'<b>'+title+'</b><span>'+sub+'</span>'+(action||'')+'</div>';
+}
+function pbar(s){
+  var places=+s.places||0, taken=+s.taken||Math.max(0,places-(+s.left||0));
+  var left=s.left!=null?+s.left:Math.max(0,places-taken);
+  var pct=places?Math.min(100,Math.round(taken/places*100)):0;
+  var cls=s.status==='Закрыт'?'is-closed':(left<=0?'is-full':'');
+  return '<div class="pbar '+cls+'"><i style="width:'+pct+'%"></i></div>'
+    +'<div class="pbar-lab">'+(places?(left<=0?'Мест нет · записано '+taken+' из '+places:'Осталось '+left+' из '+places+' мест'):'Места не указаны')+'</div>';
+}
+function slotStatus(s){
+  if(s.status==='Закрыт')return {cls:'bad',label:'Закрыт'};
+  if((s.left||0)<=0)return {cls:'w',label:'Мест нет'};
+  return {cls:'ok',label:'Открыт'};
+}
 function gph(s){s=String(s==null?'':s);if(!s)return s;
  s=s.replace(/сотрудник(?=[а-яё]*)/gi,function(m){return m[0]==='С'?'Исполнитель':'исполнитель'});
  s=s.replace(/работник(?=[а-яё]*)/gi,function(m){return m[0]==='Р'?'Исполнитель':'исполнитель'});
@@ -28,7 +60,7 @@ function gph(s){s=String(s==null?'':s);if(!s)return s;
 function hlReq(s){s=gph(s);var e=esc(s);return e.replace(/медкнижк[а-яё]*|ЛМК/gi,function(m){return'<mark class="req-hl">'+m+'</mark>'})}
 function closeSheet(){$('#sheet').hidden=true;$('#shBody').innerHTML=''}
 function openSheet(html){$('#shBody').innerHTML='<button type="button" class="sh-x" id="shclose" aria-label="Закрыть">×</button>'+html;$('#sheet').hidden=false;var x=$('#shclose');if(x)x.onclick=closeSheet}
-function skel(){return'<div class="card"><div class="sk sk-t"></div><div class="sk sk-b"></div><div class="sk sk-s"></div></div><div class="card"><div class="sk sk-b"></div><div class="sk"></div></div>'}
+function skel(){var n='',i;for(i=0;i<3;i++)n+='<div class="scard sk-card"><div class="sk sk-t"></div><div class="sk sk-b"></div><div class="sk pbar-sk"></div><div class="sk sk-s"></div></div>';return n}
 
 function errText(e){
   return ({
@@ -185,13 +217,14 @@ function siteOpts(sel, empty){
 }
 
 function slotCard(s, admin){
-  var left=s.left, st=s.status==='Закрыт'?'bad':(left<=0?'w':'ok');
-  var stLabel=s.status==='Закрыт'?'Закрыт':(left<=0?'Мест нет':left+' из '+s.places);
-  var req=s.req?('<div class="brief" style="margin-top:10px"><span class="req-line">Требования: '+hlReq(s.req)+'</span></div>'):'';
-  return '<div class="card it" data-row="'+s.row+'" style="flex-wrap:wrap"><div><div class="nm">'+esc(s.site||'—')+'</div>'+
-    '<div class="sub">'+fd(s.date)+' · начало '+esc(s.start||'—')+' · '+esc(fmtLen(s.length))+'</div>'+
-    '<div class="sub">'+esc(gph(s.vacancy||'Вид услуг не указан'))+' · вознаграждение '+esc(fmtReward(s.reward))+'</div></div>'+
-    '<span class="st '+st+'">'+stLabel+'</span>'+(req?'<div style="flex:1 0 100%">'+req+'</div>':'')+'</div>';
+  var st=slotStatus(s);
+  var req=s.req?'<div class="tag-req">Есть требования</div>':'';
+  return '<article class="scard" data-row="'+s.row+'" role="button" tabindex="0">'
+    +'<div class="scard-top"><div class="scard-site">'+esc(s.site||'—')+'</div><span class="st '+st.cls+'">'+st.label+'</span></div>'
+    +'<div class="scard-when"><div class="scard-date">'+fdLong(s.date)+'</div><div class="scard-time">'+esc(s.start||'—')+' · '+esc(fmtLen(s.length))+'</div></div>'
+    +'<div class="scard-mid"><div class="scard-vac">'+esc(gph(s.vacancy||'Вид услуг не указан'))+'</div>'
+    +'<div class="scard-pay"><b>'+esc(fmtReward(s.reward))+'</b><small>вознаграждение</small></div></div>'
+    +pbar(s)+req+'</article>';
 }
 
 function renderSlotsContractor(){
@@ -201,12 +234,12 @@ function renderSlotsContractor(){
     return true;
   });
   var h='<h2 class="scr">Открытые выходы</h2><div class="f"><select id="fsite">'+siteOpts(F.site,true)+'</select><input id="fdate" type="date" value="'+esc(F.date)+'"></div>';
-  if(!list.length)h+='<div class="empty"><b>Нет открытых выходов</b><span>Измените площадку или дату</span></div>';
+  if(!list.length)h+=emptyBox('Нет открытых выходов','Измените площадку или дату');
   else list.forEach(function(s){h+=slotCard(s)});
   $('#view').innerHTML=h;
   $('#fsite').onchange=function(){F.site=this.value;render()};
   $('#fdate').onchange=function(){F.date=this.value;render()};
-  $('#view').querySelectorAll('.card.it').forEach(function(el){el.onclick=function(){openSignup(+el.dataset.row)}});
+  $('#view').querySelectorAll('.scard').forEach(function(el){el.onclick=function(){openSignup(+el.dataset.row)}});
 }
 
 function openSignup(row){
@@ -216,12 +249,11 @@ function openSignup(row){
   var can=s.left>0&&s.status==='Открыт'&&!s.started;
   var already=s.mySignup;
   var body='<h3>'+esc(s.site)+'</h3>'+
-    '<div class="row"><span>Дата</span><span>'+fd(s.date)+'</span></div>'+
-    '<div class="row"><span>Начало</span><span>'+esc(s.start)+'</span></div>'+
-    '<div class="row"><span>Длительность</span><span>'+esc(fmtLen(s.length))+'</span></div>'+
+    '<div class="sheet-hero"><div class="scard-date">'+fdLong(s.date)+'</div><div class="scard-time">'+esc(s.start)+' · '+esc(fmtLen(s.length))+'</div>'+
+    '<div class="scard-pay hero"><b>'+esc(fmtReward(s.reward))+'</b><small>вознаграждение</small></div></div>'+
     '<div class="row"><span>Вид услуг</span><span>'+esc(gph(s.vacancy||'—'))+'</span></div>'+
-    '<div class="row"><span>Вознаграждение</span><span>'+esc(fmtReward(s.reward))+'</span></div>'+
     '<div class="row"><span>Мест осталось</span><span class="places'+(s.left<=0?' zero':'')+'">'+s.left+' из '+s.places+'</span></div>'+
+    pbar(s)+
     (s.comment?'<div class="row"><span>Комментарий</span><span>'+esc(s.comment)+'</span></div>':'')+
     req+
     (already?'<div class="okmsg" style="margin-top:16px">Вы уже записаны на этот выход</div><button class="btn s" id="shx">Закрыть</button>':
@@ -242,15 +274,18 @@ function openSignup(row){
 
 function renderMine(){
   var list=D.mine||[], h='<h2 class="scr">Мои записи</h2>';
-  if(!list.length)h+='<div class="empty"><b>Записей пока нет</b><span>Откройте вкладку «Выходы», чтобы записаться</span></div>';
+  if(!list.length)h+=emptyBox('Записей пока нет','Откройте вкладку «Выходы», чтобы записаться');
   list.forEach(function(item){
     var s=item.slot||{}, sg=item.signup||{};
     var can=sg.status==='Записан'&&s.canCancel;
     var st=sg.status==='Записан'?'ok':(sg.status==='Отменена'?'w':'bad');
-    h+='<div class="card"><div class="it"><div><div class="nm">'+esc(s.site||'—')+'</div><div class="sub">'+fd(s.date)+' · начало '+(s.start||'—')+' · '+fmtLen(s.length)+'</div><div class="sub">вознаграждение '+esc(fmtReward(s.reward))+'</div></div><span class="st '+st+'">'+esc(sg.status)+'</span></div>';
+    h+='<article class="scard mine">'
+      +'<div class="scard-top"><div class="scard-site">'+esc(s.site||'—')+'</div><span class="st '+st+'">'+esc(sg.status)+'</span></div>'
+      +'<div class="scard-when"><div class="scard-date">'+fdLong(s.date)+'</div><div class="scard-time">'+(s.start||'—')+' · '+fmtLen(s.length)+'</div></div>'
+      +'<div class="scard-pay"><b>'+esc(fmtReward(s.reward))+'</b><small>вознаграждение</small></div>';
     if(can)h+='<p class="hint">Отмена возможна не позднее чем за '+(D.cancel_hours||12)+' ч до начала</p><button class="btn s" data-cancel="'+sg.row+'">Отменить запись</button>';
     else if(sg.status==='Записан'&&s.startMs)h+='<p class="hint">Отмена уже недоступна (окно — '+(D.cancel_hours||12)+' ч до начала)</p>';
-    h+='</div>';
+    h+='</article>';
   });
   $('#view').innerHTML=h;
   $('#view').querySelectorAll('[data-cancel]').forEach(function(b){b.onclick=function(){
@@ -269,20 +304,14 @@ function renderSlotsAdmin(){
     if(F.date&&s.date!==F.date)return false;
     return true;
   });
-  var h='<h2 class="scr">Выходы</h2><button class="btn" id="newslot">Создать выход</button><div class="f"><select id="fsite">'+siteOpts(F.site,true)+'</select><input id="fdate" type="date" value="'+esc(F.date)+'"></div>';
-  if(!list.length)h+='<div class="empty"><b>Выходов нет</b><span>Создайте выход или снимите фильтр</span></div>';
-  else list.forEach(function(s){
-    var n=(s.signups||[]).filter(function(x){return x.status==='Записан'}).length;
-    h+='<div class="card it" data-row="'+s.row+'"><div><div class="nm">'+esc(s.site||'—')+'</div>'+
-      '<div class="sub">'+fd(s.date)+' · начало '+esc(s.start||'—')+' · '+esc(fmtLen(s.length))+'</div>'+
-      '<div class="sub">'+esc(gph(s.vacancy||'—'))+' · вознаграждение '+esc(fmtReward(s.reward))+' · записано '+n+' из '+s.places+'</div></div>'+
-      '<span class="st '+(s.status==='Закрыт'?'bad':'ok')+'">'+esc(s.status)+'</span></div>';
-  });
+  var h='<div class="scr-row"><h2 class="scr">Выходы</h2><button class="btn sm" id="newslot">Создать</button></div><div class="f"><select id="fsite">'+siteOpts(F.site,true)+'</select><input id="fdate" type="date" value="'+esc(F.date)+'"></div>';
+  if(!list.length)h+=emptyBox('Выходов нет','Создайте выход или снимите фильтр');
+  else list.forEach(function(s){h+=slotCard(s,true)});
   $('#view').innerHTML=h;
   $('#fsite').onchange=function(){F.site=this.value;render()};
   $('#fdate').onchange=function(){F.date=this.value;render()};
   $('#newslot').onclick=function(){openSlotForm(null)};
-  $('#view').querySelectorAll('.card.it').forEach(function(el){el.onclick=function(){openAdminSlot(+el.dataset.row)}});
+  $('#view').querySelectorAll('.scard').forEach(function(el){el.onclick=function(){openAdminSlot(+el.dataset.row)}});
 }
 
 function slotFormFields(s){
@@ -350,17 +379,17 @@ function openAdminSlot(row){
   if(!s)return;
   var sigs=s.signups||[];
   var h='<h3>'+esc(s.site)+'</h3>'+
-    '<div class="row"><span>Дата</span><span>'+fd(s.date)+'</span></div>'+
-    '<div class="row"><span>Начало</span><span>'+esc(s.start)+' · '+esc(fmtLen(s.length))+'</span></div>'+
+    '<div class="sheet-hero"><div class="scard-date">'+fdLong(s.date)+'</div><div class="scard-time">'+esc(s.start)+' · '+esc(fmtLen(s.length))+'</div>'+
+    '<div class="scard-pay hero"><b>'+esc(fmtReward(s.reward))+'</b><small>вознаграждение</small></div></div>'+
     '<div class="row"><span>Вид услуг</span><span>'+esc(gph(s.vacancy||'—'))+'</span></div>'+
-    '<div class="row"><span>Вознаграждение</span><span>'+esc(fmtReward(s.reward))+'</span></div>'+
     '<div class="row"><span>Места</span><span>'+s.taken+' из '+s.places+' занято</span></div>'+
+    pbar(s)+
     (s.comment?'<div class="row"><span>Комментарий</span><span>'+esc(s.comment)+'</span></div>':'')+
     (s.req?'<div class="brief"><span class="req-line">Требования: '+hlReq(s.req)+'</span></div>':'')+
-    '<h3 style="margin-top:20px;font-size:16px">Записавшиеся</h3>';
+    '<h3 class="subhead">Записавшиеся</h3>';
   var active=sigs.filter(function(x){return x.status==='Записан'});
   var other=sigs.filter(function(x){return x.status!=='Записан'});
-  if(!sigs.length)h+='<div class="empty sm"><span>Пока никто не записался</span></div>';
+  if(!sigs.length)h+='<div class="empty sm"><b>Пока никто не записался</b><span>Исполнители появятся после записи</span></div>';
   active.forEach(function(x){
     h+='<div class="card it"><div><div class="nm">'+esc(x.name)+'</div><div class="sub">'+esc(fmtPhone(x.phone))+'</div></div><button class="btn s" style="width:auto;margin:0;min-height:36px;padding:0 12px" data-rm="'+x.row+'">Снять</button></div>';
   });
@@ -397,7 +426,7 @@ function openAdminSlot(row){
 
 function renderPeople(){
   var list=D.contractors||[], h='<h2 class="scr">Исполнители</h2>';
-  if(!list.length)h+='<div class="empty"><b>Пока нет исполнителей</b><span>Заявки появятся после регистрации</span></div>';
+  if(!list.length)h+=emptyBox('Пока нет исполнителей','Заявки появятся после регистрации');
   list.forEach(function(u){
     var st=u.status==='Одобрен'?'ok':u.status==='Заблокирован'||u.status==='Отклонён'?'bad':'w';
     h+='<div class="card ucard"><div class="it"><div><div class="nm">'+esc(u.name)+'</div><div class="sub">'+esc(fmtPhone(u.phone))+(u.date?' · '+esc(u.date):'')+'</div></div><span class="st '+st+'">'+esc(u.status)+'</span></div>';
