@@ -4,43 +4,22 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Запись на выходы</title>
-<meta name="theme-color" content="#6C5CE7">
+<meta name="theme-color" content="#0B0B0F">
+<meta name="color-scheme" content="dark">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="../icons/icon-192.png">
 <link rel="apple-touch-icon" href="../icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Unbounded:wght@600;700&display=swap">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 <aside id="side" hidden>
-  <div class="side-brand">
-    <span class="logo" aria-hidden="true"></span>
-    <b>Запись</b>
-  </div>
+  <div class="side-brand"><span class="logo" aria-hidden="true"></span><b>Запись</b><small>администратор</small></div>
   <nav id="sidenav"></nav>
 </aside>
-<header id="top" hidden>
-  <div class="top-l">
-    <span class="logo" id="toplogo" aria-hidden="true"></span>
-    <div id="greet" class="greet">Запись</div>
-  </div>
-  <button type="button" id="avbtn" class="av-btn" aria-haspopup="true" aria-expanded="false" aria-label="Меню аккаунта"></button>
-</header>
-<div id="usermenu" hidden>
-  <button type="button" class="menu-back" id="menuBack" tabindex="-1" aria-label="Закрыть меню"></button>
-  <div class="menu" role="menu">
-    <div class="menu-head">
-      <div id="menuName" class="menu-name"></div>
-      <div id="menuSub" class="menu-sub"></div>
-    </div>
-    <button type="button" id="refresh" role="menuitem"></button>
-    <button type="button" id="logout" role="menuitem"></button>
-  </div>
-</div>
 <main id="view"></main>
 <nav id="tabs" hidden></nav>
-<button type="button" id="fab" class="fab" hidden aria-label="Создать выход"></button>
 <div id="sheet" hidden>
   <div class="sh" role="dialog" aria-modal="true">
     <div class="sh-handle" aria-hidden="true"></div>
@@ -50,7 +29,7 @@
   </div>
 </div>
 <div id="toast" hidden></div>
-<script src="config.js?v=10"></script>
-<script src="app.js?v=10"></script>
+<script src="config.js?v=11"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>
