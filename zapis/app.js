@@ -1,10 +1,17 @@
-/* Запись исполнителей на выходы (ZAPIS_APP_V1, UI v=9) */
+/* Запись исполнителей на выходы (ZAPIS_APP_V1, UI v=10) */
 (function(){
-var VER=9, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
+var VER=10, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
 var D=null, tab='slots', mineSeg='up', F={site:'',date:''}, role='', loadSeq=0;
 var $ = function(s, r){return (r||document).querySelector(s)};
 var TOKEN='zapisToken', KIND='zapisKind';
-var AV=['#2F5BFF','#0F766E','#7C3AED','#C2410C','#0369A1','#4F46E5'];
+var THEMES=[
+  {bg:'#EDE9FE',soft:'#F5F3FF',acc:'#7C3AED',ink:'#3B0764'},
+  {bg:'#D1FAE5',soft:'#ECFDF5',acc:'#059669',ink:'#064E3B'},
+  {bg:'#FFEDD5',soft:'#FFF7ED',acc:'#EA580C',ink:'#7C2D12'},
+  {bg:'#DBEAFE',soft:'#EFF6FF',acc:'#2563EB',ink:'#1E3A8A'},
+  {bg:'#FEF9C3',soft:'#FEFCE8',acc:'#CA8A04',ink:'#713F12'},
+  {bg:'#FCE7F3',soft:'#FDF2F8',acc:'#DB2777',ink:'#831843'}
+];
 var WD=['вс','пн','вт','ср','чт','пт','сб'];
 var MONTHS=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
 var ICO={
@@ -29,7 +36,7 @@ var ICO={
   chev:'<path d="m9 18 6-6-6-6"/>'
 };
 function ic(n, cls){return '<svg class="ic '+(cls||'')+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">'+((ICO[n])||'')+'</svg>'}
-function logoSvg(){return '<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="10" fill="#2F5BFF"/><path d="M10 10.5h12.2c.1 2.7-1.9 4.4-5.3 5.4 3.7.7 6.1 2.6 6.3 5.6H11" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>'}
+function logoSvg(){return '<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="10" fill="#6C5CE7"/><path d="M10 10.5h12.2c.1 2.7-1.9 4.4-5.3 5.4 3.7.7 6.1 2.6 6.3 5.6H11" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>'}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function fd(s){if(!s)return'—';var p=String(s).split('-');return p.length===3?p[2]+'.'+p[1]+'.'+p[0]:s}
 function dateParts(s){
@@ -123,7 +130,9 @@ function rewardHtml(v){
   var p=rewardParts(v);
   return (p.pre?'<span class="pre">'+esc(p.pre)+' </span>':'')+esc(p.num)+(p.suf?' '+esc(p.suf):'');
 }
-function siteColor(name){var s=String(name||''),i=0,h=0;for(i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return AV[h%AV.length]}
+function siteTheme(name){var s=String(name||''),i=0,h=0;for(i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return THEMES[h%THEMES.length]}
+function siteColor(name){return siteTheme(name).acc}
+function themeVars(name){var t=siteTheme(name);return '--c-bg:'+t.bg+';--c-soft:'+t.soft+';--c-acc:'+t.acc+';--c-ink:'+t.ink}
 function initials(name){
   var p=String(name||'').replace(/[«»"()]/g,' ').split(/[\s\-]+/).filter(function(w){return /[A-Za-zА-Яа-яЁё]/.test(w)});
   if(!p.length)return '•';
@@ -131,6 +140,12 @@ function initials(name){
   return (p[0][0]+p[1][0]).toUpperCase();
 }
 function avatar(name, size){return '<span class="av" style="background:'+siteColor(name)+((size)?';width:'+size+'px;height:'+size+'px':'')+'">'+esc(initials(name))+'</span>'}
+function siteInitials(name){
+  var short=parseSite(name).short, m=/(\d+)\s*$/.exec(short);
+  if(m)return (short.charAt(0)||'•').toUpperCase()+m[1];
+  return initials(short||name);
+}
+function siteAvatar(name,size){return '<span class="av" style="background:'+siteColor(name)+((size)?';width:'+size+'px;height:'+size+'px':'')+'">'+esc(siteInitials(name))+'</span>'}
 function cleanSitePart(s){
   s=String(s||'').replace(/\s+/g,' ').trim();
   s=s.replace(/^склад\s+/i,'');
@@ -210,8 +225,8 @@ function openSheet(html, cta){
 }
 function skel(){
   var n='',i;
-  for(i=0;i<4;i++)n+='<div class="srow sk-card"><div class="sk" style="height:28px;width:44px"></div><div><div class="sk sk-t"></div><div class="sk sk-b"></div></div><div class="sk" style="width:56px;height:16px"></div></div>';
-  return '<div class="list">'+n+'</div>';
+  for(i=0;i<3;i++)n+='<div class="scard sk-card"><div class="sk" style="height:22px;width:70%"></div><div class="sk sk-t" style="margin-top:10px"></div><div class="sk sk-b"></div></div>';
+  return '<div class="day-cards">'+n+'</div>';
 }
 
 function errText(e){
@@ -288,7 +303,7 @@ function setChrome(){
   closeMenu();
   document.querySelectorAll('.logo').forEach(function(el){if(!el.innerHTML)el.innerHTML=logoSvg()});
   if(logged){
-    $('#greet').textContent=hello();
+    $('#greet').textContent='Запись';
     $('#avbtn').innerHTML=avatar((D&&D.user&&D.user.name)||'');
     var rf=$('#refresh'); if(rf)rf.innerHTML=ic('refresh')+' Обновить';
     var lg=$('#logout'); if(lg)lg.innerHTML=ic('logout')+' Выйти';
@@ -374,8 +389,9 @@ function otpField(id, inputId, label, auto){
     +'<div class="ferr">PIN должен содержать 4–6 цифр</div></label>';
 }
 function authShell(title, lead, inner){
-  return '<div class="auth"><div class="logo lg auth-mark">'+logoSvg()+'</div><h1>'+title+'</h1>'
-    +(lead?'<p class="lead">'+lead+'</p>':'')+inner+'</div>';
+  return '<div class="auth-scene"><div class="auth-blobs" aria-hidden="true"><i></i><i></i><i></i></div>'
+    +'<div class="auth"><div class="logo lg auth-mark">'+logoSvg()+'</div><h1>'+title+'</h1>'
+    +(lead?'<p class="lead">'+lead+'</p>':'')+inner+'</div></div>';
 }
 
 function login(mode){
@@ -432,7 +448,7 @@ function login(mode){
     };
     return;
   }
-  $('#view').innerHTML=authShell('Запись','Выбирайте выходы на площадках и записывайтесь за пару секунд',
+  $('#view').innerHTML=authShell('Запись на выходы','Выбирайте выходы на площадках и записывайтесь за пару секунд',
     '<label class="fld" id="f-phone"><span>Телефон</span><input id="lpn" type="tel" inputmode="tel" autocomplete="tel" placeholder="+7 900 000-00-00"><div class="ferr">Укажите телефон в формате +7 XXX XXX-XX-XX</div></label>'
     +otpField('f-pin','lp','PIN','current-password')
     +'<button class="btn" id="lb">Войти</button>'
@@ -474,10 +490,10 @@ function dateStrip(){
 }
 function siteStrip(){
   var sites=(D&&D.sites)||[], h='<div class="strip-wrap"><div class="strip" id="sstrip">';
-  h+='<button type="button" class="schip'+(F.site?'':' on')+'" data-s="">Все площадки</button>';
+  h+='<button type="button" class="schip all'+(F.site?'':' on')+'" data-s="">Все площадки</button>';
   sites.forEach(function(s){
     var n=s.site||''; if(!n)return;
-    h+='<button type="button" class="schip'+(F.site===n?' on':'')+'" data-s="'+esc(n)+'">'+esc(parseSite(n).short)+'</button>';
+    h+='<button type="button" class="schip'+(F.site===n?' on':'')+'" data-s="'+esc(n)+'" style="'+themeVars(n)+'">'+siteAvatar(n,28)+esc(parseSite(n).short)+'</button>';
   });
   return h+'</div></div>';
 }
@@ -495,26 +511,31 @@ function filterSlots(list){
   });
 }
 
+function placesRing(s){
+  var p=placesLeft(s);
+  if(!p.places)return '';
+  var pct=Math.min(100,Math.round(p.taken/p.places*100));
+  var r=15, c=2*Math.PI*r, off=c*(1-pct/100);
+  return '<span class="pring"><svg viewBox="0 0 36 36" aria-hidden="true"><circle class="bg" cx="18" cy="18" r="15"/><circle class="fg" cx="18" cy="18" r="15" stroke-dasharray="'+c.toFixed(2)+'" stroke-dashoffset="'+off.toFixed(2)+'"/></svg><span>'+p.taken+'/'+p.places+'</span></span>';
+}
 function slotRow(s, opts){
   opts=opts||{};
   var site=parseSite(s.site||'');
   var end=fmtEnd(s.start,s.length);
   var signed=!!s.mySignup;
-  var right=signed?'<span class="chip-ok">Записан</span>':'<div class="srow-pay">'+rewardHtml(s.reward)+'</div>'+ic('chev','chev');
-  if(opts.admin){
-    var st=slotStatus(s);
-    right='<div class="srow-pay">'+rewardHtml(s.reward)+'</div>'+(st.cls!=='ok'?'<span class="st '+st.cls+'">'+st.label+'</span>':'')+ic('chev','chev');
-  }
-  return '<article class="srow" data-row="'+s.row+'">'
-    +'<div class="srow-time"><b>'+esc(s.start||'—')+'</b><small>'+(end?'→'+end:'')+'</small></div>'
-    +'<div class="srow-main"><div class="srow-title">'+esc(site.title)+'</div>'
-    +(site.sub?'<div class="srow-sub">'+esc(site.sub)+'</div>':'')
-    +'<div class="srow-vac">'+esc(gph(s.vacancy||'Вид услуг не указан'))+'</div>'
-    +'<div class="srow-meta">'+ic('users','sm')+'<span>'+esc(placesText(s))+'</span>'
+  var st=opts.admin?slotStatus(s):null;
+  var time=esc(s.start||'—')+(end?' — '+end:'');
+  return '<article class="scard" data-row="'+s.row+'" style="'+themeVars(s.site||'')+'">'
     +(s.req?ic('shield','sm shield'):'')
-    +'</div></div>'
-    +'<div class="srow-side">'+right+'</div>'
-    +'</article>';
+    +'<div class="scard-time">'+time+'</div>'
+    +'<div class="scard-site">'+esc(site.title)+'</div>'
+    +(site.sub?'<div class="scard-sub">'+esc(site.sub)+'</div>':'')
+    +'<span class="tag">'+esc(gph(s.vacancy||'Вид услуг не указан'))+'</span>'
+    +'<div class="scard-foot"><span class="pay-pill">'+rewardHtml(s.reward)+'</span>'
+    +(signed?'<span class="chip-ok">Записан</span>':'')
+    +(st&&st.cls!=='ok'?'<span class="st '+st.cls+'">'+st.label+'</span>':'')
+    +placesRing(s)
+    +'<span class="go-btn">'+ic('chev')+'</span></div></article>';
 }
 function groupedSlots(list, opts){
   if(!list.length)return emptyBox('Нет открытых выходов','Измените площадку или дату');
@@ -523,18 +544,60 @@ function groupedSlots(list, opts){
     if(list[i].date!==last){
       if(last)h+='</div></section>';
       last=list[i].date;
-      h+='<section class="day-group"><h2 class="day-h">'+esc(dayHeading(last))+'</h2><div class="list">';
+      h+='<section class="day-group"><h2 class="day-h">'+esc(dayHeading(last))+'</h2><div class="day-cards">';
     }
     h+=slotRow(list[i], opts);
   }
   return h+'</div></section>';
 }
+function weekOpenCount(){
+  var from=today(), to=addDays(from,6);
+  return (D.slots||[]).filter(function(s){return s.date>=from&&s.date<=to&&s.status!=='Закрыт'}).length;
+}
+function nearestMine(){
+  return (D.mine||[]).filter(isUpcoming).slice().sort(function(a,b){return slotStartMs(a.slot)-slotStartMs(b.slot)})[0]||null;
+}
+function slotsHero(){
+  var n=weekOpenCount();
+  var mine=nearestMine();
+  var h='<section class="hero"><div class="hero-blobs" aria-hidden="true"></div>'
+    +'<div class="hero-k">'+esc(hello())+'</div>'
+    +'<h1 class="hero-title">Доступно '+numWord(n,'выход','выхода','выходов')+' на неделе</h1>';
+  if(mine&&mine.slot){
+    var s=mine.slot, site=parseSite(s.site||'');
+    h+='<button type="button" class="hero-next" data-slot="'+s.row+'"><span>Ближайшая запись</span><b>'+esc(site.title)+' · '+esc(s.start||'')+'</b></button>';
+  } else {
+    h+='<div class="hero-cta">Выберите выход ниже и запишитесь за пару секунд</div>';
+  }
+  return h+'</section>';
+}
+function slotsBento(){
+  var up=(D.mine||[]).filter(isUpcoming).length;
+  var sites={}; (D.slots||[]).forEach(function(s){if(s.site)sites[s.site]=1});
+  var ns=Object.keys(sites).length;
+  var next=(filterSlots(D.slots||[])[0])||(D.slots||[])[0];
+  var nextLab=next?(parseSite(next.site||'').short+' · '+(next.start||'')):'—';
+  return '<div class="bento">'
+    +'<button type="button" class="btile lav" data-go="mine">'+'<span class="bub">'+ic('list','sm')+'</span><b>'+up+'</b><span>Мои записи</span></button>'
+    +'<button type="button" class="btile mint"><span class="bub">'+ic('map','sm')+'</span><b>'+ns+'</b><span>Площадки</span></button>'
+    +'<button type="button" class="btile peach"'+(next?' data-row="'+next.row+'"':'')+'><span class="bub">'+ic('clock','sm')+'</span><b style="font-size:13px;font-family:var(--font,Manrope,sans-serif)">'+esc(next?next.start||'—':'—')+'</b><span>Ближайший</span></button>'
+    +'</div>';
+}
+function bindSlotClicks(root){
+  (root||$('#view')).querySelectorAll('.scard, [data-row]').forEach(function(el){
+    if(el.closest&&el.closest('#dstrip,#sstrip,.bento,.hero'))return;
+    el.onclick=function(){var r=el.dataset.row|| (el.closest('[data-row]')&&el.closest('[data-row]').dataset.row); if(r) (role==='admin'?openAdminSlot:openSignup)(+r)};
+  });
+}
 
 function renderSlotsContractor(){
   var list=filterSlots(D.slots||[]);
-  var h=dateStrip()+siteStrip()+groupedSlots(list);
+  var h=slotsHero()+slotsBento()+dateStrip()+siteStrip()+groupedSlots(list);
   $('#view').innerHTML=h; bindFilters();
-  $('#view').querySelectorAll('.srow').forEach(function(el){
+  var hn=$('.hero-next'); if(hn)hn.onclick=function(e){e.stopPropagation(); openSignup(+hn.dataset.slot)};
+  var bm=$('.btile[data-go="mine"]'); if(bm)bm.onclick=function(){tab='mine';render()};
+  var bn=$('.btile.peach[data-row]'); if(bn)bn.onclick=function(){openSignup(+bn.dataset.row)};
+  $('#view').querySelectorAll('.scard').forEach(function(el){
     el.onclick=function(){openSignup(+el.dataset.row)};
   });
 }
@@ -542,13 +605,12 @@ function renderSlotsContractor(){
 function sheetHero(s){
   var site=parseSite(s.site||'');
   var end=fmtEnd(s.start,s.length);
-  var x=dateParts(s.date);
-  var when=x?(dayHeading(s.date)+(s.start?' · '+s.start:'')):fdLong(s.date);
-  return '<p class="sh-kicker">'+esc(when)+'</p>'
+  var when=dayHeading(s.date);
+  return '<div class="sh-hero"><p class="sh-kicker">'+esc(when)+'</p>'
     +'<h3>'+esc(site.title)+'</h3>'
     +(site.sub?'<div class="sh-sub">'+esc(site.sub)+'</div>':'')
-    +'<div class="sh-pay"><div class="tm">'+esc(s.start||'—')+(end?'–'+end:'')+'<small>'+esc(fmtLen(s.length))+'</small></div>'
-    +'<div class="am">'+rewardHtml(s.reward)+'</div></div>';
+    +'<div class="sh-pay"><div class="tm">'+esc(s.start||'—')+(end?' — '+end:'')+'<small>'+esc(fmtLen(s.length))+'</small></div>'
+    +'<div class="am">'+rewardHtml(s.reward)+'</div></div></div>';
 }
 
 function openSignup(row){
@@ -628,14 +690,15 @@ function mineRow(item, compact){
   var site=parseSite(s.site||'');
   var end=fmtEnd(s.start,s.length);
   var st=sg.status==='Записан'?'ok':(sg.status==='Отменена'?'w':'bad');
-  var right='<span class="st '+st+'">'+esc(sg.status==='Записан'?'Записан':sg.status)+'</span>'+ic('chev','chev');
-  return '<article class="srow" data-slot="'+s.row+'" data-sg="'+(sg.row||'')+'">'
-    +'<div class="srow-time"><b>'+esc(s.start||'—')+'</b><small>'+(end?'→'+end:'')+'</small></div>'
-    +'<div class="srow-main"><div class="srow-title">'+esc(site.title)+'</div>'
-    +(site.sub?'<div class="srow-sub">'+esc(site.sub)+'</div>':'')
-    +'<div class="srow-vac">'+esc(gph(s.vacancy||''))+' · '+esc(dayHeading(s.date))+'</div></div>'
-    +'<div class="srow-side">'+(!compact?'<div class="srow-pay">'+rewardHtml(s.reward)+'</div>':'')+right+'</div>'
-    +'</article>';
+  var time=esc(s.start||'—')+(end?' — '+end:'');
+  return '<article class="scard" data-slot="'+s.row+'" data-sg="'+(sg.row||'')+'" style="'+themeVars(s.site||'')+'">'
+    +'<div class="scard-time">'+time+'</div>'
+    +'<div class="scard-site">'+esc(site.title)+'</div>'
+    +(site.sub?'<div class="scard-sub">'+esc(site.sub)+'</div>':'')
+    +'<span class="tag">'+esc(gph(s.vacancy||''))+' · '+esc(dayHeading(s.date))+'</span>'
+    +'<div class="scard-foot"><span class="pay-pill">'+rewardHtml(s.reward)+'</span>'
+    +'<span class="st '+st+'">'+esc(sg.status==='Записан'?'Записан':sg.status)+'</span>'
+    +'<span class="go-btn">'+ic('chev')+'</span></div></article>';
 }
 function renderMine(){
   var all=D.mine||[], up=all.filter(isUpcoming).slice().sort(function(a,b){return slotStartMs(a.slot)-slotStartMs(b.slot)}),
@@ -648,14 +711,13 @@ function renderMine(){
     else {
       var next=up[0], s=next.slot||{}, site=parseSite(s.site||'');
       var end=fmtEnd(s.start,s.length);
-      h+='<article class="feat" data-slot="'+s.row+'"><div class="feat-k">Ближайший выход</div>'
-        +'<div class="feat-title">'+esc(site.title)+'</div>'
-        +(site.sub?'<div class="feat-sub">'+esc(site.sub)+'</div>':'')
-        +'<div class="feat-row"><div class="feat-time">'+esc(s.start||'—')+(end?'–'+end:'')+'<small>'+esc(dayHeading(s.date))+'</small></div>'
-        +'<div class="feat-pay">'+rewardHtml(s.reward)+'</div></div>'
-        +'<div class="cdown">'+esc(countdown(s))+'</div></article>';
+      h+='<article class="ticket" data-slot="'+s.row+'"><div class="ticket-k">Ближайший выход</div>'
+        +'<div class="ticket-title">'+esc(site.title)+'</div>'
+        +(site.sub?'<div class="ticket-sub">'+esc(site.sub)+'</div>':'')
+        +'<div class="dash"></div><div class="ticket-row"><div class="feat-time">'+esc(s.start||'—')+(end?' — '+end:'')+'<small>'+esc(dayHeading(s.date))+'</small></div>'
+        +'<div><div class="feat-pay">'+rewardHtml(s.reward)+'</div><div class="cdown">'+esc(countdown(s))+'</div></div></div></article>';
       if(up.length>1){
-        h+='<div class="list">';
+        h+='<div class="day-cards">';
         up.slice(1).forEach(function(it){h+=mineRow(it)});
         h+='</div>';
       }
@@ -663,7 +725,7 @@ function renderMine(){
   } else {
     if(!hist.length)h+=emptyBox('История пуста','Завершённые и отменённые записи появятся здесь');
     else {
-      h+='<div class="list">';
+      h+='<div class="day-cards">';
       hist.forEach(function(it){h+=mineRow(it)});
       h+='</div>';
     }
@@ -683,10 +745,10 @@ function adminKpis(){
   open.forEach(function(s){places+=(+s.places||0); taken+=(+s.taken||0)});
   var fill=places?Math.round(taken/places*100):0;
   var pend=(D.contractors||[]).filter(function(u){return u.status==='Ожидает'}).length;
-  return '<div class="kpi-card">'
-    +'<div class="kpi-cell"><div class="kpi-n">'+open.length+'</div><span class="kpi-l">'+plural(open.length,'Открытый выход','Открытых выхода','Открытых выходов')+'</span></div>'
-    +'<div class="kpi-cell"><div class="kpi-n">'+ringSvg(fill)+'<span>'+fill+'%</span></div><span class="kpi-l">Заполнение мест</span></div>'
-    +'<div class="kpi-cell"><div class="kpi-n">'+pend+'</div><span class="kpi-l">'+plural(pend,'Заявка на одобрение','Заявки на одобрение','Заявок на одобрение')+'</span></div>'
+  return '<div class="kpi-bento">'
+    +'<div class="btile grad"><div class="kpi-n">'+open.length+'</div><span>'+plural(open.length,'Открытый выход','Открытых выхода','Открытых выходов')+'</span></div>'
+    +'<div class="btile mint"><div class="kpi-n">'+ringSvg(fill)+'<span>'+fill+'%</span></div><span>Заполнение мест</span></div>'
+    +'<div class="btile amber"><div class="kpi-n">'+pend+'</div><span>'+plural(pend,'Заявка на одобрение','Заявки на одобрение','Заявок на одобрение')+'</span></div>'
     +'</div>';
 }
 
@@ -712,7 +774,7 @@ function renderSlotsAdmin(){
   var ns=$('#newslot'); if(ns)ns.onclick=function(){openSlotForm(null)};
   var fab=$('#fab'); if(fab){fab.innerHTML=ic('plus'); fab.onclick=function(){openSlotForm(null)};}
   function openR(el){var r=el.closest('[data-row]'); if(r)openAdminSlot(+r.dataset.row)}
-  $('#view').querySelectorAll('.srow, .tbl tbody tr').forEach(function(el){el.onclick=function(){openR(el)}});
+  $('#view').querySelectorAll('.scard, .tbl tbody tr').forEach(function(el){el.onclick=function(){openR(el)}});
 }
 
 function slotFormFields(s){
