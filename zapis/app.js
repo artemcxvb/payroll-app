@@ -1,6 +1,6 @@
-/* Запись исполнителей на выходы (ZAPIS_APP_V1.3, UI v=16, светлая карточная тема) */
+/* Запись исполнителей на выходы (ZAPIS_APP_V1.3, UI v=17, светлая карточная тема) */
 (function(){
-var VER=16, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
+var VER=17, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
 var D=null, E=null, C=null, CP=null, tab='slots', mineSeg='up', F={site:'',date:'',q:''}, role='', loadSeq=0, EP='', CPid='', searchOn=false;
 var $ = function(s, r){return (r||document).querySelector(s)};
 var TOKEN='zapisToken', KIND='zapisKind';

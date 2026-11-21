@@ -15,7 +15,10 @@
 html{background:var(--bg)}
 html,body{margin:0;min-height:100%}
 body{font:500 15px/1.45 var(--font);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;
-  padding-bottom:calc(var(--nav-h) + 28px + env(safe-area-inset-bottom))}
+  --safe-b:max(env(safe-area-inset-bottom),0px);padding-bottom:0}
+/* Отступ под фиксированной нижней навигацией: отдельный блок в конце контента (надёжнее padding у body в iOS Safari/WebView) */
+#view::after{content:"";display:block;height:calc(var(--nav-h) + 48px + var(--safe-b))}
+body.is-login #view::after{display:none}
 body.is-login{padding-bottom:0}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer;background:none;border:0;padding:0}
@@ -285,7 +288,8 @@ input[type=date],input[type=time]{color-scheme:light}
 #tabs[hidden],#side[hidden],#toast[hidden]{display:none !important}
 .sh-top,.sh-pay{position:relative;z-index:1}
 @media (min-width:980px){
-  body.role-admin{padding-left:256px;padding-bottom:30px}
+  body.role-admin{padding-left:256px}
+  body.role-admin #view::after{height:30px}
   body.role-admin #tabs{display:none}
   body.role-admin #side{display:flex;flex-direction:column;position:fixed;left:0;top:0;bottom:0;width:256px;padding:22px 14px;background:var(--card);border-right:1px solid var(--line);z-index:15}
   body.role-admin #side[hidden]{display:none}
