@@ -1,6 +1,6 @@
-/* Запись исполнителей на выходы (ZAPIS_APP_V1.3, UI v=14, тёмная тема) */
+/* Запись исполнителей на выходы (ZAPIS_APP_V1.3, UI v=15, светлая карточная тема, 2 варианта) */
 (function(){
-var VER=14, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
+var VER=15, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
 var D=null, E=null, C=null, CP=null, tab='slots', mineSeg='up', F={site:'',date:'',q:''}, role='', loadSeq=0, EP='', CPid='', searchOn=false;
 var $ = function(s, r){return (r||document).querySelector(s)};
 var TOKEN='zapisToken', KIND='zapisKind';
@@ -50,7 +50,7 @@ var ICO={
   grid:'<rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/>'
 };
 function ic(n, cls){return '<svg class="ic '+(cls||'')+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">'+((ICO[n])||'')+'</svg>'}
-var LGN=0;function logoSvg(){var id='lg'+(++LGN);return '<svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="'+id+'" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4F6BFF"/><stop offset=".55" stop-color="#C13BD8"/><stop offset="1" stop-color="#FF4D8D"/></linearGradient></defs><rect width="32" height="32" rx="10" fill="#8B5CF6"/><rect width="32" height="32" rx="10" fill="url(#'+id+')"/><path d="M10 10.5h12.2c.1 2.7-1.9 4.4-5.3 5.4 3.7.7 6.1 2.6 6.3 5.6H11" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>'}
+var LGN=0;function logoSvg(){var id='lg'+(++LGN);return '<svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="'+id+'" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4F6BFF"/><stop offset=".55" stop-color="#C13BD8"/><stop offset="1" stop-color="#FF4D8D"/></linearGradient></defs><rect width="32" height="32" rx="10" style="fill:var(--acc)"/><path d="M10 10.5h12.2c.1 2.7-1.9 4.4-5.3 5.4 3.7.7 6.1 2.6 6.3 5.6H11" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>'}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function fd(s){if(!s)return'—';var p=String(s).split('-');return p.length===3?p[2]+'.'+p[1]+'.'+p[0]:s}
 function dateParts(s){
@@ -356,6 +356,7 @@ function lrow(o){
     +'<div class="lright"><div class="la">'+(o.amount||'')+'</div>'+(o.line?'<div class="ll '+(o.lineCls||'')+'">'+o.line+'</div>':'')+'</div></div>';
 }
 function card(title, body, tools){
+  title=String(title).replace(/:\s*$/,'');
   return '<section class="dcard"><div class="dcard-h"><h2>'+title+'</h2>'+(tools?'<div class="dtools">'+tools+'</div>':'')+'</div>'+body+'</section>';
 }
 function placesLine(s){
@@ -500,7 +501,8 @@ function otpField(id, inputId, label, auto){
 function authShell(title, lead, inner){
   return '<div class="auth-scene"><div class="auth-glow" aria-hidden="true"></div>'
     +'<div class="auth"><div class="logo lg auth-mark">'+logoSvg()+'</div><h1>'+title+'</h1>'
-    +(lead?'<p class="lead">'+lead+'</p>':'')+inner+'</div></div>';
+    +(lead?'<p class="lead">'+lead+'</p>':'')+'<div class="auth-card">'+inner+'</div>'
+    +(title==='Запись на выходы'?'<div class="auth-feats"><div><b>Выходы</b>свободные места на площадках</div><div><b>Записи</b>напоминание и отмена</div><div><b>Расчёт</b>вознаграждение по объёму услуг</div></div>':'')+'</div></div>';
 }
 function login(mode){
   mode=mode||'contractor';
@@ -597,18 +599,33 @@ function filterSlots(list){
 }
 function nearestMine(){return (D.mine||[]).filter(isUpcoming).slice().sort(function(a,b){return slotStartMs(a.slot)-slotStartMs(b.slot)})[0]||null}
 function weekOpenCount(){var from=today(), to=addDays(from,6);return (D.slots||[]).filter(function(s){return s.date>=from&&s.date<=to&&s.status!=='Закрыт'}).length}
-function slotRowHtml(s, admin){
-  var site=parseSite(s.site||''), pl=placesLine(s), end=fmtEnd(s.start,s.length);
-  var x=dateParts(s.date), dl=s.date===today()?'сегодня':s.date===addDays(today(),1)?'завтра':(x?WD[x.dt.getDay()]+' '+x.d+'.'+('0'+x.m).slice(-2):fd(s.date));
-  var sub=esc(dl)+' '+esc(s.start||'—')+' · '+esc(gph(s.vacancy||'вид услуг не указан'));
-  var line=admin?(placesLeft(s).taken+' из '+placesLeft(s).places+' занято'+(s.status==='Закрыт'?' · закрыт':'')):pl.t;
-  var lc=admin?(s.status==='Закрыт'?'bad':(placesLeft(s).left<=0?'up':'')):pl.c;
-  return lrow({attrs:' data-row="'+s.row+'"', icon:rowIcon(s.site), title:esc(site.title)+(s.mySignup?' <span class="badge-ok" title="Вы записаны">'+ic('check')+'</span>':'')+(s.req?' <span class="req-dot" title="Есть требования">'+ic('shield','xs')+'</span>':''), sub:sub, amount:esc(fmtReward(s.reward)), line:line, lineCls:lc});
+function slotRowHtml(s, admin){ return shiftCard(s, admin); }
+/* карточка выхода: дата-плашка, площадка, время, вид услуг, заполненность, вознаграждение */
+function shiftCard(s, admin){
+  var site=parseSite(s.site||''), p=placesLeft(s), pl=placesLine(s), end=fmtEnd(s.start,s.length), x=dateParts(s.date), th=siteTheme(s.site);
+  var pct=p.places?Math.min(100,Math.round(p.taken/p.places*100)):0;
+  var foot=admin?(p.taken+' из '+p.places+' занято'+(s.status==='Закрыт'?' · закрыт':'')):pl.t;
+  var fc=admin?(s.status==='Закрыт'?'bad':(p.left<=0?'up':'')):pl.c;
+  var tags='';
+  if(s.mySignup)tags+='<span class="sc-tag ok">'+ic('check','xs')+'Вы записаны</span>';
+  if(s.req)tags+='<span class="sc-tag req">'+ic('shield','xs')+'Требования</span>';
+  if(admin&&s.status==='Закрыт')tags+='<span class="sc-tag off">Закрыт</span>';
+  return '<article class="shift'+(s.mySignup?' is-mine':'')+'" data-row="'+s.row+'" style="--c:'+th.acc+'">'
+    +'<div class="sc-date"><b>'+(x?x.d:'—')+'</b><span>'+(x?WD[x.dt.getDay()]:'')+'</span></div>'
+    +'<div class="sc-main"><div class="sc-top"><span class="sc-site">'+esc(site.title)+'</span><span class="sc-pay">'+esc(fmtReward(s.reward))+'</span></div>'
+    +'<div class="sc-time">'+ic('clock','xs')+'<span>'+esc(s.start||'—')+(end?'–'+end:'')+(s.length?' · '+esc(fmtLen(s.length)):'')+'</span></div>'
+    +'<div class="sc-vac">'+esc(gph(s.vacancy||'вид услуг не указан'))+'</div>'
+    +'<div class="sc-foot"><div class="sc-bar '+fc+'"><i style="width:'+pct+'%"></i></div><span class="sc-pl '+fc+'">'+esc(foot)+'</span></div>'
+    +(tags?'<div class="sc-tags">'+tags+'</div>':'')
+    +'</div></article>';
 }
 function slotsList(list, admin){
   if(!list.length)return '<div class="empty dk">'+emptyArt()+'<b>Нет открытых выходов</b><span>Измените площадку, дату или поиск</span></div>';
-  return '<div class="lrows">'+list.map(function(s){return slotRowHtml(s, admin)}).join('')+'</div>';
+  var groups=[], cur=null;
+  list.forEach(function(x){ if(!cur||cur.d!==x.date){cur={d:x.date,items:[]};groups.push(cur);} cur.items.push(x); });
+  return groups.map(function(g){return '<section class="sgroup"><h3 class="sg-h">'+esc(dayHeading(g.d))+'<span>'+g.items.length+'</span></h3><div class="scards">'+g.items.map(function(x){return shiftCard(x,admin)}).join('')+'</div></section>'}).join('');
 }
+function secHead(title, tools){return '<div class="sec-h"><h2>'+title+'</h2>'+(tools?'<div class="dtools">'+tools+'</div>':'')+'</div>'}
 function heroHead(left, right){
   return '<div class="hero-head"><button type="button" class="hsel" id="hsite">'+esc(left)+' '+ic('down','xs')+'</button>'
     +(right!=null?'<button type="button" class="hsel" id="hper">'+esc(right)+' '+ic('down','xs')+'</button>':'<span></span>')+'</div>';
@@ -657,14 +674,14 @@ function bindHome(){
   bindRows();
 }
 function bindRows(){
-  $('#view').querySelectorAll('.lrow[data-row]').forEach(function(el){el.onclick=function(){(role==='admin'?openAdminSlot:openSignup)(+el.dataset.row)}});
+  $('#view').querySelectorAll('.shift[data-row],.lrow[data-row]').forEach(function(el){el.onclick=function(){(role==='admin'?openAdminSlot:openSignup)(+el.dataset.row)}});
 }
 function listTools(){return '<button type="button" class="tbtn'+(searchOn?' on':'')+'" id="tsearch" aria-label="Поиск">'+ic('search','sm')+'</button><button type="button" class="tbtn'+(F.site||F.date?' on':'')+'" id="tfilter" aria-label="Фильтр">'+ic('sliders','sm')+'</button>'}
 function searchBox(){return searchOn?'<div class="qsearch">'+ic('search','sm')+'<input id="qinp" placeholder="Площадка или вид услуг" value="'+esc(F.q||'')+'"></div>':''}
 function renderSlotsContractor(){
   var list=filterSlots(D.slots||[]);
   $('#view').innerHTML=contractorHero()+quickChips()
-    +card('Открытые выходы:', searchBox()+'<div id="slist">'+slotsList(list)+'</div>', listTools());
+    +secHead('Открытые выходы', listTools())+searchBox()+'<div id="slist">'+slotsList(list)+'</div>';
   bindHome();
 }
 function openSitePicker(){
@@ -693,7 +710,7 @@ function openFilter(){
 function openQuick(){
   var list=filterSlots(D.slots||[]).filter(function(s){return !s.mySignup&&placesLeft(s).left>0}).slice(0,8);
   openSheet('<div class="sh-glow"></div><h3>Записаться</h3><p class="hint">Ближайшие выходы со свободными местами</p>'+slotsList(list));
-  $('#shBody').querySelectorAll('.lrow[data-row]').forEach(function(el){el.onclick=function(){openSignup(+el.dataset.row)}});
+  $('#shBody').querySelectorAll('[data-row]').forEach(function(el){el.onclick=function(){openSignup(+el.dataset.row)}});
 }
 
 function sheetHero(s){
@@ -776,7 +793,7 @@ function renderMine(){
     if(!up.length)h+='<div class="empty dk">'+emptyArt()+'<b>Нет предстоящих записей</b><span>Нажмите центральную кнопку, чтобы записаться</span></div>';
     else{
       var s=up[0].slot||{}, site=parseSite(s.site||''), end=fmtEnd(s.start,s.length);
-      h+='<article class="ticket" data-open="'+s.row+'"><div class="mesh" aria-hidden="true"></div><div class="ticket-k">Ближайший выход · '+esc(countdown(s))+'</div><div class="ticket-title">'+esc(site.title)+'</div>'+(site.sub?'<div class="ticket-sub">'+esc(site.sub)+'</div>':'')
+      h+='<article class="ticket" data-open="'+s.row+'"><div class="ticket-k">Ближайший выход · '+esc(countdown(s))+'</div><div class="ticket-title">'+esc(site.title)+'</div>'+(site.sub?'<div class="ticket-sub">'+esc(site.sub)+'</div>':'')
         +'<div class="ticket-row"><div class="feat-time">'+esc(s.start||'—')+(end?' — '+end:'')+'<small>'+esc(dayHeading(s.date))+'</small></div><div class="feat-pay">'+esc(fmtReward(s.reward))+'</div></div></article>';
       if(up.length>1)h+=card('Дальше:','<div class="lrows">'+up.slice(1).map(mineRowHtml).join('')+'</div>');
     }
@@ -793,21 +810,24 @@ var NOTE='Вознаграждение рассчитано по объёму о
 function earnBody(p, opts){
   opts=opts||{};
   var h='';
-  var rows=lrow({icon:rowIcon('','bag','#4F8BFF'), title:'Объём услуг', sub:esc(String(p.units).replace('.',','))+' ед. · по отчёту площадки', amount:money(p.volume), line:'стоимость услуг', lineCls:'muted'})
-    +lrow({icon:rowIcon('','wallet','#22C08A'), title:'Вознаграждение', sub:esc(String(p.share).replace('.',','))+'% от объёма услуг', amount:money(p.reward,true), line:'по договору', lineCls:'up'});
+  var acc=lrow({icon:rowIcon('','bag','#3B82F6'), title:'Объём услуг', sub:esc(String(p.units).replace('.',','))+' ед. · по отчёту площадки', amount:money(p.volume), line:'стоимость услуг', lineCls:'muted'})
+    +lrow({icon:rowIcon('','wallet','#16A34A'), title:'Вознаграждение', sub:esc(String(p.share).replace('.',','))+'% от объёма услуг', amount:money(p.reward,true), line:'по договору', lineCls:'up'});
+  h+=card('Начислено', '<div class="lrows">'+acc+'</div>');
+  var ded='', dsum=0;
   (p.deductions||[]).forEach(function(d){
-    var col=d.kind==='quality'?'#FF5A6E':d.kind==='housing'?'#FF8A3D':d.kind==='carry'?'#B07CFF':'#F2B51B', icn=d.kind==='quality'?'alert':d.kind==='housing'?'home':d.kind==='carry'?'link':'pay';
-    rows+=lrow({cls:d.items&&d.items.length?'tap':'', attrs:d.items&&d.items.length?' data-ded="'+d.kind+'"':'', icon:rowIcon('',icn,col), title:esc(d.label), sub:d.kind==='quality'?numWord((d.items||[]).length,'случай','случая','случаев')+' · удержание по договору':(d.note?esc(d.note):'зачёт встречных требований'), amount:'<span class="neg">'+money(-d.amount)+'</span>', line:d.items&&d.items.length?'подробнее':'', lineCls:'muted'});
+    dsum+=+d.amount||0;
+    var col=d.kind==='quality'?'#E11D48':d.kind==='housing'?'#EA580C':d.kind==='carry'?'#7C3AED':'#CA8A04', icn=d.kind==='quality'?'alert':d.kind==='housing'?'home':d.kind==='carry'?'link':'pay';
+    ded+=lrow({cls:d.items&&d.items.length?'tap':'', attrs:d.items&&d.items.length?' data-ded="'+d.kind+'"':'', icon:rowIcon('',icn,col), title:esc(d.label), sub:d.kind==='quality'?numWord((d.items||[]).length,'случай','случая','случаев')+' · удержание по договору':(d.note?esc(d.note):'зачёт встречных требований'), amount:'<span class="neg">'+money(-d.amount)+'</span>', line:d.items&&d.items.length?'подробнее':'', lineCls:'muted'});
   });
-  rows+='<div class="ltotal"><span>Итого к выплате</span><b>'+money(p.payout)+'</b></div>';
-  if(p.carry)rows+='<p class="hint pad">Удержания превысили вознаграждение. Остаток '+money(p.carry)+' будет зачтён в следующем периоде как зачёт задолженности прошлого периода.</p>';
-  h+=card('Расчёт за '+esc(shortRange(p.from,p.to))+':', '<div class="lrows">'+rows+'</div>');
+  if(ded)h+=card('Удержания по договору', '<div class="lrows">'+ded+'</div><div class="lsub"><span>Всего удержаний</span><b class="neg">'+money(-(p.deductionsTotal!=null?p.deductionsTotal:dsum))+'</b></div>');
+  h+='<section class="paybox"><div><span>Итого к выплате</span><small>'+esc(shortRange(p.from,p.to))+'</small></div><b>'+money(p.payout)+'</b></section>';
+  if(p.carry)h+='<p class="hint pad">Удержания превысили вознаграждение. Остаток '+money(p.carry)+' будет зачтён в следующем периоде как зачёт задолженности прошлого периода.</p>';
   if(p.days&&p.days.length){
     var dr=p.days.slice().reverse().map(function(d){
       var x=dateParts(d.date), descr=d.items.map(function(it){return it.descr}).join(' + ');
-      return lrow({icon:'<span class="ricon day">'+(x?x.d:'')+'<small>'+(x?WD[x.dt.getDay()]:'')+'</small></span>', title:esc(dayHeading(d.date)), sub:esc(descr), amount:money(d.value), line:esc(String(d.units).replace('.',','))+' ед.', lineCls:'muted'});
+      return '<div class="dtile"><div class="dt-h"><b>'+(x?x.d:'')+'</b><span>'+(x?WD[x.dt.getDay()]+' · '+(MONTHS[x.m-1]||''):esc(d.date))+'</span></div><div class="dt-a">'+money(d.value)+'</div><div class="dt-s">'+esc(String(d.units).replace('.',','))+' ед. · '+esc(descr)+'</div></div>';
     }).join('');
-    h+=card('По дням · '+numWord(p.days.length,'выход','выхода','выходов')+':', '<div class="lrows">'+dr+'</div>');
+    h+=card('По дням · '+numWord(p.days.length,'выход','выхода','выходов'), '<div class="dtiles">'+dr+'</div>');
   }
   h+='<p class="note">'+NOTE+'</p>';
   return h;
@@ -835,6 +855,15 @@ function renderEarn(){
   bindHome(); bindEarn(p);
 }
 
+/* ---------- оформление (два варианта) ---------- */
+var THEME_LIST=[['a','Светлое','#2563EB'],['b','Тёплое','#0F766E']];
+function curTheme(){return document.documentElement.dataset.theme||'a'}
+function setTheme(t){try{localStorage.zapisTheme=t}catch(e){} document.documentElement.dataset.theme=t; var m=document.querySelector('meta[name=theme-color]'); if(m)m.content=t==='b'?'#F6F1E9':'#F3F5F9'; render()}
+function themeCard(){
+  return card('Оформление','<div class="theme-pick">'+THEME_LIST.map(function(t){return '<button type="button" class="tp'+(curTheme()===t[0]?' on':'')+'" data-theme-set="'+t[0]+'"><i style="--c:'+t[2]+'"></i><span>'+t[1]+'</span></button>'}).join('')+'</div>');
+}
+function bindTheme(){document.querySelectorAll('[data-theme-set]').forEach(function(b){b.onclick=function(){setTheme(b.dataset.themeSet)}})}
+
 /* ---------- профиль ---------- */
 function renderProfile(){
   var u=(D&&D.user)||{};
@@ -844,8 +873,9 @@ function renderProfile(){
     +lrow({icon:rowIcon('','link','#4F8BFF'), title:'Идентификатор в системе заказчика', sub:esc(u.extId||'не указан, сопоставление по ФИО')})
     +'</div>')
     +'<div class="stack"><button class="btn s" id="prf">'+ic('refresh','sm')+' Обновить</button><button class="btn s" id="plo">'+ic('logout','sm')+' Выйти</button></div>'
+    +themeCard()
     +'<p class="note">Площадку и идентификатор меняет администратор. '+NOTE+'</p>';
-  $('#view').innerHTML=h;
+  $('#view').innerHTML=h; bindTheme();
   $('#prf').onclick=function(){E=null;load()}; $('#plo').onclick=logout;
 }
 
@@ -864,7 +894,7 @@ function renderSlotsAdmin(){
   var cnt={}; (D.slots||[]).forEach(function(s){if(!F.site||s.site===F.site)cnt[s.date]=(cnt[s.date]||0)+1});
   var chips=Object.keys(cnt).sort().filter(function(d){return d>=today()}).slice(0,12).map(function(d){var x=dateParts(d);return '<button type="button" class="qchip'+(F.date===d?' on':'')+'" data-date="'+d+'">'+esc(WD[x.dt.getDay()]+' '+x.d)+' · <b class="up">'+cnt[d]+'</b></button>'});
   if(F.date)chips.push('<button type="button" class="qchip" data-date="">Все даты ✕</button>');
-  $('#view').innerHTML=adminHero()+chipsRow('Даты:', chips)+card('Выходы:', searchBox()+'<div id="slist">'+slotsList(list,true)+'</div>', listTools());
+  $('#view').innerHTML=adminHero()+chipsRow('Даты:', chips)+secHead('Выходы', listTools())+searchBox()+'<div id="slist">'+slotsList(list,true)+'</div>';
   bindHome();
 }
 
@@ -1151,10 +1181,10 @@ function renderMore(){
   $('#view').innerHTML=pageHead('Ещё','Настройки записи и выгрузки')
     +card('Окно отмены:','<p class="hint pad">Исполнитель может отменить запись не позднее чем за указанное число часов до начала выхода.</p><div class="pad"><label class="fld"><span>Часов до начала</span><input id="chours" type="number" min="0" max="168" value="'+(D.cancel_hours||12)+'"></label><button class="btn" id="csave">Сохранить</button></div>')
     +card('Выгрузка записей:','<p class="hint pad">Список записей за дату и площадку на лист «Выгрузка_выходов» и в CSV.</p><div class="pad"><label class="fld"><span>Дата</span><input id="edate" type="date" value="'+today()+'"></label><label class="fld"><span>Площадка (необязательно)</span><select id="esite">'+opts+'</select></label><button class="btn" id="ego">Выгрузить</button></div>')
-    +'<div class="stack"><button class="btn s" id="mrf">'+ic('refresh','sm')+' Обновить</button><button class="btn s" id="mlo">'+ic('logout','sm')+' Выйти</button></div>';
+    +themeCard()+'<div class="stack"><button class="btn s" id="mrf">'+ic('refresh','sm')+' Обновить</button><button class="btn s" id="mlo">'+ic('logout','sm')+' Выйти</button></div>';
   $('#csave').onclick=function(){api({action:'setZapisSetting',cancel_hours:+$('#chours').value}).then(function(j){if(!j.ok){toast(errText(j.error),'bad');return}toast('Сохранено','ok');load()}).catch(function(){toast(netErr(),'bad')})};
   $('#ego').onclick=function(){$('#ego').disabled=true;api({action:'exportSlots',date:$('#edate').value,site:$('#esite').value}).then(function(j){$('#ego').disabled=false;if(!j.ok){toast(errText(j.error),'bad');return}downloadCsv(toCsv(j.rows),'vyhody_'+$('#edate').value+'.csv');toast('Выгружено строк: '+(j.count||0),'ok')}).catch(function(){toast(netErr(),'bad');$('#ego').disabled=false})};
-  $('#mrf').onclick=function(){C=null;CP=null;load()}; $('#mlo').onclick=logout;
+  $('#mrf').onclick=function(){C=null;CP=null;load()}; $('#mlo').onclick=logout; bindTheme();
 }
 
 function render(){
