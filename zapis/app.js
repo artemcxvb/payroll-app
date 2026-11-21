@@ -1,6 +1,6 @@
-/* Запись исполнителей на выходы (ZAPIS_APP_V1.3, UI v=13, тёмная тема) */
+/* Запись исполнителей на выходы (ZAPIS_APP_V1.3, UI v=14, тёмная тема) */
 (function(){
-var VER=13, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
+var VER=14, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
 var D=null, E=null, C=null, CP=null, tab='slots', mineSeg='up', F={site:'',date:'',q:''}, role='', loadSeq=0, EP='', CPid='', searchOn=false;
 var $ = function(s, r){return (r||document).querySelector(s)};
 var TOKEN='zapisToken', KIND='zapisKind';
@@ -377,8 +377,10 @@ function setChrome(){
   var side=$('#side'); if(side)side.hidden=!(logged&&role==='admin');
   $('#tabs').hidden=!logged;
   document.querySelectorAll('.logo').forEach(function(el){if(!el.innerHTML)el.innerHTML=logoSvg()});
-  if(logged)setNav();
+  if(logged){ if(setChrome.r!==role){setChrome.r=role;setNav();} else markNav(); }
+  else setChrome.r='';
 }
+function markNav(){document.querySelectorAll('#tabs button[data-t],#sidenav button[data-t]').forEach(function(b){b.classList.toggle('on',b.dataset.t===tab)})}
 function navItems(){
   if(role==='admin')return [['slots','cal','Выходы'],['people','users','Исполнители'],['*','plus','Создать'],['calc','wallet','Расчёты'],['more','grid','Ещё']];
   return [['slots','home','Главная'],['mine','list','Записи'],['*','spark','Записаться'],['earn','wallet','Расчёт'],['profile','user','Профиль']];
@@ -400,31 +402,48 @@ function setNav(){
   var s=$('#sidenav'); if(s){s.innerHTML=navHtml(true)+'<button class="side-new" data-t="*">'+ic('plus','sm')+' Создать выход</button>'; s.querySelectorAll('button').forEach(function(b){b.onclick=function(){goTab(b.dataset.t)}});}
 }
 
+/* ---- кэш последних данных: показываем сразу, обновляем в фоне ---- */
+var CACHE_KEY='zapisCache', cacheT=null, sig={};
+function cacheSave(){clearTimeout(cacheT);cacheT=setTimeout(function(){try{localStorage[CACHE_KEY]=JSON.stringify({v:2,kind:localStorage[KIND]||'',at:Date.now(),D:D,E:E,C:C,CP:CP,CPid:CPid})}catch(e){try{localStorage[CACHE_KEY]=JSON.stringify({v:2,kind:localStorage[KIND]||'',at:Date.now(),D:D,E:E,C:C})}catch(e2){}}},400)}
+function cacheLoad(){try{var c=JSON.parse(localStorage[CACHE_KEY]||'null');if(!c||c.v!==2||c.kind!==(localStorage[KIND]||''))return false;if(Date.now()-c.at>7*864e5)return false;D=c.D;E=c.E;C=c.C;CP=c.CP;CPid=c.CPid||'';if(E&&!EP&&E.periods&&E.periods[0])EP=E.periods[0].id;return !!D}catch(e){return false}}
+/* обновляем экран только если данные действительно изменились и пользователь не печатает в поле */
+function changed(k,obj){var s=JSON.stringify(obj,function(key,v){return key==='cached'||key==='_ms'?undefined:v});if(sig[k]===s)return false;sig[k]=s;return true}
+function busyTyping(){var a=document.activeElement;return !!(a&&$('#view').contains(a)&&/INPUT|TEXTAREA|SELECT/.test(a.tagName))}
+var pendingRender=false;
+function softRender(){if(busyTyping()){if(!pendingRender){pendingRender=true;var a=document.activeElement;a.addEventListener('blur',function f(){a.removeEventListener('blur',f);pendingRender=false;render()})}return}render()}
 function load(){
   if(!LIVE){$('#view').innerHTML='<div class="errbox"><b>Приложение доступно только в боевом режиме.</b></div>';return}
   var seq=++loadSeq, kind=localStorage[KIND];
-  var action=kind==='admin'?'adminZapisData':'contractorData';
   closeSheet();
-  role=kind||'contractor'; setChrome();
-  $('#view').innerHTML=skel()+'<p class="muted" id="ldhint" style="text-align:center">Загрузка… если сервер отвечает дольше 15 секунд, подождите.</p>';
+  role=kind||'contractor';
+  var had=!!D||cacheLoad();
+  setChrome();
+  if(had){ ['D','E','C','CP'].forEach(function(k){changed(k,window.__z_get(k))}); render(); }
+  else $('#view').innerHTML=skel()+'<p class="muted" id="ldhint" style="text-align:center">Загрузка… если сервер отвечает дольше 15 секунд, подождите.</p>';
+  var action=kind==='admin'?'adminZapisData':'contractorData';
   api({action:action},{seq:seq,onRetry:function(){var h=$('#ldhint');if(h)h.textContent='Сервер отвечает дольше обычного, пробуем ещё раз…'}}).then(function(j){
     if(seq!==loadSeq)return;
     if(!j.ok)throw new Error(j.error||'load');
-    D=j; role=j.role||kind||'contractor';
-    setChrome(); render();
-    if(role==='contractor')loadEarn(); else if(tab==='calc')loadCalc();
+    var first=!D; D=j; role=j.role||kind||'contractor';
+    if(changed('D',j)||first){ setChrome(); softRender(); }
+    cacheSave();
   }).catch(function(e){
     if(e&&(e.stale||e.message==='stale'||e.message==='auth'))return;
     if(seq!==loadSeq)return;
+    if(D){ toast('Нет связи — показаны сохранённые данные','bad'); return; }
     $('#view').innerHTML='<div class="errbox"><b>Не удалось загрузить данные</b><p class="hint">'+esc(netErr())+'</p><button class="btn" id="retry">Повторить</button></div>';
     var b=$('#retry'); if(b)b.onclick=function(){load()};
   });
+  // параллельно, а не после основного запроса
+  if(role==='contractor')loadEarn(); else loadCalc(CPid||'',true);
 }
+window.__z_get=function(k){return k==='D'?D:k==='E'?E:k==='C'?C:CP};
 function loadEarn(){
   api({action:'contractorEarnings'},{timeout:40000}).then(function(j){
     if(!j.ok)return;
     E=j; if(!EP&&E.periods&&E.periods[0])EP=E.periods[0].id;
-    if(tab==='slots'||tab==='earn')render();
+    if(changed('E',j)&&D&&(tab==='slots'||tab==='earn'))softRender();
+    cacheSave();
   }).catch(function(){});
 }
 function logout(){
@@ -943,20 +962,28 @@ function openPerson(row){
 
 /* ---------- админ: расчёты ---------- */
 var MSTAT={manual:['вручную','up'],id:['по идентификатору','up'],name:['по ФИО','up'],ambiguous:['неоднозначно','warn'],none:['нет пары','bad'],skip:['исключён','muted']};
-function loadCalc(id){
-  api({action:'calcList'},{timeout:40000}).then(function(j){
-    if(!j.ok){toast(errText(j.error),'bad');return}
-    C=j; var pid=id||CPid||(j.periods[0]&&j.periods[0].id)||'';
-    if(pid)loadCalcPeriod(pid); else {CP=null; if(tab==='calc')render();}
-  }).catch(function(){toast(netErr(),'bad')});
+function loadCalc(id,quiet){
+  api({action:'calcList',withPeriod:id||CPid||'latest'},{timeout:90000}).then(function(j){
+    if(!j.ok){if(!quiet)toast(errText(j.error),'bad');return}
+    var per=j.period; delete j.period;
+    var ch=changed('C',j); C=j;
+    if(per&&per.ok){ CPid=per.period.id; if(changed('CP',per))ch=true; CP=per; }
+    else if(!j.periods.length){ CP=null; CPid=''; }
+    if(ch&&D&&tab==='calc')softRender();
+    cacheSave();
+  }).catch(function(){if(!quiet)toast(netErr(),'bad')});
 }
 function loadCalcPeriod(id){
-  CPid=id; if(tab==='calc')render();
+  if(CPid!==id){ CPid=id; if(tab==='calc')render(); }
   api({action:'calcPeriod',id:id},{timeout:60000}).then(function(j){
     if(!j.ok){toast(errText(j.error),'bad');return}
-    CP=j; if(tab==='calc')render();
+    if(j.period.id!==CPid)return;
+    if(changed('CP',j)||!CP||CP.period.id!==id){CP=j; if(tab==='calc')softRender();}
+    cacheSave();
   }).catch(function(){toast(netErr(),'bad')});
 }
+/* ответ записи с returnPeriod уже содержит свежий период */
+function applyPeriod(j,id){ if(j&&j.period&&j.period.ok){ CP=j.period; CPid=CP.period.id; changed('CP',CP); if(tab==='calc')render(); cacheSave(); loadCalc(CPid,true); } else loadCalcPeriod(id); }
 function renderCalc(){
   var per=CP&&CP.period&&CP.period.id===CPid?CP.period:null;
   var h='<section class="whero"><div class="mesh" aria-hidden="true"></div>'+heroHead(per?parseSite(per.site).short:'Расчёты', per?periodLabel(per)+' · '+(per.status==='Опубликован'?'опубликован':'черновик'):(C&&C.periods.length?'Период':'Нет периодов'));
@@ -978,11 +1005,11 @@ function renderCalc(){
   h+=chipsRow('Статус:', chips);
   var persons=(CP.persons||[]).slice();
   if(F.calcBad)persons=persons.filter(function(x){return x.match.status==='none'||x.match.status==='ambiguous'});
-  var q=String(F.cq||'').toLowerCase(); if(q)persons=persons.filter(function(x){return (x.name+' '+x.key).toLowerCase().indexOf(q)>=0});
+  var q=String(F.cq||'').toLowerCase().trim();
   persons.sort(function(a,b){return b.payout-a.payout});
   var rows=persons.map(function(x){
     var m=MSTAT[x.match.status]||['',''];
-    return lrow({attrs:' data-k="'+esc(x.key)+'"', icon:'<span class="ricon site" style="--c:'+siteColor(x.name)+'">'+esc(initials(x.name))+'</span>', title:esc(x.name||x.key), sub:esc(x.key.replace(/^n:/,''))+' · '+(x.match.exec?esc(x.match.exec.name):'<span class="'+m[1]+'">'+m[0]+'</span>'),
+    return lrow({cls:q&&(x.name+' '+x.key).toLowerCase().indexOf(q)<0?'hid':'', attrs:' data-k="'+esc(x.key)+'" data-s="'+esc((x.name+' '+x.key).toLowerCase())+'"', icon:'<span class="ricon site" style="--c:'+siteColor(x.name)+'">'+esc(initials(x.name))+'</span>', title:esc(x.name||x.key), sub:esc(x.key.replace(/^n:/,''))+' · '+(x.match.exec?esc(x.match.exec.name):'<span class="'+m[1]+'">'+m[0]+'</span>'),
       amount:money(x.payout), line:x.deductions?'<span class="neg">'+money(-x.deductions)+'</span>':'+'+money(x.reward).replace(/\u00a0₽$/,'')+' · '+m[0], lineCls:x.deductions?'':m[1]});
   }).join('');
   h+=card((F.calcBad?'Без пары:':'Исполнители в файле:'), '<div class="qsearch">'+ic('search','sm')+'<input id="cq" placeholder="ФИО или идентификатор" value="'+esc(F.cq||'')+'"></div><div class="lrows" id="clist">'+rows+'</div>', '<button type="button" class="tbtn'+(F.calcBad?' on':'')+'" id="cbad" aria-label="Только без пары">'+ic('sliders','sm')+'</button>');
@@ -994,7 +1021,8 @@ function renderCalc(){
   $('#view').querySelectorAll('[data-k]').forEach(function(el){el.onclick=function(){openCalcPerson(el.dataset.k)}});
   var cb=$('#cbad'); if(cb)cb.onclick=function(){F.calcBad=!F.calcBad;render()};
   var fb=$('[data-flt="bad"]'); if(fb)fb.onclick=function(){F.calcBad=!F.calcBad;render()};
-  var cq=$('#cq'); if(cq)cq.oninput=function(){F.cq=cq.value; clearTimeout(cq._t); cq._t=setTimeout(function(){var pos=cq.selectionStart;render();var n=$('#cq');if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}},250)};
+  // поиск фильтрует уже нарисованные строки, без перерисовки экрана
+  var cq=$('#cq'); if(cq)cq.oninput=function(){F.cq=cq.value; clearTimeout(cq._t); cq._t=setTimeout(function(){var q=String(F.cq||'').toLowerCase().trim();$('#clist').querySelectorAll('.lrow').forEach(function(el){el.hidden=!!q&&el.dataset.s.indexOf(q)<0})},120)};
   var cd=$('#cdel'); if(cd)cd.onclick=function(){if(!confirm('Удалить черновик расчёта за '+shortRange(per.from,per.to)+'? Строки и ручные удержания будут удалены.'))return;
     api({action:'calcDeletePeriod',id:per.id}).then(function(j){if(!j.ok){toast(errText(j.error),'bad');return}toast('Черновик удалён','ok');CP=null;CPid='';loadCalc()}).catch(function(){toast(netErr(),'bad')})};
 }
@@ -1013,7 +1041,7 @@ function openHousingRate(per){
     +'<label class="chk"><input type="checkbox" id="hrdef" checked> Сделать ставкой площадки по умолчанию</label>',
     '<button class="btn" id="hrsave">Сохранить и пересчитать</button>');
   $('#hrsave').onclick=function(){var b=$('#hrsave'); b.disabled=true;
-    api({action:'calcSetHousingRate',id:per.id,rate:+$('#hrv').value,asDefault:$('#hrdef').checked},{timeout:120000}).then(function(j){if(!j.ok){toast(errText(j.error),'bad');b.disabled=false;return}toast('Пересчитано','ok');closeSheet();loadCalcPeriod(per.id)}).catch(function(){toast(netErr(),'bad');b.disabled=false})};
+    api({action:'calcSetHousingRate',id:per.id,rate:+$('#hrv').value,asDefault:$('#hrdef').checked,returnPeriod:1},{timeout:120000}).then(function(j){if(!j.ok){toast(errText(j.error),'bad');b.disabled=false;return}toast('Пересчитано','ok');closeSheet();applyPeriod(j,per.id)}).catch(function(){toast(netErr(),'bad');b.disabled=false})};
 }
 function openUpload(){
   var sites=(C&&C.sites)||[], opts='<option value="">Выберите площадку</option>';
@@ -1050,7 +1078,7 @@ function togglePublish(){
   var per=CP&&CP.period; if(!per)return;
   var pub=per.status!=='Опубликован';
   if(!confirm(pub?'Опубликовать расчёт за '+shortRange(per.from,per.to)+'? Исполнители с сопоставлением увидят свои суммы.':'Снять публикацию? Исполнители перестанут видеть этот период.'))return;
-  api({action:'calcPublish',id:per.id,unpublish:!pub}).then(function(j){if(!j.ok){toast(errText(j.error),'bad');return}toast(pub?'Опубликовано':'Публикация снята','ok');loadCalc(per.id)}).catch(function(){toast(netErr(),'bad')});
+  api({action:'calcPublish',id:per.id,unpublish:!pub,returnPeriod:1},{timeout:90000}).then(function(j){if(!j.ok){toast(errText(j.error),'bad');return}toast(pub?'Опубликовано':'Публикация снята','ok');applyPeriod(j,per.id)}).catch(function(){toast(netErr(),'bad')});
 }
 function exportCalc(){
   var per=CP&&CP.period; if(!per)return;
@@ -1090,13 +1118,13 @@ function openCalcPerson(key){
     '<button class="btn" id="pview">'+ic('eye','sm')+' Как увидит исполнитель</button>');
   function after(j){if(!j.ok){toast(errText(j.error),'bad');return false}return true}
   $('#lsave').onclick=function(){var r=+$('#lsel').value; if(!r){toast('Выберите исполнителя','bad');return}
-    api({action:'calcLink',site:per.site,key:x.key,name:x.name,exec:r}).then(function(j){if(after(j)){toast('Связано','ok');closeSheet();loadCalcPeriod(per.id)}}).catch(function(){toast(netErr(),'bad')})};
-  var lc=$('#lclear'); if(lc)lc.onclick=function(){api({action:'calcLink',site:per.site,key:x.key,clear:true}).then(function(j){if(after(j)){toast('Связь убрана','ok');closeSheet();loadCalcPeriod(per.id)}}).catch(function(){toast(netErr(),'bad')})};
-  var ls=$('#lskip'); if(ls)ls.onclick=function(){api({action:'calcLink',site:per.site,key:x.key,name:x.name,exec:0}).then(function(j){if(after(j)){toast('Исключён из сопоставления','ok');closeSheet();loadCalcPeriod(per.id)}}).catch(function(){toast(netErr(),'bad')})};
+    api({action:'calcLink',site:per.site,key:x.key,name:x.name,exec:r,periodId:per.id,returnPeriod:1},{timeout:90000}).then(function(j){if(after(j)){toast('Связано','ok');closeSheet();applyPeriod(j,per.id)}}).catch(function(){toast(netErr(),'bad')})};
+  var lc=$('#lclear'); if(lc)lc.onclick=function(){api({action:'calcLink',site:per.site,key:x.key,clear:true,periodId:per.id,returnPeriod:1},{timeout:90000}).then(function(j){if(after(j)){toast('Связь убрана','ok');closeSheet();applyPeriod(j,per.id)}}).catch(function(){toast(netErr(),'bad')})};
+  var ls=$('#lskip'); if(ls)ls.onclick=function(){api({action:'calcLink',site:per.site,key:x.key,name:x.name,exec:0,periodId:per.id,returnPeriod:1},{timeout:90000}).then(function(j){if(after(j)){toast('Исключён из сопоставления','ok');closeSheet();applyPeriod(j,per.id)}}).catch(function(){toast(netErr(),'bad')})};
   $('#dsave').onclick=function(){
     var b=$('#dsave'); b.disabled=true;
-    var jobs=[['housing','#dh'],['prepay','#dp'],['quality','#dq']].map(function(z){return function(){return api({action:'calcSetDeduction',id:per.id,key:x.key,kind:z[0],amount:+($(z[1]).value||0)})}});
-    jobs.reduce(function(pr,fn){return pr.then(function(r){if(r&&!r.ok)throw new Error(r.error);return fn()})},Promise.resolve(null)).then(function(r){if(r&&!r.ok)throw new Error(r.error);toast('Удержания сохранены','ok');closeSheet();loadCalcPeriod(per.id)}).catch(function(e){toast(errText(e&&e.message),'bad');b.disabled=false});
+    var items=[['housing','#dh'],['prepay','#dp'],['quality','#dq']].map(function(z){return {kind:z[0],amount:+($(z[1]).value||0)}});
+    api({action:'calcSetDeduction',id:per.id,key:x.key,items:items,returnPeriod:1},{timeout:90000}).then(function(r){if(!r||!r.ok)throw new Error(r&&r.error);toast('Удержания сохранены','ok');closeSheet();applyPeriod(r,per.id)}).catch(function(e){toast(errText(e&&e.message),'bad');b.disabled=false});
   };
   $('#pview').onclick=function(){
     api({action:'calcPreviewAs',id:per.id,key:x.key}).then(function(j){
