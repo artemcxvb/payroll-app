@@ -1,6 +1,6 @@
-/* Запись исполнителей на выходы (ZAPIS_APP_V1.3, UI v=15, светлая карточная тема, 2 варианта) */
+/* Запись исполнителей на выходы (ZAPIS_APP_V1.3, UI v=16, светлая карточная тема) */
 (function(){
-var VER=15, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
+var VER=16, CFG=window.ZAPIS_CONFIG||{}, LIVE=CFG.mode==='live'&&/^https:\/\/script\.google\.com\//.test(CFG.apiUrl||'');
 var D=null, E=null, C=null, CP=null, tab='slots', mineSeg='up', F={site:'',date:'',q:''}, role='', loadSeq=0, EP='', CPid='', searchOn=false;
 var $ = function(s, r){return (r||document).querySelector(s)};
 var TOKEN='zapisToken', KIND='zapisKind';
@@ -104,6 +104,7 @@ function plural(n, one, few, many){
   if(n10>=2 && n10<=4 && (n100<12 || n100>14))return few;
   return many;
 }
+function qty(n){n=Number(n)||0;return n.toLocaleString('ru-RU',{maximumFractionDigits:2}).replace(/\s/g,'\u00a0')+'\u00a0шт.'}
 function numWord(n, one, few, many){n=Math.abs(parseInt(n,10)||0);return n+' '+plural(n, one, few, many)}
 function fmtLen(min){min=Math.round(+min||0);var h=Math.floor(min/60),m=min%60;var hs=h?numWord(h,'час','часа','часов'):'';var ms=m?numWord(m,'минута','минуты','минут'):'';if(h&&m)return hs+' '+ms;return hs||ms}
 function fmtEnd(start,len){
@@ -810,8 +811,8 @@ var NOTE='Вознаграждение рассчитано по объёму о
 function earnBody(p, opts){
   opts=opts||{};
   var h='';
-  var acc=lrow({icon:rowIcon('','bag','#3B82F6'), title:'Объём услуг', sub:esc(String(p.units).replace('.',','))+' ед. · по отчёту площадки', amount:money(p.volume), line:'стоимость услуг', lineCls:'muted'})
-    +lrow({icon:rowIcon('','wallet','#16A34A'), title:'Вознаграждение', sub:esc(String(p.share).replace('.',','))+'% от объёма услуг', amount:money(p.reward,true), line:'по договору', lineCls:'up'});
+  var acc=lrow({icon:rowIcon('','bag','#3B82F6'), title:'Объём услуг', sub:'по отчёту площадки', amount:qty(p.units), line:'количество', lineCls:'muted'})
+    +lrow({icon:rowIcon('','wallet','#16A34A'), title:'Вознаграждение', sub:esc(String(p.share).replace('.',','))+'% от стоимости услуг по отчёту ('+money(p.volume)+')', amount:money(p.reward,true), line:'по договору', lineCls:'up'});
   h+=card('Начислено', '<div class="lrows">'+acc+'</div>');
   var ded='', dsum=0;
   (p.deductions||[]).forEach(function(d){
@@ -825,7 +826,7 @@ function earnBody(p, opts){
   if(p.days&&p.days.length){
     var dr=p.days.slice().reverse().map(function(d){
       var x=dateParts(d.date), descr=d.items.map(function(it){return it.descr}).join(' + ');
-      return '<div class="dtile"><div class="dt-h"><b>'+(x?x.d:'')+'</b><span>'+(x?WD[x.dt.getDay()]+' · '+(MONTHS[x.m-1]||''):esc(d.date))+'</span></div><div class="dt-a">'+money(d.value)+'</div><div class="dt-s">'+esc(String(d.units).replace('.',','))+' ед. · '+esc(descr)+'</div></div>';
+      return '<div class="dtile"><div class="dt-h"><b>'+(x?x.d:'')+'</b><span>'+(x?WD[x.dt.getDay()]+' · '+(MONTHS[x.m-1]||''):esc(d.date))+'</span></div><div class="dt-a">'+qty(d.units)+'</div><div class="dt-s">'+esc(descr)+'</div></div>';
     }).join('');
     h+=card('По дням · '+numWord(p.days.length,'выход','выхода','выходов'), '<div class="dtiles">'+dr+'</div>');
   }
@@ -856,13 +857,6 @@ function renderEarn(){
 }
 
 /* ---------- оформление (два варианта) ---------- */
-var THEME_LIST=[['a','Светлое','#2563EB'],['b','Тёплое','#0F766E']];
-function curTheme(){return document.documentElement.dataset.theme||'a'}
-function setTheme(t){try{localStorage.zapisTheme=t}catch(e){} document.documentElement.dataset.theme=t; var m=document.querySelector('meta[name=theme-color]'); if(m)m.content=t==='b'?'#F6F1E9':'#F3F5F9'; render()}
-function themeCard(){
-  return card('Оформление','<div class="theme-pick">'+THEME_LIST.map(function(t){return '<button type="button" class="tp'+(curTheme()===t[0]?' on':'')+'" data-theme-set="'+t[0]+'"><i style="--c:'+t[2]+'"></i><span>'+t[1]+'</span></button>'}).join('')+'</div>');
-}
-function bindTheme(){document.querySelectorAll('[data-theme-set]').forEach(function(b){b.onclick=function(){setTheme(b.dataset.themeSet)}})}
 
 /* ---------- профиль ---------- */
 function renderProfile(){
@@ -873,9 +867,8 @@ function renderProfile(){
     +lrow({icon:rowIcon('','link','#4F8BFF'), title:'Идентификатор в системе заказчика', sub:esc(u.extId||'не указан, сопоставление по ФИО')})
     +'</div>')
     +'<div class="stack"><button class="btn s" id="prf">'+ic('refresh','sm')+' Обновить</button><button class="btn s" id="plo">'+ic('logout','sm')+' Выйти</button></div>'
-    +themeCard()
     +'<p class="note">Площадку и идентификатор меняет администратор. '+NOTE+'</p>';
-  $('#view').innerHTML=h; bindTheme();
+  $('#view').innerHTML=h;
   $('#prf').onclick=function(){E=null;load()}; $('#plo').onclick=logout;
 }
 
@@ -1025,7 +1018,7 @@ function renderCalc(){
   }
   var k=CP.counts||{}, ok=(k.manual||0)+(k.id||0)+(k.name||0), bad=(k.none||0)+(k.ambiguous||0);
   h+='<div class="hk">К выплате · '+esc(shortRange(per.from,per.to))+(per.dataTo?' · данные по '+fd(per.dataTo):'')+'</div><div class="big">'+bigMoney(per.payout)+'</div>'
-    +'<div class="delta muted">Объём '+money(per.volume)+' · '+esc(String(per.share))+'% = '+money(per.reward)+' · удержания <span class="neg">'+money(-per.deductions)+'</span></div>'
+    +'<div class="delta muted">Объём услуг '+qty((CP.persons||[]).reduce(function(a,x){return a+(Number(x.units)||0)},0))+' · вознаграждение '+money(per.reward)+' · удержания <span class="neg">'+money(-per.deductions)+'</span></div>'
     +glassActions([['upload','upload','Загрузить'],['publish',per.status==='Опубликован'?'eye':'check',per.status==='Опубликован'?'Снять':'Опубликовать'],['export','download','Выгрузить']])+'</section>';
   var chips=['<span class="qchip"><i class="dotc" style="--c:#22C08A"></i>Сопоставлено <b class="up">'+ok+'</b></span>',
     '<button type="button" class="qchip" data-flt="bad"><i class="dotc" style="--c:#FF5A6E"></i>Нет пары <b class="pink">'+bad+'</b></button>',
@@ -1127,8 +1120,8 @@ function openCalcPerson(key){
   var opts='<option value="">— выберите исполнителя —</option>';
   var cands=x.match.candidates||[];
   (CP.contractors||[]).forEach(function(c){opts+='<option value="'+c.row+'"'+(x.match.exec&&x.match.exec.row===c.row?' selected':'')+'>'+esc(c.name)+' · '+esc(fmtPhone(c.phone))+(cands.some(function(z){return z.row===c.row})?' ★':'')+'</option>'});
-  var rows=lrow({icon:rowIcon('','bag','#4F8BFF'), title:'Объём услуг', sub:esc(String(x.units).replace('.',','))+' ед. · '+numWord(x.days.length,'день','дня','дней'), amount:money(x.volume)})
-    +lrow({icon:rowIcon('','wallet','#22C08A'), title:'Вознаграждение '+esc(String(per.share))+'%', amount:money(x.reward,true)})
+  var rows=lrow({icon:rowIcon('','bag','#4F8BFF'), title:'Объём услуг', sub:numWord(x.days.length,'день','дня','дней'), amount:qty(x.units)})
+    +lrow({icon:rowIcon('','wallet','#22C08A'), title:'Вознаграждение '+esc(String(per.share))+'%', sub:'от стоимости по отчёту '+money(x.volume), amount:money(x.reward,true)})
     +lrow({icon:rowIcon('','alert','#FF5A6E'), title:'Качество по файлу', sub:numWord(x.qItems.length,'случай','случая','случаев'), amount:'<span class="neg">'+money(-x.qualityFile)+'</span>'})
     +lrow({icon:rowIcon('','home','#FF8A3D'), title:'Проживание (зачёт)', sub:x.hDays+' дн. × '+esc(String(x.hRate))+' ₽'+(x.housingAdj?' · корр. '+money(x.housingAdj):''), amount:'<span class="neg">'+money(-x.housing)+'</span>'})
     +(x.prepay?lrow({icon:rowIcon('','pay','#F2B51B'), title:'Предоплата', amount:'<span class="neg">'+money(-x.prepay)+'</span>'}):'')
@@ -1181,10 +1174,10 @@ function renderMore(){
   $('#view').innerHTML=pageHead('Ещё','Настройки записи и выгрузки')
     +card('Окно отмены:','<p class="hint pad">Исполнитель может отменить запись не позднее чем за указанное число часов до начала выхода.</p><div class="pad"><label class="fld"><span>Часов до начала</span><input id="chours" type="number" min="0" max="168" value="'+(D.cancel_hours||12)+'"></label><button class="btn" id="csave">Сохранить</button></div>')
     +card('Выгрузка записей:','<p class="hint pad">Список записей за дату и площадку на лист «Выгрузка_выходов» и в CSV.</p><div class="pad"><label class="fld"><span>Дата</span><input id="edate" type="date" value="'+today()+'"></label><label class="fld"><span>Площадка (необязательно)</span><select id="esite">'+opts+'</select></label><button class="btn" id="ego">Выгрузить</button></div>')
-    +themeCard()+'<div class="stack"><button class="btn s" id="mrf">'+ic('refresh','sm')+' Обновить</button><button class="btn s" id="mlo">'+ic('logout','sm')+' Выйти</button></div>';
+    +'<div class="stack"><button class="btn s" id="mrf">'+ic('refresh','sm')+' Обновить</button><button class="btn s" id="mlo">'+ic('logout','sm')+' Выйти</button></div>';
   $('#csave').onclick=function(){api({action:'setZapisSetting',cancel_hours:+$('#chours').value}).then(function(j){if(!j.ok){toast(errText(j.error),'bad');return}toast('Сохранено','ok');load()}).catch(function(){toast(netErr(),'bad')})};
   $('#ego').onclick=function(){$('#ego').disabled=true;api({action:'exportSlots',date:$('#edate').value,site:$('#esite').value}).then(function(j){$('#ego').disabled=false;if(!j.ok){toast(errText(j.error),'bad');return}downloadCsv(toCsv(j.rows),'vyhody_'+$('#edate').value+'.csv');toast('Выгружено строк: '+(j.count||0),'ok')}).catch(function(){toast(netErr(),'bad');$('#ego').disabled=false})};
-  $('#mrf').onclick=function(){C=null;CP=null;load()}; $('#mlo').onclick=logout; bindTheme();
+  $('#mrf').onclick=function(){C=null;CP=null;load()}; $('#mlo').onclick=logout;
 }
 
 function render(){
